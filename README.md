@@ -115,6 +115,22 @@ Nous accueillons avec plaisir les contributions ! Si vous souhaitez améliorer c
 
 ---
 
+
+## Documentation et ressources
+
+Vous trouverez ci-dessous des documents et captures d’écran illustrant les différentes versions de l’interface utilisateur ainsi que la documentation PDF associée.
+
+### Documentation PDF
+
+- [Documentation version 1 (PDF)](docs/docs_pdf/Librairie_Papetierie-V1.pdf)
+
+### Captures d’écran de l’interface
+
+#### Interface version 1  
+![Accueil v1](docs/images/v1/ui_accueil.png)
+
+---
+
 ## 📄 Licence
 
 Ce projet est distribué sous la licence [**MIT License**]. Veuillez consulter le fichier `LICENSE` à la racine du dépôt pour plus de détails sur les conditions d'utilisation.

@@ -6,6 +6,6 @@
     "auto_backup": true,
     "backup_path": "backups/",
     "recent_files": [],
-    "default_theme": "dark_style.qss",
+    "default_theme": "system_style.qss",
     "auto_theme": false
 }
