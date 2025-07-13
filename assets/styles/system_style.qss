@@ -1,0 +1,134 @@
+/* Fond et texte */
+QWidget {
+    background-color: #f0f0f0;  /* Gris clair */
+    color: #2c3e50;             /* Bleu foncé */
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 14px;
+}
+
+/* QDialog pour boîtes de dialogue */
+QDialog {
+    background-color: #ffffff; /* Blanc */
+    color: #2c3e50;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 14px;
+}
+
+/* Labels */
+QLabel {
+    font-size: 15px;
+    font-weight: 600;
+    color: #34495e;
+}
+
+/* Champs de texte */
+QLineEdit {
+    background-color: #ffffff;
+    border: 1px solid #bdc3c7;
+    border-radius: 5px;
+    padding: 6px;
+    color: #2c3e50;
+}
+
+QLineEdit:focus {
+    border: 1px solid #3498db; /* Bleu clair */
+    background-color: #ecf0f1;
+}
+
+/* Boutons */
+QPushButton {
+    background-color: #3498db;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 5px;
+    font-weight: 600;
+    border: none;
+}
+
+QPushButton:hover {
+    background-color: #2980b9;
+}
+
+QPushButton:pressed {
+    background-color: #1c5980;
+}
+
+/* MessageBox */
+QMessageBox {
+    background-color: #ffffff;
+    color: #2c3e50;
+    font-size: 14px;
+}
+
+/* Barre de menus */
+QMenuBar {
+    background-color: #ecf0f1;
+    color: #2c3e50;
+}
+
+QMenuBar::item:selected {
+    background-color: #3498db;
+    color: white;
+}
+
+/* Menu contextuel */
+QMenu {
+    background-color: #ffffff;
+    color: #2c3e50;
+    border: 1px solid #bdc3c7;
+}
+
+QMenu::item:selected {
+    background-color: #3498db;
+    color: white;
+}
+
+/* Onglets */
+QTabWidget::pane {
+    border: 1px solid #bdc3c7;
+    background: #ffffff;
+}
+
+QTabBar::tab {
+    background: #ecf0f1;
+    padding: 8px 15px;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    margin-right: 2px;
+    color: #2c3e50;
+}
+
+QTabBar::tab:selected {
+    background: #3498db;
+    color: white;
+    font-weight: 700;
+}
+
+/* Scrollbars */
+QScrollBar:vertical {
+    border: 1px solid #bdc3c7;
+    background: #ecf0f1;
+    width: 14px;
+    margin: 0px 0px 0px 0px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical {
+    background: #3498db;
+    min-height: 20px;
+    border-radius: 5px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    background: none;
+}
+
+/* Tooltips */
+QToolTip {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 5px;
+    border-radius: 3px;
+}

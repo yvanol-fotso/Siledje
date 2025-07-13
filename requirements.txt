@@ -1,0 +1,7 @@
+PySide6==6.6.0       # Alternative moderne à PyQt5
+# PyQt5==5.15.9      # (Optionnel - à décommenter si nécessaire)
+sqlite3             # Intégré à Python
+opencv-python       # Pour l'analyse vidéo
+numpy               # Requis par OpenCV
+python-dotenv       # Pour la gestion des variables d'environnement
+psutil

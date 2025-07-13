@@ -1,0 +1,244 @@
+/* === Variables de couleurs principales === */
+:root {
+    --primary-bg: #2c3e50;
+    --secondary-bg: #34495e;
+    --highlight: #1abc9c;
+    --highlight-dark: #16a085;
+    --text-light: #ecf0f1;
+    --border-color: #7f8c8d;
+    --disabled-text: #95a5a6;
+    --tooltip-bg: #1abc9c;
+    --tooltip-text: #2c3e50;
+}
+
+/* === Fenêtre principale === */
+QMainWindow {
+    background-color: var(--primary-bg);
+    color: var(--text-light);
+    font-family: "Segoe UI", sans-serif;
+    font-size: 14px;
+}
+
+/* === Barre d’onglets (TabWidget) === */
+QTabWidget::pane {
+    border: 1px solid var(--border-color);
+    background-color: var(--secondary-bg);
+    border-radius: 6px;
+    padding: 4px;
+}
+
+QTabBar::tab {
+    background: var(--secondary-bg);
+    color: var(--text-light);
+    padding: 10px 20px;
+    border: 1px solid var(--border-color);
+    border-bottom: none;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    margin-right: 4px;
+    font-weight: 600;
+    min-width: 90px;
+    transition: background-color 0.3s ease;
+}
+
+QTabBar::tab:hover {
+    background-color: var(--highlight-dark);
+}
+
+QTabBar::tab:selected {
+    background: var(--primary-bg);
+    border-color: var(--highlight);
+    font-weight: 800;
+    color: var(--highlight);
+}
+
+/* === Barre d’outils (ToolBar) === */
+QToolBar {
+    background: var(--secondary-bg);
+    border: none;
+    padding: 6px 8px;
+}
+
+QToolButton {
+    background: transparent;
+    color: var(--text-light);
+    padding: 8px 12px;
+    border-radius: 5px;
+    transition: background-color 0.25s ease;
+}
+
+QToolButton:hover {
+    background-color: var(--highlight);
+}
+
+/* === Boutons (PushButton) === */
+QPushButton {
+    background-color: var(--highlight);
+    color: white;
+    border-radius: 6px;
+    padding: 10px 16px;
+    font-weight: 700;
+    border: none;
+    min-width: 90px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    box-shadow: 0 3px 6px rgba(26, 188, 156, 0.5);
+}
+
+QPushButton:hover {
+    background-color: var(--highlight-dark);
+}
+
+QPushButton:pressed {
+    background-color: #0f7a69;
+}
+
+/* === Champs texte (LineEdit) === */
+QLineEdit {
+    background-color: var(--secondary-bg);
+    color: var(--text-light);
+    border: 1.5px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 12px;
+    selection-background-color: var(--highlight);
+    selection-color: var(--primary-bg);
+    font-size: 14px;
+}
+
+QLineEdit:focus {
+    border: 2px solid var(--highlight);
+    background-color: #3f5a72;
+}
+
+/* === Labels === */
+QLabel {
+    color: var(--text-light);
+    font-weight: normal;
+}
+
+/* === Barre de statut (StatusBar) === */
+QStatusBar {
+    background-color: var(--secondary-bg);
+    color: var(--text-light);
+    font-weight: 600;
+    padding: 4px 8px;
+}
+
+/* === MessageBox === */
+QMessageBox {
+    background-color: var(--primary-bg);
+    color: var(--text-light);
+    font-size: 14px;
+}
+
+/* === Cases à cocher (CheckBox) === */
+QCheckBox {
+    color: var(--text-light);
+    font-weight: 600;
+    spacing: 8px;
+}
+
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 2px solid var(--border-color);
+    background: transparent;
+}
+
+QCheckBox::indicator:checked {
+    background-color: var(--highlight);
+    border-color: var(--highlight);
+}
+
+/* === Boutons radio (RadioButton) === */
+QRadioButton {
+    color: var(--text-light);
+    font-weight: 600;
+    spacing: 8px;
+}
+
+QRadioButton::indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    border: 2px solid var(--border-color);
+    background: transparent;
+}
+
+QRadioButton::indicator:checked {
+    background-color: var(--highlight);
+    border-color: var(--highlight);
+}
+
+/* === ComboBox (menus déroulants) === */
+QComboBox {
+    background-color: var(--secondary-bg);
+    border: 1.5px solid var(--border-color);
+    border-radius: 6px;
+    padding: 6px 15px 6px 8px;
+    color: var(--text-light);
+    min-width: 140px;
+    font-size: 14px;
+}
+
+QComboBox:hover {
+    border-color: var(--highlight);
+}
+
+QComboBox:focus {
+    border: 2px solid var(--highlight);
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 24px;
+    border-left: 1.5px solid var(--border-color);
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
+    background: transparent;
+}
+
+QComboBox::down-arrow {
+    image: url(:/icons/arrow-down-white.png); /* À remplacer par ta propre icône */
+}
+
+/* === Scrollbars verticales === */
+QScrollBar:vertical {
+    background: var(--secondary-bg);
+    width: 14px;
+    border-radius: 7px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background: var(--highlight);
+    min-height: 25px;
+    border-radius: 7px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+/* === Tooltips === */
+QToolTip {
+    background-color: var(--tooltip-bg);
+    color: var(--tooltip-text);
+    padding: 6px 10px;
+    border-radius: 5px;
+    font-size: 13px;
+}
+
+/* === Désactivé (disabled) === */
+*:disabled {
+    color: var(--disabled-text) !important;
+}
+
+/* === Texte sélectionné (globale) === */
+QWidget {
+    selection-background-color: var(--highlight);
+    selection-color: var(--primary-bg);
+}
