@@ -1,7 +1,28 @@
-PySide6==6.6.0       # Alternative moderne à PyQt5
-# PyQt5==5.15.9      # (Optionnel - à décommenter si nécessaire)
-sqlite3             # Intégré à Python
-opencv-python       # Pour l'analyse vidéo
-numpy               # Requis par OpenCV
-python-dotenv       # Pour la gestion des variables d'environnement
-psutil
+# Librairies principales pour l'application PySide6 + IA + Sécurité
+pillow==11.3.0
+psutil==7.0.0
+
+# GUI Qt (les deux sont installés, tu peux garder l'un seul si tu veux alléger)
+pyside6==6.9.1
+pyside6-addons==6.9.1
+pyside6-essentials==6.9.1
+
+# PyQt5 aussi présent (non nécessaire si tu utilises uniquement PySide6)
+# pyqt5==5.15.11
+# pyqt5-qt5==5.15.17
+# pyqt5-sip==12.17.0
+
+# Traitement d'image et vidéosurveillance avec OpenCV
+opencv-python==4.10.0.82
+
+# Analyse, traitement et calcul
+numpy==1.26.4
+
+# Gestion des variables d’environnement (.env)
+python-dotenv==1.0.1
+
+# Génération de codes-barres
+python-barcode==0.15.1
+
+# Composant pour PySide6 (nécessaire)
+shiboken6==6.9.1
