@@ -28,38 +28,100 @@ Un système de gestion intuitif et complet pour les librairies et papeteries, co
 
 ---
 
-## 🚀 Installation et Lancement
 
-Pour faire fonctionner l'application, suivez ces étapes :
+## 🚀 Installation et Lancement (Windows)
+
+**⚠️ ATTENTION : Ce projet ne fonctionne qu'avec Python 3.12. Vous devez absolument avoir cette version installée, même si vous en avez une autre sur votre machine.**
+
+### 1. Installation de Python 3.12
+
+1.  **Téléchargez et installez Python 3.12** depuis le site officiel.
+2.  **Très important :** Lors de l'installation, assurez-vous de cocher la case **"Add python.exe to PATH"**.
+3.  Vérifiez que l'exécutable `py` est reconnu. Ouvrez votre terminal (PowerShell ou CMD) et tapez :
+    ```bash
+    py -0
+    ```
+    Cette commande devrait lister toutes les versions de Python installées, y compris le `3.12`.
+
+### 2. Configuration du Projet
 
 1.  **Cloner le dépôt :**
     ```bash
-    git clone [https://github.com/votre_utilisateur/librairie_papeterie.git](https://github.com/votre_utilisateur/librairie_papeterie.git)
+    git clone [https://github.com/yvanol-fotso/librairie_papeterie.git](https://github.com/yvanol-fotso/librairie_papeterie.git)
     cd librairie_papeterie
     ```
 
-2.  **Créer un environnement virtuel (fortement recommandé) :**
-    Cela isole les dépendances de votre projet du reste de votre système Python, évitant ainsi les conflits.
+2.  **Se positionner à la racine du projet (là où se trouve le `src` et le `requirements.txt`) :**
+    
+    ✅ **1️⃣ Aller dans ton projet**
+    
     ```bash
-    python -m venv venv
-    # Sur Windows
-    .\venv\Scripts\activate
-    # Sur macOS/Linux
-    source venv/bin/activate
+    cd C:\Users\fotyv\Documents\Boite\librairie_papeterie\librairie_papeterie 
     ```
+    *(Ajustez ce chemin selon l'emplacement réel du dépôt sur votre machine)*
 
-3.  **Installer les dépendances :**
-    Toutes les bibliothèques nécessaires au projet sont listées dans le fichier `requirements.txt`. Assurez-vous que ce fichier existe à la racine de votre projet et qu'il contient toutes les dépendances (ex: `PySide6`, `SQLAlchemy`, `qrcode`, `Pillow`, etc.). Installez-les en une seule commande :
+3.  **Créer et Activer l'Environnement Virtuel (venv) :**
+
+    Utilisez explicitement la version 3.12 pour créer le `venv`.
+    
+    ✅ **3️⃣ Créer un venv avec Python 3.12**
+    
     ```bash
+    py -3.12 -m venv venv
+    ```
+    
+    ✅ **4️⃣ Activer l’environnement**
+    
+    ```bash
+    .\venv\Scripts\activate
+    ```
+    Quand c’est bon, vous verrez `(venv)` apparaître au début de votre ligne de commande, indiquant que l'environnement est actif.
+
+4.  **Installer les dépendances :**
+    
+    ✅ **5️⃣ Installer les dépendances**
+    
+    ```bash
+    pip install --upgrade pip
     pip install -r requirements.txt
     ```
-
-4.  **Lancer l'application :**
-    ```bash
-    python main.py # Ou le nom de votre fichier de démarrage principal (par exemple, app.py)
-    ```
+    👉 **Avec Python 3.12, PySide6 va s’installer sans erreur.**
 
 ---
+
+## 🚀 Lancement de l'Application
+
+### Option A : Depuis PyCharm (Recommandé pour le Dev)
+
+1.  **Ouvrir le projet dans PyCharm** et configurer l'interpréteur pour qu'il utilise le `venv` que vous venez de créer (voir section 💻 ci-dessous).
+2.  Dans la structure du projet, faites un clic droit sur le fichier principal (qui se trouve dans le dossier `src`, par exemple `src/main.py` ou `src/app.py`).
+3.  Sélectionnez "**Run 'main'**" (ou le nom de votre fichier).
+4.  Pour arrêter, cliquez sur le bouton rouge **Stop** de la console de PyCharm.
+
+### Option B : Depuis le Terminal (VS Code / CMD)
+
+Puisqu'il n'y a PAS de `main.py` à la racine mais dans le dossier `src`, vous devez lancer le programme comme un module Python depuis la racine du projet (`librairie_papeterie`).
+
+1.  Assurez-vous d'être à la **racine du projet** et que le `venv` est **actif** :
+    
+    ```bash
+    C:\Users\fotyv\Documents\Boite\librairie_papeterie\librairie_papeterie>
+    ```
+
+2.  **Lancez le programme correctement :**
+    
+    ```bash
+    python -m src.main
+    ```
+    
+    💡 **Pourquoi ?** L'option `-m` traite `src.main` comme un chemin de module, permettant à Python de trouver le fichier `main.py` dans le dossier `src` et de lancer l'application.
+    
+    ❌ **Ne faites PAS** : `python src/main.py` (peut causer des problèmes d'importation de modules internes)
+    
+    ❌ **Ne faites PAS** : `python3.12` ou `python` (vous devez utiliser le venv activé)
+
+---
+
 
 ## 💻 Configuration de l'Environnement de Développement (PyCharm)
 
