@@ -33,12 +33,6 @@ class NotificationManager(QObject):
         QMessageBox.warning(None, title, message)
 
 
-    #
-    # def show_error(self, title: str, message: str):
-    #     """Affiche une erreur"""
-    #     self.notification_sent.emit(title, message)
-    #     QMessageBox.critical(None, title, message)
-
     def show_error(self, parent, message, title="Erreur"):
         QMessageBox.critical(parent, title, message)
 

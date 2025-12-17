@@ -2,50 +2,6 @@
 from PySide6.QtWidgets import QLabel
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath
 from PySide6.QtCore import Qt
-import os
-
-
-# def create_circular_avatar_label(image_path, size=48, border_color="#1abc9c", border_width=2):
-#     pixmap = QPixmap(image_path)
-#     if pixmap.isNull():
-#         label = QLabel("No Img")
-#         label.setAlignment(Qt.AlignCenter)
-#         label.setFixedSize(size, size)
-#         return label
-#
-#     # Redimensionner à taille carrée
-#     pixmap = pixmap.scaled(size, size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-#
-#     # Créer pixmap transparent et masque circulaire
-#     masked_pixmap = QPixmap(size, size)
-#     masked_pixmap.fill(Qt.transparent)
-#     painter = QPainter(masked_pixmap)
-#     painter.setRenderHint(QPainter.Antialiasing)
-#     path = QPainterPath()
-#     path.addEllipse(0, 0, size, size)
-#     painter.setClipPath(path)
-#     painter.drawPixmap(0, 0, pixmap)
-#
-#     # Dessiner la bordure circulaire
-#     pen = painter.pen()
-#     pen.setWidth(border_width)
-#     pen.setColor(Qt.GlobalColor.transparent)  # Optionnel : transparente pour contour lisse
-#     painter.setPen(pen)
-#     painter.drawEllipse(border_width // 2, border_width // 2, size - border_width, size - border_width)
-#
-#     painter.end()
-#
-#     # Créer label et affecter pixmap
-#     label = QLabel()
-#     label.setPixmap(masked_pixmap)
-#     label.setFixedSize(size, size)
-#     label.setStyleSheet(f"border-radius: {size // 2}px; border: {border_width}px solid {border_color};")
-#     return label
-
-
-
-
-
 from PySide6.QtWidgets import QLabel, QGraphicsDropShadowEffect
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QBrush
 from PySide6.QtCore import Qt

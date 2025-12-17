@@ -1,0 +1,11 @@
+{
+    "app_name": "Librairie-Papeterie",
+    "version": "1.0.0",
+    "theme": "light_style.qss",
+    "confirm_exit": true,
+    "auto_backup": true,
+    "backup_path": "backups/",
+    "recent_files": [],
+    "auto_theme": false,
+    "default_theme": "dark_style.qss"
+}

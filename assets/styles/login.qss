@@ -1,40 +1,421 @@
+/* ============================================
+   LOGIN DIALOG - Style Moderne et Professionnel
+   Sans emojis, interface captivante - VERSION CORRIGÉE
+   ============================================ */
+
+/* ========================================
+   DIALOG PRINCIPAL
+   ======================================== */
 QDialog {
-    background-color: #2c3e50;
-    color: #ecf0f1;
-    font-family: "Segoe UI", sans-serif;
-    font-size: 14px;
+    background-color: #f5f5f5;
 }
 
-QLabel {
-    font-size: 16px;
+#loginContainer {
+    background-color: white;
+    border-radius: 15px;
+    border: 1px solid #e0e0e0;
+}
+
+/* ========================================
+   LOGO - CIRCULAIRE AVEC IMAGE À L'INTÉRIEUR
+   ======================================== */
+#logoLabel {
+    border-radius: 60px;  /* 120px / 2 = 60px pour être circulaire */
+    border: 3px solid #3498db;
+    background-color: white;
+}
+
+/* ========================================
+   TITRES
+   ======================================== */
+#loginTitle {
+    color: #2c3e50;
+    font-size: 24pt;
     font-weight: bold;
-    color: #ecf0f1;
+    font-family: "Segoe UI", sans-serif;
 }
 
-QLineEdit {
-    background-color: #34495e;
-    border: 1px solid #7f8c8d;
-    border-radius: 5px;
-    padding: 6px;
-    color: #ecf0f1;
+#loginSubtitle {
+    color: #7f8c8d;
+    font-size: 10pt;
+    font-family: "Segoe UI", sans-serif;
 }
 
-QLineEdit:focus {
-    border: 1px solid #1abc9c;
+/* ========================================
+   CONTAINERS D'INPUT
+   ======================================== */
+#inputContainer {
+    background-color: #f8f9fa;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    min-height: 50px;
 }
 
-QPushButton {
-    background-color: #1abc9c;
-    color: white;
+#inputContainer:focus-within {
+    border-color: #3498db;
+    background-color: white;
+}
+
+/* ========================================
+   ICÔNES TEXTE (remplace les emojis)
+   ======================================== */
+#iconLabel {
+    color: #7f8c8d;
+    font-size: 9pt;
+    font-weight: bold;
+    font-family: "Segoe UI", sans-serif;
+}
+
+/* ========================================
+   CHAMPS DE SAISIE
+   ======================================== */
+#loginInput {
+    background: transparent;
+    border: none;
+    color: #2c3e50;
+    font-size: 11pt;
     padding: 8px;
-    border-radius: 5px;
 }
 
-QPushButton:hover {
+#loginInput:focus {
+    outline: none;
+}
+
+/* ========================================
+   BOUTON PRINCIPAL - HAUTEUR RÉDUITE
+   ======================================== */
+#primaryButton {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-weight: bold;
+    font-size: 11pt;
+    min-height: 48px;  /* Réduit de 50px à 48px */
+    max-height: 48px;
+    padding: 12px 24px;
+    font-family: "Segoe UI", sans-serif;
+}
+
+#primaryButton:hover {
+    background-color: #2980b9;
+}
+
+#primaryButton:pressed {
+    background-color: #21618c;
+}
+
+#primaryButton:disabled {
+    background-color: #bdc3c7;
+    color: #7f8c8d;
+}
+
+/* ========================================
+   BOUTON LIEN (Mot de passe oublié)
+   ======================================== */
+#linkButton {
+    color: #3498db;
+    border: none;
+    background: transparent;
+    padding: 6px 10px;
+    font-size: 9pt;
+}
+
+#linkButton:hover {
+    color: #2980b9;
+}
+
+/* ========================================
+   BOUTON TOGGLE THÈME - TAILLE RÉDUITE
+   ======================================== */
+#themeButton {
+    background-color: #3498db;
+    color: white;
+    border: 2px solid #2980b9;
+    border-radius: 8px;
+    font-size: 9pt;
+    font-weight: 600;
+    min-width: 100px;  /* Réduit de 140px à 100px */
+    max-width: 100px;
+    min-height: 36px;  /* Réduit de 42px à 36px */
+    max-height: 36px;
+    padding: 8px 16px;
+    font-family: "Segoe UI", sans-serif;
+}
+
+#themeButton:hover {
+    background-color: #2980b9;
+    border-color: #21618c;
+}
+
+#themeButton:pressed {
+    background-color: #21618c;
+    border-color: #1a5276;
+}
+
+/* ========================================
+   BOUTON ICÔNE (Show/Hide Password)
+   ======================================== */
+#iconButton {
+    background-color: #ecf0f1;
+    border: 1px solid #bdc3c7;
+    border-radius: 8px;
+    color: #2c3e50;
+    padding: 6px;
+    font-size: 9pt;
+    font-weight: 600;
+    font-family: "Segoe UI", sans-serif;
+}
+
+#iconButton:hover {
+    background-color: #bdc3c7;
+    border-color: #95a5a6;
+    color: #2c3e50;
+}
+
+#iconButton:pressed {
+    background-color: #3498db;
+    border-color: #2980b9;
+    color: white;
+}
+
+#iconButton:checked {
+    background-color: #3498db;
+    border-color: #2980b9;
+    color: white;
+}
+
+/* ========================================
+   CHECKBOX – LISIBLE, PRO, UX CORRECTE
+   ======================================== */
+
+QCheckBox {
+    color: #2c3e50;
+    font-size: 9pt;
+    spacing: 8px;
+    font-family: "Segoe UI", sans-serif;
+}
+
+/* Case */
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 2px solid #bdc3c7;
+    background-color: white;
+}
+
+/* Hover */
+QCheckBox::indicator:hover {
+    border-color: #3498db;
+}
+
+/* Checked → ✔ visible */
+QCheckBox::indicator:checked {
+    background-color: white;
+    border-color: #3498db;
+    image: url(assets/icons/check_blue.svg);
+}
+
+/* ========================================
+   FOOTER
+   ======================================== */
+#loginFooter {
+    color: #95a5a6;
+    font-size: 8pt;
+    font-family: "Segoe UI", sans-serif;
+}
+
+/* ========================================
+   MODE SOMBRE
+   ======================================== */
+
+/* Container principal dark */
+QDialog[theme="dark"] {
+    background-color: #1e2a38;
+}
+
+QDialog[theme="dark"] #loginContainer {
+    background-color: #2c3e50;
+    border-color: #34495e;
+}
+
+/* Titres dark */
+QDialog[theme="dark"] #loginTitle {
+    color: #ecf0f1;
+}
+
+QDialog[theme="dark"] #loginSubtitle {
+    color: #95a5a6;
+}
+
+/* Icônes texte dark */
+QDialog[theme="dark"] #iconLabel {
+    color: #95a5a6;
+}
+
+/* Inputs dark */
+QDialog[theme="dark"] #inputContainer {
+    background-color: #34495e;
+    border-color: #4a5f7f;
+}
+
+QDialog[theme="dark"] #inputContainer:focus-within {
+    border-color: #1abc9c;
+    background-color: #3b5770;
+}
+
+QDialog[theme="dark"] #loginInput {
+    color: #ecf0f1;
+}
+
+/* Bouton principal dark */
+QDialog[theme="dark"] #primaryButton {
+    background-color: #1abc9c;
+    border: none;
+}
+
+QDialog[theme="dark"] #primaryButton:hover {
     background-color: #16a085;
 }
 
-QMessageBox {
-    background-color: #2c3e50;
+QDialog[theme="dark"] #primaryButton:pressed {
+    background-color: #13876b;
+}
+
+QDialog[theme="dark"] #primaryButton:disabled {
+    background-color: #4a5f7f;
+    color: #95a5a6;
+}
+
+/* Bouton lien dark */
+QDialog[theme="dark"] #linkButton {
+    color: #1abc9c;
+}
+
+QDialog[theme="dark"] #linkButton:hover {
+    color: #16a085;
+}
+
+/* Bouton thème dark - TAILLE RÉDUITE */
+QDialog[theme="dark"] #themeButton {
+    background-color: #1abc9c;
     color: white;
+    border: 2px solid #16a085;
+}
+
+QDialog[theme="dark"] #themeButton:hover {
+    background-color: #16a085;
+    border-color: #13876b;
+}
+
+QDialog[theme="dark"] #themeButton:pressed {
+    background-color: #13876b;
+    border-color: #0e6b56;
+}
+
+/* Bouton icône dark */
+QDialog[theme="dark"] #iconButton {
+    background-color: #34495e;
+    border-color: #4a5f7f;
+    color: #ecf0f1;
+}
+
+QDialog[theme="dark"] #iconButton:hover {
+    background-color: #4a5f7f;
+    border-color: #5d7599;
+}
+
+QDialog[theme="dark"] #iconButton:pressed {
+    background-color: #1abc9c;
+    border-color: #16a085;
+    color: white;
+}
+
+QDialog[theme="dark"] #iconButton:checked {
+    background-color: #1abc9c;
+    border-color: #16a085;
+    color: white;
+}
+
+/* Checkbox dark */
+QDialog[theme="dark"] QCheckBox {
+    color: #ecf0f1;
+}
+
+QDialog[theme="dark"] QCheckBox::indicator {
+    border-color: #7f8c8d;
+    background-color: #34495e;
+}
+
+QDialog[theme="dark"] QCheckBox::indicator:hover {
+    border-color: #1abc9c;
+}
+
+/* Logo dark */
+QDialog[theme="dark"] #logoLabel {
+    border-color: #1abc9c;
+    background-color: #2c3e50;
+}
+
+/* Footer dark */
+QDialog[theme="dark"] #loginFooter {
+    color: #7f8c8d;
+}
+
+/* ========================================
+   QMESSAGEBOX - TEXTE CENTRÉ
+   ======================================== */
+QMessageBox {
+    background-color: white;
+    color: #2c3e50;
+}
+
+QMessageBox QLabel {
+    color: #2c3e50;
+    font-size: 11pt;
+    min-width: 300px;
+    font-family: "Segoe UI", sans-serif;
+    qproperty-alignment: AlignCenter;  /* CENTRE LE TEXTE */
+}
+
+QMessageBox QPushButton {
+    background-color: #3498db;
+    color: white;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    min-width: 90px;
+    border: none;
+}
+
+QMessageBox QPushButton:hover {
+    background-color: #2980b9;
+}
+
+QMessageBox QPushButton:pressed {
+    background-color: #21618c;
+}
+
+/* Dark mode pour MessageBox */
+QDialog[theme="dark"] QMessageBox {
+    background-color: #2c3e50;
+    color: #ecf0f1;
+}
+
+QDialog[theme="dark"] QMessageBox QLabel {
+    color: #ecf0f1;
+    qproperty-alignment: AlignCenter;  /* CENTRE LE TEXTE */
+}
+
+QDialog[theme="dark"] QMessageBox QPushButton {
+    background-color: #1abc9c;
+}
+
+QDialog[theme="dark"] QMessageBox QPushButton:hover {
+    background-color: #16a085;
+}
+
+QDialog[theme="dark"] QMessageBox QPushButton:pressed {
+    background-color: #13876b;
 }
