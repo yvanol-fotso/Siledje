@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QPainterPath
 from PySide6.QtCore import Qt, QSize
 import os
-from src.data.data import classes_par_niveau, livres_par_classe
+from data.dummy_data.data_home import classes_par_niveau, livres_par_classe
 from src.utils.helpers import create_circular_avatar_label
 
 

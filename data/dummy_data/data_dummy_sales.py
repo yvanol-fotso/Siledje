@@ -1,4 +1,3 @@
-# Fichier data_dummy_sales.py
 PRODUCTS = [
     {"id": 1, "barcode_test": "CAH123456789", "name": "Cahier 96p", "price": 2.5, "stock": 50, "type": "unitaire"},
     {"id": 2, "barcode_test": "STY123456789", "name": "Stylo bleu", "price": 1.2, "stock": 100, "type": "unitaire"},

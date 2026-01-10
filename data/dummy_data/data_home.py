@@ -1,4 +1,3 @@
-# src/data/data.py
 classes_par_niveau = {
     ("Maternelle", "Anglophone"): ["Nursery 1", "Nursery 2", "Nursery 3"],
     ("Maternelle", "Francophone"): ["Petite Section", "Grande Section"],

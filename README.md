@@ -28,6 +28,91 @@ Un système de gestion intuitif et complet pour les librairies et papeteries, co
 
 ---
 
+## 🏗️ Architecture du Projet
+
+Le projet suit une architecture modulaire et organisée pour faciliter la maintenance et l'évolutivité :
+
+```
+LIBRAIRIE_PAPETERIE/
+├── main.py                    # Point d'entrée de l'application
+├── config.json                # Configuration unique centralisée
+├── requirements.txt           # Dépendances Python
+├── README.md                  # Documentation principale
+│
+├── assets/                    # Ressources statiques
+│   ├── icons/                 # Icônes de l'interface
+│   ├── images/                # Images et illustrations
+│   └── styles/                # Feuilles de style Qt
+│       ├── light.qss          # Thème clair
+│       └── dark.qss           # Thème sombre
+│
+├── src/                       # Code source principal
+│   ├── __init__.py
+│   │
+│   ├── models/                # Modèles de données (entités métier)
+│   │   ├── __init__.py
+│   │   ├── product.py         # Modèle Produit (livre/papeterie)
+│   │   ├── sale.py            # Modèle Vente
+│   │   ├── stock.py           # Modèle Stock
+│   │   └── user.py            # Modèle Utilisateur
+│   │
+│   ├── database/              # Gestion de la base de données
+│   │   ├── __init__.py
+│   │   ├── connection.py      # Connexion à la BDD
+│   │   ├── manager.py         # Gestionnaire de BDD
+│   │   └── migrations/        # Scripts de migration
+│   │
+│   ├── ui/                    # Interface graphique (Vue)
+│   │   ├── __init__.py
+│   │   ├── windows/           # Fenêtres principales
+│   │   │   ├── main_window.py # Fenêtre principale
+│   │   │   └── login_window.py # Fenêtre de connexion
+│   │   ├── views/             # Vues/écrans spécifiques
+│   │   │   ├── accueil_view.py    # Vue d'accueil
+│   │   │   ├── caisse_view.py     # Vue caisse/vente
+│   │   │   ├── stock_view.py      # Vue gestion stock
+│   │   │   └── reports_view.py    # Vue rapports
+│   │   └── widgets/           # Composants réutilisables
+│   │       └── custom_button.py
+│   │
+│   ├── modules/               # Logique métier (Contrôleur)
+│   │   ├── __init__.py
+│   │   ├── sales.py           # Gestion des ventes
+│   │   ├── stock.py           # Gestion du stock
+│   │   ├── reports.py         # Génération de rapports
+│   │   ├── barcode.py         # Gestion codes-barres/QR
+│   │   └── security.py        # Authentification et sécurité
+│   │
+│   └── utils/                 # Utilitaires et helpers
+│       ├── __init__.py
+│       ├── config.py          # Gestion de la configuration
+│       ├── notifications.py   # Système de notifications
+│       ├── theme_manager.py   # Gestion des thèmes
+│       └── helpers.py         # Fonctions auxiliaires
+│
+├── data/                      # Données de l'application
+│   ├── backups/               # Sauvegardes automatiques
+│   └── dummy_data/            # Données de test/démonstration
+│
+└── docs/                      # Documentation technique
+    ├── architecture.md        # Documentation de l'architecture
+    ├── user_manual.md         # Manuel utilisateur
+    └── dev_manual.md          # Guide développeur
+```
+
+### 📋 Description des Modules
+
+**`models/`** : Contient les classes représentant les entités métier (Produit, Vente, Stock, Utilisateur). Ces classes définissent la structure des données et les règles de validation.
+
+**`database/`** : Centralise toute la logique d'accès aux données, la connexion à la base de données et les opérations CRUD (Create, Read, Update, Delete).
+
+**`ui/`** : Regroupe tous les composants de l'interface graphique PyQt/PySide. Séparé en fenêtres principales, vues spécifiques et widgets réutilisables.
+
+**`modules/`** : Contient la logique métier de l'application (traitement des ventes, gestion du stock, génération de rapports, etc.). Fait le lien entre l'interface et les données.
+
+**`utils/`** : Fonctions utilitaires réutilisables dans toute l'application (configuration, notifications, gestion des thèmes, helpers).
+
+---
 
 ## 🚀 Installation et Lancement (Windows)
 
@@ -47,7 +132,7 @@ Un système de gestion intuitif et complet pour les librairies et papeteries, co
 
 1.  **Cloner le dépôt :**
     ```bash
-    git clone [https://github.com/yvanol-fotso/librairie_papeterie.git](https://github.com/yvanol-fotso/librairie_papeterie.git)
+    git clone https://github.com/yvanol-fotso/librairie_papeterie.git
     cd librairie_papeterie
     ```
 
@@ -70,12 +155,12 @@ Un système de gestion intuitif et complet pour les librairies et papeteries, co
     py -3.12 -m venv venv
     ```
     
-    ✅ **4️⃣ Activer l’environnement**
+    ✅ **4️⃣ Activer l'environnement**
     
     ```bash
     .\venv\Scripts\activate
     ```
-    Quand c’est bon, vous verrez `(venv)` apparaître au début de votre ligne de commande, indiquant que l'environnement est actif.
+    Quand c'est bon, vous verrez `(venv)` apparaître au début de votre ligne de commande, indiquant que l'environnement est actif.
 
 4.  **Installer les dépendances :**
     
@@ -85,7 +170,7 @@ Un système de gestion intuitif et complet pour les librairies et papeteries, co
     pip install --upgrade pip
     pip install -r requirements.txt
     ```
-    👉 **Avec Python 3.12, PySide6 va s’installer sans erreur.**
+    👉 **Avec Python 3.12, PySide6 va s'installer sans erreur.**
 
 ---
 
@@ -121,7 +206,6 @@ Puisqu'il n'y a PAS de `main.py` à la racine mais dans le dossier `src`, vous d
     ❌ **Ne faites PAS** : `python3.12` ou `python` (vous devez utiliser le venv activé)
 
 ---
-
 
 ## 💻 Configuration de l'Environnement de Développement (PyCharm)
 
@@ -178,15 +262,40 @@ Nous accueillons avec plaisir les contributions ! Si vous souhaitez améliorer c
 ---
 
 
+# 🧪 Tests de la Base de Données
+
+Le projet inclut une suite de tests permettant de vérifier le bon fonctionnement de la base de données (connexion, opérations CRUD, gestion des stocks et association des codes-barres).
+
+---
+
+### 📁 Emplacement des tests
+
+Les tests se trouvent dans le dossier :
+
+```text
+tests/
+└── test_database.py
+
+Se placer à la racine du projet
+
+
+python -m tests.test_database
+
+Résultats : 8/8 tests réussis
+🎉 TOUS LES TESTS SONT PASSÉS !
+
+```
+---
+
 ## Documentation et ressources
 
-Vous trouverez ci-dessous des documents et captures d’écran illustrant les différentes versions de l’interface utilisateur ainsi que la documentation PDF associée.
+Vous trouverez ci-dessous des documents et captures d'écran illustrant les différentes versions de l'interface utilisateur ainsi que la documentation PDF associée.
 
 ### Documentation PDF
 
 - [Documentation version 1 (PDF)](docs/docs_pdf/Librairie_Papetierie-V1.pdf)
 
-### Captures d’écran de l’interface
+### Captures d'écran de l'interface
 
 #### Interface version 1  
 ![Accueil v1](docs/images/v1/ui_accueil.png)

@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QAbstractTableModel, Signal, QDate, QModelIndex
 from PySide6.QtGui import QIntValidator, QDoubleValidator
 
-from src.data.data_dummy_stock import dummy_stock_data, stock_headers
+from data.dummy_data.data_dummy_stock import dummy_stock_data, stock_headers
 
 
 class StockTableModel(QAbstractTableModel):

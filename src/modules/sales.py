@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                                QHeaderView, QSpacerItem, QSizePolicy)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
-from  src.data.data_dummy_sales import  PRODUCTS
+from  data.dummy_data.data_dummy_sales import  PRODUCTS
 
 
 class SalesManager(QWidget):

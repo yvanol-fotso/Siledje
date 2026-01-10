@@ -6,7 +6,7 @@ from PySide6.QtPrintSupport import QPrinter, QPrintDialog
 from PySide6.QtGui import QTextDocument
 import csv
 from datetime import datetime
-from src.data.data_dummy_report import SALES_DATA
+from data.dummy_data.data_dummy_report import SALES_DATA
 
 
 class ReportSystem(QWidget):

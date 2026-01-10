@@ -5,13 +5,15 @@ import sys
 import os
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QCoreApplication
-from src.ui.main_window import MainWindow
-from src.ui.login import LoginDialog
-from src.core.config import AppConfig
+from src.ui.windows.main_window import MainWindow
+from src.ui.windows.login_window import LoginDialog 
 from src.utils.theme_manager import ThemeManager
+
+from src.utils.config import AppConfig, config
 
 
 def main():
+    #print(config.app_name)  
     print("=" * 50)
     print("Démarrage de l'application...")
     print("=" * 50)
