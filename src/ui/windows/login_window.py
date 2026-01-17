@@ -1,22 +1,108 @@
 """
-Interface de connexion moderne et professionnelle
-Espacements optimisés, design épuré et captivant
+Interface de connexion moderne et professionnelle.
+Version optimisée - Utilisation cohérente de get_asset_path.
 """
-import os
-from pathlib import Path
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QLabel, QLineEdit,
-    QPushButton, QMessageBox, QWidget, QHBoxLayout, 
-    QFrame, QGraphicsOpacityEffect, QCheckBox
-)
-from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, QTimer, QPoint
-from PySide6.QtGui import QPixmap, QFont, QPainter, QPainterPath
 
-from src.Beans.User import User
+from src.utils.compat import (
+    QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox,
+    QWidget, QHBoxLayout, QFrame, QGraphicsOpacityEffect, QCheckBox,
+    Qt, Signal, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QFont, 
+    QIcon, QSize, QPixmap, QPainter, QColor, QBrush, QPen
+)
+from src.utils.helpers import (
+    create_circular_avatar_label,
+    get_asset_path
+)
+from src.models import User, UserRole
+
+
+def load_svg_icon(icon_name: str, size: int = 24, debug: bool = False) -> QPixmap:
+    """
+    Charge une icône SVG et la convertit en QPixmap.
+    
+    Args:
+        icon_name: Nom de l'icône (sans .svg)
+        size: Taille en pixels
+        debug: Afficher les messages de debug
+        
+    Returns:
+        QPixmap de l'icône ou QPixmap vide si erreur
+    """
+    try:
+        icon_path = get_asset_path("icons", f"{icon_name}.svg")
+        
+        if debug:
+            print(f"🔍 Chargement icône : {icon_name}")
+            print(f"   Chemin : {icon_path}")
+            print(f"   Existe : {icon_path.exists()}")
+        
+        if not icon_path.exists():
+            if debug:
+                print(f"❌ Fichier SVG non trouvé : {icon_path}")
+            return create_placeholder_pixmap(size, icon_name[0].upper())
+        
+        # Charger le SVG via QIcon
+        icon = QIcon(str(icon_path))
+        
+        if icon.isNull():
+            if debug:
+                print(f"❌ QIcon est null pour {icon_name}")
+            return create_placeholder_pixmap(size, icon_name[0].upper())
+        
+        # Convertir en pixmap
+        pixmap = icon.pixmap(QSize(size, size))
+        
+        if pixmap.isNull():
+            if debug:
+                print(f"❌ Pixmap est null pour {icon_name}")
+            return create_placeholder_pixmap(size, icon_name[0].upper())
+        
+        if debug:
+            print(f"✅ Icône chargée : {icon_name} ({pixmap.width()}x{pixmap.height()})")
+        
+        return pixmap
+        
+    except Exception as e:
+        if debug:
+            print(f"❌ Erreur chargement {icon_name} : {e}")
+        return create_placeholder_pixmap(size, icon_name[0].upper())
+
+
+def create_placeholder_pixmap(size: int, letter: str) -> QPixmap:
+    """
+    Crée un placeholder visuel avec une lettre.
+    
+    Args:
+        size: Taille du pixmap
+        letter: Lettre à afficher
+        
+    Returns:
+        QPixmap avec fond coloré et lettre
+    """
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    
+    # Fond coloré
+    painter.setBrush(QBrush(QColor("#e74c3c")))
+    painter.setPen(QPen(Qt.NoPen))
+    painter.drawRoundedRect(0, 0, size, size, 4, 4)
+    
+    # Lettre blanche
+    painter.setPen(QColor("#ffffff"))
+    font = QFont("Segoe UI", int(size * 0.5), QFont.Bold)
+    painter.setFont(font)
+    painter.drawText(0, 0, size, size, Qt.AlignCenter, letter)
+    
+    painter.end()
+    
+    return pixmap
 
 
 class AnimatedLineEdit(QLineEdit):
-    """QLineEdit avec effet de focus animé"""
+    """QLineEdit avec effet de focus animé."""
     
     def __init__(self, placeholder="", parent=None):
         super().__init__(parent)
@@ -25,40 +111,10 @@ class AnimatedLineEdit(QLineEdit):
         self.setFont(QFont("Segoe UI", 10))
 
 
-class CircularLabel(QLabel):
-    """QLabel avec image circulaire"""
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFixedSize(100, 100)
-        
-    def setPixmap(self, pixmap):
-        """Définit le pixmap et le rend circulaire"""
-        size = 100
-        circular_pixmap = QPixmap(size, size)
-        circular_pixmap.fill(Qt.transparent)
-        
-        painter = QPainter(circular_pixmap)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setRenderHint(QPainter.SmoothPixmapTransform)
-        
-        path = QPainterPath()
-        path.addEllipse(0, 0, size, size)
-        painter.setClipPath(path)
-        
-        scaled = pixmap.scaled(size, size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-        x = (scaled.width() - size) // 2
-        y = (scaled.height() - size) // 2
-        painter.drawPixmap(0, 0, scaled, x, y, size, size)
-        painter.end()
-        
-        super().setPixmap(circular_pixmap)
-
-
 class LoginDialog(QDialog):
     """
-    Boîte de dialogue de connexion professionnelle
-    Interface épurée avec espacements optimisés
+    Boîte de dialogue de connexion professionnelle.
+    Utilisation optimisée de get_asset_path pour tous les assets.
     """
     
     auth_success = Signal(object)
@@ -80,13 +136,18 @@ class LoginDialog(QDialog):
         QTimer.singleShot(100, lambda: self.txt_username.setFocus())
     
     def _setup_window(self):
-        """Configure la fenêtre"""
+        """Configure la fenêtre."""
         self.setWindowTitle("Connexion - Librairie-Papeterie")
         self.setFixedSize(420, 560)
         self.setWindowFlags(Qt.Dialog | Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
         
+        # Définir l'icône de la fenêtre
+        app_icon_path = get_asset_path("icons", "app.png")
+        if app_icon_path.exists():
+            self.setWindowIcon(QIcon(str(app_icon_path)))
+    
     def _setup_ui(self):
-        """Construit l'interface utilisateur"""
+        """Construit l'interface utilisateur."""
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         
@@ -174,8 +235,11 @@ class LoginDialog(QDialog):
         self.btn_theme.setCursor(Qt.PointingHandCursor)
         self.btn_theme.setFixedSize(110, 32)
         self.btn_theme.clicked.connect(self._toggle_theme)
-        theme_layout.addWidget(self.btn_theme)
         
+        # Ajouter l'icône au bouton thème
+        self._update_theme_button_icon()
+        
+        theme_layout.addWidget(self.btn_theme)
         theme_layout.addStretch()
         footer_layout.addLayout(theme_layout)
         
@@ -195,54 +259,47 @@ class LoginDialog(QDialog):
         self.txt_password.returnPressed.connect(self._authenticate)
     
     def _create_header(self) -> QWidget:
-        """Crée l'en-tête avec le logo circulaire"""
+        """Crée l'en-tête avec le logo circulaire."""
         header_widget = QWidget()
         header_layout = QVBoxLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(0)
         header_layout.setAlignment(Qt.AlignCenter)
         
-        self.logo_label = CircularLabel()
-        self.logo_label.setObjectName("logoLabel")
-        self.logo_label.setAlignment(Qt.AlignCenter)
-        logo_path = Path(__file__).parent.parent.parent / "assets" / "images" / "logo.jpg"
+        # Utiliser get_asset_path pour le logo
+        logo_path = get_asset_path("images", "logo.jpg")
         
-        if logo_path.exists():
-            pixmap = QPixmap(str(logo_path))
-            self.logo_label.setPixmap(pixmap)
-        else:
-            # Logo par défaut
-            default_pixmap = QPixmap(100, 100)
-            default_pixmap.fill(Qt.white)
-            painter = QPainter(default_pixmap)
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(Qt.blue)
-            painter.drawEllipse(10, 10, 80, 80)
-            painter.end()
-            self.logo_label.setPixmap(default_pixmap)
+        self.logo_label = create_circular_avatar_label(
+            image_path=logo_path if logo_path.exists() else None,
+            size=100,
+            border_width=3,
+            border_color="#3498db",
+            shadow_enabled=True
+        )
         
         header_layout.addWidget(self.logo_label, 0, Qt.AlignCenter)
         
         return header_widget
     
     def _create_form(self) -> QWidget:
-        """Crée le formulaire de connexion"""
+        """Crée le formulaire de connexion."""
         form_widget = QWidget()
         form_layout = QVBoxLayout(form_widget)
         form_layout.setSpacing(0)
         form_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Champ utilisateur
+        # ========== CHAMP UTILISATEUR ==========
         username_container = QFrame()
         username_container.setObjectName("inputContainer")
         username_layout = QHBoxLayout(username_container)
         username_layout.setContentsMargins(15, 0, 15, 0)
         username_layout.setSpacing(12)
         
-        icon_user = QLabel("👤")
+        # Icône utilisateur
+        icon_user = QLabel()
         icon_user.setObjectName("iconLabel")
-        icon_user.setFont(QFont("Segoe UI", 14))
-        icon_user.setFixedWidth(25)
+        icon_user.setFixedSize(24, 24)
+        icon_user.setPixmap(load_svg_icon("user", size=24))
         username_layout.addWidget(icon_user)
         
         self.txt_username = AnimatedLineEdit("Nom d'utilisateur")
@@ -251,21 +308,20 @@ class LoginDialog(QDialog):
         username_layout.addWidget(self.txt_username, 1)
         
         form_layout.addWidget(username_container)
-        
-        # Espacement entre les champs
         form_layout.addSpacing(16)
         
-        # Champ mot de passe
+        # ========== CHAMP MOT DE PASSE ==========
         password_container = QFrame()
         password_container.setObjectName("inputContainer")
         password_layout = QHBoxLayout(password_container)
         password_layout.setContentsMargins(15, 0, 15, 0)
         password_layout.setSpacing(12)
         
-        icon_pass = QLabel("🔒")
+        # Icône cadenas
+        icon_pass = QLabel()
         icon_pass.setObjectName("iconLabel")
-        icon_pass.setFont(QFont("Segoe UI", 14))
-        icon_pass.setFixedWidth(25)
+        icon_pass.setFixedSize(24, 24)
+        icon_pass.setPixmap(load_svg_icon("lock", size=24))
         password_layout.addWidget(icon_pass)
         
         self.txt_password = AnimatedLineEdit("Mot de passe")
@@ -274,12 +330,17 @@ class LoginDialog(QDialog):
         self.txt_password.setFrame(False)
         password_layout.addWidget(self.txt_password, 1)
         
-        self.btn_show_password = QPushButton("👁")
+        # Bouton afficher/masquer mot de passe
+        self.btn_show_password = QPushButton()
         self.btn_show_password.setObjectName("iconButton")
         self.btn_show_password.setFixedSize(36, 36)
         self.btn_show_password.setCursor(Qt.PointingHandCursor)
         self.btn_show_password.setCheckable(True)
         self.btn_show_password.clicked.connect(self._toggle_password_visibility)
+        
+        # Définir l'icône initiale
+        self._update_password_visibility_icon(checked=False)
+        
         password_layout.addWidget(self.btn_show_password)
         
         form_layout.addWidget(password_container)
@@ -287,7 +348,7 @@ class LoginDialog(QDialog):
         return form_widget
     
     def _apply_theme(self):
-        """Applique le thème actuel"""
+        """Applique le thème actuel."""
         stylesheet = self.theme_manager.load_stylesheet('login')
         
         if self.theme_manager.get_current_theme() == 'dark':
@@ -297,12 +358,32 @@ class LoginDialog(QDialog):
             self.setProperty("theme", "light")
             self.btn_theme.setText("Mode sombre")
         
+        self._update_theme_button_icon()
+        
         self.setStyleSheet(stylesheet)
         self.style().unpolish(self)
         self.style().polish(self)
     
+    def _update_theme_button_icon(self):
+        """Met à jour l'icône du bouton de thème."""
+        icon_name = "sun" if self.theme_manager.get_current_theme() == 'dark' else "moon"
+        pixmap = load_svg_icon(icon_name, size=16)
+        
+        icon = QIcon(pixmap)
+        self.btn_theme.setIcon(icon)
+        self.btn_theme.setIconSize(QSize(16, 16))
+    
+    def _update_password_visibility_icon(self, checked: bool):
+        """Met à jour l'icône du bouton de visibilité du mot de passe."""
+        icon_name = "eye-off" if checked else "eye"
+        pixmap = load_svg_icon(icon_name, size=20)
+        
+        icon = QIcon(pixmap)
+        self.btn_show_password.setIcon(icon)
+        self.btn_show_password.setIconSize(QSize(20, 20))
+    
     def _setup_animations(self):
-        """Configure les animations"""
+        """Configure les animations."""
         self.opacity_effect = QGraphicsOpacityEffect(self.container)
         self.container.setGraphicsEffect(self.opacity_effect)
         
@@ -314,7 +395,7 @@ class LoginDialog(QDialog):
         self.fade_in.start()
     
     def _shake_animation(self):
-        """Animation de secousse en cas d'erreur"""
+        """Animation de secousse en cas d'erreur."""
         self.animation = QPropertyAnimation(self, b"pos")
         self.animation.setDuration(500)
         self.animation.setLoopCount(2)
@@ -330,7 +411,7 @@ class LoginDialog(QDialog):
         self.animation.start()
     
     def _authenticate(self):
-        """Authentifie l'utilisateur"""
+        """Authentifie l'utilisateur."""
         username = self.txt_username.text().strip()
         password = self.txt_password.text()
         
@@ -350,9 +431,13 @@ class LoginDialog(QDialog):
         QTimer.singleShot(500, lambda: self._check_credentials(username, password))
     
     def _check_credentials(self, username: str, password: str):
-        """Vérifie les identifiants"""
+        """Vérifie les identifiants."""
         if username == "admin" and password == "admin":
-            self.authenticated_user = User(name=username, role="admin")
+            self.authenticated_user = User.create(
+                username=username,
+                password=password,
+                role=UserRole.ADMIN
+            )
             self.auth_success.emit(self.authenticated_user)
             
             self.btn_login.setText("✓ Connexion réussie")
@@ -384,7 +469,7 @@ class LoginDialog(QDialog):
                 self.reject()
     
     def _show_error(self, message: str):
-        """Affiche un message d'erreur"""
+        """Affiche un message d'erreur."""
         msg = QMessageBox(self)
         msg.setIcon(QMessageBox.Warning)
         msg.setWindowTitle("Erreur d'authentification")
@@ -393,21 +478,21 @@ class LoginDialog(QDialog):
         msg.exec()
     
     def _toggle_password_visibility(self):
-        """Bascule la visibilité du mot de passe"""
+        """Bascule la visibilité du mot de passe."""
         if self.btn_show_password.isChecked():
             self.txt_password.setEchoMode(QLineEdit.Normal)
-            self.btn_show_password.setText("🙈")
         else:
             self.txt_password.setEchoMode(QLineEdit.Password)
-            self.btn_show_password.setText("👁")
+        
+        self._update_password_visibility_icon(self.btn_show_password.isChecked())
     
     def _toggle_theme(self):
-        """Bascule le thème"""
+        """Bascule le thème."""
         self.theme_manager.toggle_theme()
         self._apply_theme()
     
     def _forgot_password(self):
-        """Gère le mot de passe oublié"""
+        """Gère le mot de passe oublié."""
         QMessageBox.information(
             self,
             "Mot de passe oublié",
@@ -415,9 +500,9 @@ class LoginDialog(QDialog):
         )
     
     def get_authenticated_user(self) -> User:
-        """Retourne l'utilisateur authentifié"""
+        """Retourne l'utilisateur authentifié."""
         return self.authenticated_user
     
     def get_username(self) -> str:
-        """Retourne le nom d'utilisateur"""
+        """Retourne le nom d'utilisateur."""
         return self.txt_username.text().strip()

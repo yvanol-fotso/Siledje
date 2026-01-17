@@ -1,77 +1,94 @@
 """
-Point d'entrée principal de l'application
+Point d'entrée principal de l'application Librairie-Papeterie.
+Gère l'initialisation de l'application, l'authentification et le lancement.
 """
+
 import sys
 import os
-from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QCoreApplication
+
+# Utiliser compat pour la compatibilité PySide6/PyQt5
+from src.utils.compat import QApplication, QCoreApplication, qt_exec
 from src.ui.windows.main_window import MainWindow
 from src.ui.windows.login_window import LoginDialog 
 from src.utils.theme_manager import ThemeManager
-
-from src.utils.config import AppConfig, config
+from src.utils.config import AppConfig
 
 
 def main():
-    #print(config.app_name)  
+    """
+    Fonction principale de l'application.
+    
+    Étapes:
+    1. Configuration de l'application Qt
+    2. Initialisation du thème
+    3. Affichage de la fenêtre de connexion
+    4. Si authentification réussie, lancement de la fenêtre principale
+    """
+    
     print("=" * 50)
     print("Démarrage de l'application...")
     print("=" * 50)
     
+    # Configuration de la plateforme Qt (Windows uniquement)
     os.environ["QT_QPA_PLATFORM"] = "windows"
  
+    # Configuration de l'application Qt
     QCoreApplication.setApplicationName("Librairie-Papeterie")
     QCoreApplication.setOrganizationName("VotreEntreprise")
-    QCoreApplication.setApplicationVersion("1.0.0-alpha")
+    QCoreApplication.setApplicationVersion("1.0.0")
 
+    # Créer l'application Qt
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
 
-    # Initialiser la configuration
+    # ========== INITIALISATION DE LA CONFIGURATION ==========
     config = AppConfig()
-    print(f"Configuration chargée: version {config.version}")
+    print(f"Configuration chargee: version {config.version}")
     
-    # Initialiser le gestionnaire de thèmes
+    # ========== INITIALISATION DU GESTIONNAIRE DE THÈMES ==========
     theme_manager = ThemeManager(config)
-    print(f"ThemeManager créé")
+    print("ThemeManager cree")
     
-    # Obtenir le thème par défaut
+    # Obtenir et appliquer le thème par défaut
     current_theme = theme_manager.get_current_theme()
-    print(f" Thème actuel: {current_theme}")
+    print(f"Theme actuel: {current_theme}")
     
-    # Appliquer le thème global à l'application
     theme_manager.set_theme(current_theme)
-    print(f"Thème appliqué à l'application")
+    print("Theme applique a l'application")
 
-    # Afficher le login avec config et theme_manager
+    # ========== AFFICHAGE DE LA FENÊTRE DE CONNEXION ==========
     print("\n" + "=" * 50)
-    print("Affichage de la fenêtre de connexion...")
+    print("Affichage de la fenetre de connexion...")
     print("=" * 50)
     
     login_dialog = LoginDialog(config, theme_manager)
     
+    # Vérifier si l'utilisateur s'est authentifié
     if login_dialog.exec() == LoginDialog.Accepted:
         current_user = login_dialog.get_authenticated_user()
-        print(f"\n Utilisateur connecté: {current_user.name} ({current_user.role})")
+        print(f"\nUtilisateur connecte: {current_user.username} ({current_user.role})")
         
-        # Créer la fenêtre principale
-        print("\n Chargement de la fenêtre principale...")
+        # ========== CRÉATION DE LA FENÊTRE PRINCIPALE ==========
+        print("\nChargement de la fenetre principale...")
         
-        # Si MainWindow accepte config et theme_manager
         try:
+            # Créer MainWindow avec tous les paramètres
             main_window = MainWindow(config, theme_manager, current_user)
-            print("MainWindow créée avec ThemeManager")
-        except TypeError:
-            # Fallback si MainWindow n'accepte que current_user
+            print("MainWindow creee avec succes")
+        except TypeError as e:
+            # Fallback au cas où MainWindow aurait une signature différente
+            print(f"Erreur lors de la creation de MainWindow: {e}")
             main_window = MainWindow(current_user)
-            print("MainWindow créée sans ThemeManager (ancien format)")
+            print("MainWindow creee (mode fallback)")
         
         main_window.show()
-        print("Application lancée avec succès!\n")
+        print("Application lancee avec succes!\n")
         
-        sys.exit(app.exec())
+        # Lancer la boucle événementielle Qt (compatible PySide6/PyQt5)
+        sys.exit(qt_exec(app))
     else:
-        print("\n Authentification annulée.")
+        # L'utilisateur a annulé la connexion
+        print("\nAuthentification annulee.")
         sys.exit(0)
 
 

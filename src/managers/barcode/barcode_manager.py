@@ -1,48 +1,84 @@
-import sys
+"""
+Module de gestion des codes-barres et produits.
+Refactorisé pour utiliser la base de données principale (librairie.db).
+"""
+
 import os
 import sqlite3
 import random
-from datetime import datetime, timedelta  # Add timedelta
+from datetime import datetime, timedelta
+from pathlib import Path
 
 import barcode
-# Import PySide6 modules
-from PySide6.QtWidgets import (
+from barcode.writer import ImageWriter
+
+# Import depuis le système de compatibilité
+from src.utils.compat import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QLineEdit, QComboBox, QMessageBox, QGroupBox, QScrollArea,
     QSizePolicy, QFormLayout, QTabWidget, QTableWidget, QTableWidgetItem,
-    QHeaderView, QDialog, QDialogButtonBox, QDateEdit
+    QHeaderView, QDialog, QDialogButtonBox, QDateEdit, Qt, Signal, QSize,
+    QPixmap, QIcon, QFont, QDoubleValidator, QIntValidator, QDate
 )
-from PySide6.QtCore import Qt, Signal, QSize, QDate
-from PySide6.QtGui import QPixmap, QIcon, QFont, QDoubleValidator, QIntValidator
-from barcode.writer import ImageWriter
+
+# Import de la configuration centralisée
+from src.utils.config import get_config
 
 
-# --- 1. Database Refactoring (BarcodeDatabase) ---
+# --- 1. Database Management (BarcodeDatabase) ---
 class BarcodeDatabase:
     """
-    Simplified SQLite database management for barcodes
-    Problem solved: Centralization and persistence of all operational data.
+    Gestionnaire SQLite pour les codes-barres.
+    Utilise la base de données principale définie dans config.json.
     """
 
-    def __init__(self, db_name="librairie_gestion.sqlite"):
-        self.db_name = db_name
+    def __init__(self, db_path=None):
+        """
+        Initialise la connexion à la base de données.
+        
+        Args:
+            db_path: Chemin optionnel vers la BD (sinon utilise config.json)
+        """
+        # Récupérer la configuration
+        self.config = get_config()
+        
+        # Utiliser le chemin de la BD depuis config.json
+        if db_path is None:
+            self.db_path = self.config.db_path
+        else:
+            self.db_path = Path(db_path)
+        
+        # S'assurer que le dossier data existe
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        
         self.conn = None
         self._connect()
         self._init_db()
+        
+        print(f"✅ [BarcodeDatabase] Connecté à : {self.db_path}")
 
     def _connect(self):
-        """Establishes connection to the database."""
+        """Établit la connexion à la base de données."""
         try:
-            self.conn = sqlite3.connect(self.db_name)
-            self.conn.row_factory = sqlite3.Row  # To access columns by name
-            print(f"Connected to database: {self.db_name}")
+            self.conn = sqlite3.connect(str(self.db_path))
+            self.conn.row_factory = sqlite3.Row
+            print(f"✅ Connexion à la base de données : {self.db_path}")
         except sqlite3.Error as e:
-            QMessageBox.critical(None, "DB Error", f"Unable to connect to database: {e}")
-            sys.exit(1)  # Exit application if connection fails
+            QMessageBox.critical(
+                None, 
+                "Erreur BD", 
+                f"Impossible de se connecter à la base de données : {e}"
+            )
+            raise SystemExit(1)
 
     def _init_db(self):
-        """Creates tables if they don't exist."""
+        """
+        Crée les tables si elles n'existent pas.
+        Compatible avec la structure existante de librairie.db.
+        """
         cursor = self.conn.cursor()
+        
+        # Table products
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS products (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,10 +87,13 @@ class BarcodeDatabase:
                 category TEXT,
                 price REAL DEFAULT 0.0,
                 stock INTEGER DEFAULT 0,
-                is_internal_barcode BOOLEAN DEFAULT 0, -- 1 if generated, 0 if external
-                created_at TEXT
+                is_internal_barcode BOOLEAN DEFAULT 0,
+                created_at TEXT,
+                updated_at TEXT
             )
         """)
+        
+        # Table sales
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS sales (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,6 +104,8 @@ class BarcodeDatabase:
                 sale_date TEXT NOT NULL
             )
         """)
+        
+        # Table sale_items
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS sale_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,116 +119,139 @@ class BarcodeDatabase:
                 FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT
             )
         """)
+        
         self.conn.commit()
-        print("Database tables checked/created.")
+        print("✅ Tables de codes-barres vérifiées/créées.")
 
     def add_product(self, barcode, name, category="", price=0.0, stock=0, is_internal_barcode=False):
-        """Adds a new product to the database."""
+        """Ajoute un nouveau produit à la base de données."""
         try:
             cursor = self.conn.cursor()
+            now = datetime.now().isoformat()
             cursor.execute(
-                "INSERT INTO products (barcode, name, category, price, stock, is_internal_barcode, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (barcode, name, category, price, stock, 1 if is_internal_barcode else 0, datetime.now().isoformat())
+                """INSERT INTO products 
+                   (barcode, name, category, price, stock, is_internal_barcode, created_at, updated_at) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (barcode, name, category, price, stock, 
+                 1 if is_internal_barcode else 0, now, now)
             )
             self.conn.commit()
+            print(f"✅ Produit ajouté : {name} ({barcode})")
             return True
         except sqlite3.IntegrityError:
-            QMessageBox.warning(None, "Error", f"Barcode '{barcode}' already exists for another product.")
+            QMessageBox.warning(
+                None, 
+                "Erreur", 
+                f"Le code-barres '{barcode}' existe déjà pour un autre produit."
+            )
             return False
         except sqlite3.Error as e:
-            QMessageBox.critical(None, "DB Error", f"Error adding product: {e}")
+            QMessageBox.critical(None, "Erreur BD", f"Erreur lors de l'ajout : {e}")
             return False
 
     def get_product(self, barcode):
-        """Retrieves a product by its barcode."""
+        """Récupère un produit par son code-barres."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM products WHERE barcode=?", (barcode,))
-        return cursor.fetchone()  # Returns a Row object
+        return cursor.fetchone()
 
     def get_product_by_id(self, product_id):
-        """Retrieves a product by its ID."""
+        """Récupère un produit par son ID."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM products WHERE id=?", (product_id,))
-        return cursor.fetchone()  # Returns a Row object
+        return cursor.fetchone()
 
     def update_stock(self, barcode, quantity_change):
-        """Updates the stock of a product. quantity_change can be positive or negative."""
+        """
+        Met à jour le stock d'un produit.
+        
+        Args:
+            barcode: Code-barres du produit
+            quantity_change: Changement de quantité (peut être négatif)
+        """
         try:
             cursor = self.conn.cursor()
             cursor.execute(
-                "UPDATE products SET stock = stock + ? WHERE barcode=?",
-                (quantity_change, barcode)
+                "UPDATE products SET stock = stock + ?, updated_at = ? WHERE barcode=?",
+                (quantity_change, datetime.now().isoformat(), barcode)
             )
             self.conn.commit()
             return cursor.rowcount > 0
         except sqlite3.Error as e:
-            QMessageBox.critical(None, "DB Error", f"Error updating stock: {e}")
+            QMessageBox.critical(None, "Erreur BD", f"Erreur mise à jour stock : {e}")
             return False
 
     def update_product_details(self, product_id, name, category, price, stock):
-        """Updates product details by its ID."""
+        """Met à jour les détails d'un produit."""
         try:
             cursor = self.conn.cursor()
             cursor.execute(
-                "UPDATE products SET name=?, category=?, price=?, stock=? WHERE id=?",
-                (name, category, price, stock, product_id)
+                """UPDATE products 
+                   SET name=?, category=?, price=?, stock=?, updated_at=? 
+                   WHERE id=?""",
+                (name, category, price, stock, datetime.now().isoformat(), product_id)
             )
             self.conn.commit()
             return cursor.rowcount > 0
         except sqlite3.Error as e:
-            QMessageBox.critical(None, "DB Error", f"Error updating product: {e}")
+            QMessageBox.critical(None, "Erreur BD", f"Erreur mise à jour : {e}")
             return False
 
     def delete_product(self, product_id):
-        """Deletes a product by its ID."""
+        """Supprime un produit par son ID."""
         try:
             cursor = self.conn.cursor()
             cursor.execute("DELETE FROM products WHERE id=?", (product_id,))
             self.conn.commit()
             return cursor.rowcount > 0
         except sqlite3.Error as e:
-            QMessageBox.critical(None, "DB Error", f"Error deleting product: {e}")
+            QMessageBox.critical(None, "Erreur BD", f"Erreur suppression : {e}")
             return False
 
     def get_all_products(self):
-        """Retrieves all products."""
+        """Récupère tous les produits."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM products ORDER BY name ASC")
         return cursor.fetchall()
 
     def add_sale(self, customer_name, customer_contact, total_amount, cart_items):
-        """Adds a new sale and its associated items."""
+        """Enregistre une nouvelle vente avec ses articles."""
         try:
             cursor = self.conn.cursor()
             invoice_number = f"INV-{datetime.now().strftime('%Y%m%d%H%M%S')}-{random.randint(1000, 9999)}"
             sale_date = datetime.now().isoformat()
 
+            # Insérer la vente
             cursor.execute(
-                "INSERT INTO sales (invoice_number, customer_name, customer_contact, total_amount, sale_date) "
-                "VALUES (?, ?, ?, ?, ?)",
+                """INSERT INTO sales 
+                   (invoice_number, customer_name, customer_contact, total_amount, sale_date) 
+                   VALUES (?, ?, ?, ?, ?)""",
                 (invoice_number, customer_name, customer_contact, total_amount, sale_date)
             )
             sale_id = cursor.lastrowid
 
+            # Insérer les articles de la vente
             for item in cart_items:
                 cursor.execute(
-                    "INSERT INTO sale_items (sale_id, product_id, barcode, product_name, quantity, price_per_unit) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
-                    (sale_id, item['id'], item['barcode'], item['name'], item['quantity'], item['price'])
+                    """INSERT INTO sale_items 
+                       (sale_id, product_id, barcode, product_name, quantity, price_per_unit) 
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (sale_id, item['id'], item['barcode'], item['name'], 
+                     item['quantity'], item['price'])
                 )
-                # Decrement stock after sale
+                # Décrémenter le stock
                 self.update_stock(item['barcode'], -item['quantity'])
 
             self.conn.commit()
+            print(f"✅ Vente enregistrée : {invoice_number}")
             return invoice_number
         except sqlite3.Error as e:
-            QMessageBox.critical(None, "DB Error", f"Error recording sale: {e}")
+            QMessageBox.critical(None, "Erreur BD", f"Erreur vente : {e}")
             self.conn.rollback()
             return None
 
-    def get_all_sales(self, start_date=None, end_date=None, customer_name_filter=None):  # Added customer_name_filter
-        """Retrieves all sales, with optional date and customer name filters."""
+    def get_all_sales(self, start_date=None, end_date=None, customer_name_filter=None):
+        """Récupère toutes les ventes avec filtres optionnels."""
         cursor = self.conn.cursor()
         query = "SELECT * FROM sales"
         params = []
@@ -195,15 +259,13 @@ class BarcodeDatabase:
 
         if start_date:
             conditions.append("sale_date >= ?")
-            # Convert QDate to Python date object then to ISO format
             params.append(start_date.toPython().isoformat())
+            
         if end_date:
-            conditions.append("sale_date < ?")  # Use < for exclusive end date (next day's start)
-            # Add one day to the end date to include all sales on the selected day
-            # Convert QDate to Python date object, add timedelta, then to ISO format
+            conditions.append("sale_date < ?")
             params.append((end_date.toPython() + timedelta(days=1)).isoformat())
 
-        if customer_name_filter:  # Added customer name filter
+        if customer_name_filter:
             conditions.append("customer_name LIKE ?")
             params.append(f"%{customer_name_filter}%")
 
@@ -211,35 +273,33 @@ class BarcodeDatabase:
             query += " WHERE " + " AND ".join(conditions)
 
         query += " ORDER BY sale_date DESC"
-
         cursor.execute(query, params)
         return cursor.fetchall()
 
     def get_sale_items(self, sale_id):
-        """Retrieves items for a specific sale."""
+        """Récupère les articles d'une vente spécifique."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM sale_items WHERE sale_id=?", (sale_id,))
         return cursor.fetchall()
 
     def close(self):
-        """Closes the database connection."""
+        """Ferme la connexion à la base de données."""
         if self.conn:
             self.conn.close()
-            print("Database connection closed.")
+            print("✅ Connexion BD fermée.")
 
 
-# --- 2. Tab: Barcode and Product Management (ProductBarcodeManagementTab) ---
+# --- 2. Tab: Gestion Produits et Codes-Barres ---
 class ProductBarcodeManagementTab(QWidget):
     """
-    Interface for adding new products (with external or internally generated barcodes)
-    and updating existing products via scan.
-    Problem solved: Unified management of new product integration and initial updates.
+    Interface pour ajouter des produits (avec codes externes ou internes générés)
+    et mettre à jour les produits existants via scan.
     """
 
     def __init__(self, db: BarcodeDatabase, parent=None):
         super().__init__(parent)
         self.db = db
-        self.current_barcode_for_print = None  # Stores the last generated code for printing
+        self.current_barcode_for_print = None
         self.current_product_name_for_print = None
 
         self.setup_ui()
@@ -247,55 +307,60 @@ class ProductBarcodeManagementTab(QWidget):
         self._create_barcodes_directory()
 
     def _create_barcodes_directory(self):
-        """Creates the directory for barcode images if necessary."""
-        os.makedirs("barcodes", exist_ok=True)
+        """Crée le dossier pour les images de codes-barres."""
+        config = get_config()
+        self.barcodes_dir = config.base_dir / "barcodes"
+        self.barcodes_dir.mkdir(exist_ok=True)
+        print(f"✅ Dossier codes-barres : {self.barcodes_dir}")
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
 
-        # Section for scanning an external barcode and associating/updating it
+        # Section scan/recherche code-barres externe
         scan_group = QGroupBox("Rechercher ou Ajouter un Produit par Code-Barres")
         scan_layout = QVBoxLayout(scan_group)
 
-        # Layout for input field and buttons
+        # Champ de saisie + boutons
         scan_input_buttons_layout = QHBoxLayout()
         self.external_barcode_input = QLineEdit()
         self.external_barcode_input.setPlaceholderText("Scan ou saisie d'un code-barres existant...")
         self.external_barcode_input.returnPressed.connect(self._handle_external_barcode_input)
 
-        # "Rechercher" button
         self.search_btn = QPushButton("Rechercher")
-        self.search_btn.setIcon(QIcon.fromTheme("system-search"))  # Search icon
-        self.search_btn.clicked.connect(self._handle_external_barcode_input)  # Connect to click
+        self.search_btn.setIcon(QIcon.fromTheme("system-search"))
+        self.search_btn.clicked.connect(self._handle_external_barcode_input)
 
-        # New "Scanner" button
         self.scan_btn = QPushButton("Scanner")
-        self.scan_btn.setIcon(QIcon.fromTheme("camera-web"))  # Scan icon
-        self.scan_btn.setStyleSheet("background-color: #2196F3;")  # Soft blue color
-        self.scan_btn.clicked.connect(self._simulate_scan_and_handle)  # New method to simulate scan
+        self.scan_btn.setIcon(QIcon.fromTheme("camera-web"))
+        self.scan_btn.setStyleSheet("background-color: #2196F3;")
+        self.scan_btn.clicked.connect(self._simulate_scan_and_handle)
 
         scan_input_buttons_layout.addWidget(self.external_barcode_input)
         scan_input_buttons_layout.addWidget(self.search_btn)
-        scan_input_buttons_layout.addWidget(self.scan_btn)  # Add the new "Scanner" button
+        scan_input_buttons_layout.addWidget(self.scan_btn)
 
         self.scan_product_status = QLabel(
-            "Utilisez le champ ci-dessus pour saisir un code-barres et rechercher, ou cliquez sur 'Scanner' pour simuler un scan.")
+            "Utilisez le champ ci-dessus pour saisir un code-barres et rechercher, "
+            "ou cliquez sur 'Scanner' pour simuler un scan."
+        )
         self.scan_product_status.setWordWrap(True)
 
-        scan_layout.addLayout(scan_input_buttons_layout)  # Add the layout with both buttons
+        scan_layout.addLayout(scan_input_buttons_layout)
         scan_layout.addWidget(self.scan_product_status)
 
-        # Form for product details (used by both sections)
+        # Formulaire détails produit
         self.product_form_layout = QFormLayout()
 
-        self.product_id_hidden = QLabel("")  # To store the product ID if it exists (invisible)
+        self.product_id_hidden = QLabel("")
         self.product_id_hidden.setVisible(False)
 
         self.product_name_input = QLineEdit()
         self.product_name_input.setPlaceholderText("Nom complet du produit")
 
         self.product_category_combo = QComboBox()
-        self.product_category_combo.addItems(["Papeterie", "Fournitures", "Vêtements", "Livres", "Divers"])
+        self.product_category_combo.addItems([
+            "Papeterie", "Fournitures", "Vêtements", "Livres", "Divers"
+        ])
 
         self.product_price_input = QLineEdit()
         self.product_price_input.setPlaceholderText("0.00")
@@ -317,15 +382,14 @@ class ProductBarcodeManagementTab(QWidget):
         scan_layout.addLayout(self.product_form_layout)
         scan_layout.addWidget(self.save_product_btn)
 
-        # Internal Barcode Generation Section
-        gen_group = QGroupBox("Générer un Code-Barre Interne (pour les nouveaux produits sans code)")
+        # Section génération code-barres interne
+        gen_group = QGroupBox("Générer un Code-Barre Interne (produits sans code)")
         gen_layout = QVBoxLayout(gen_group)
 
         self.generate_internal_btn = QPushButton("Générer & Enregistrer Code Interne")
         self.generate_internal_btn.setIcon(QIcon.fromTheme("document-new"))
         self.generate_internal_btn.clicked.connect(self._generate_internal_barcode)
 
-        # Generated barcode display
         self.barcode_preview = QLabel()
         self.barcode_preview.setAlignment(Qt.AlignCenter)
         self.barcode_preview.setMinimumHeight(120)
@@ -342,68 +406,67 @@ class ProductBarcodeManagementTab(QWidget):
         self.print_internal_btn.clicked.connect(self._print_generated_barcode)
 
         gen_layout.addWidget(self.generate_internal_btn)
-        gen_layout.addSpacing(15)  # Ajout d'espace vertical
+        gen_layout.addSpacing(15)
         gen_layout.addWidget(self.barcode_preview)
         gen_layout.addWidget(self.barcode_value_display)
-        gen_layout.addSpacing(15)  # Ajout d'espace vertical
+        gen_layout.addSpacing(15)
         gen_layout.addWidget(self.print_internal_btn)
 
         main_layout.addWidget(scan_group)
         main_layout.addWidget(gen_group)
         main_layout.addStretch()
 
-        self._clear_product_form()  # Initialize empty fields
+        self._clear_product_form()
 
     def setup_connections(self):
-        # Connections are made directly in setup_ui for buttons
         pass
 
     def _simulate_scan_and_handle(self):
-        """
-        Simulates a barcode scan (generates a random code)
-        and calls the handling method to process it.
-        """
-        # Generate a random "external" barcode for simulation
+        """Simule un scan de code-barres (génère un code aléatoire)."""
         simulated_barcode = f"{random.randint(1000000000000, 9999999999999)}"
         self.external_barcode_input.setText(simulated_barcode)
-        self._handle_external_barcode_input()  # Process the simulated code
+        self._handle_external_barcode_input()
 
     def _handle_external_barcode_input(self):
-        """Processes the entered or scanned external barcode."""
+        """Traite le code-barres externe saisi/scanné."""
         barcode_value = self.external_barcode_input.text().strip()
         if not barcode_value:
             self.scan_product_status.setText(
-                "<span style='color: red;'>Veuillez entrer un code-barres pour rechercher.</span>")
-            self._clear_product_form(clear_input_field=False)  # Do not clear input here
+                "<span style='color: red;'>Veuillez entrer un code-barres pour rechercher.</span>"
+            )
+            self._clear_product_form(clear_input_field=False)
             return
 
         product = self.db.get_product(barcode_value)
         if product:
-            self.product_id_hidden.setText(str(product['id']))  # Store product ID
+            # Produit trouvé - mode édition
+            self.product_id_hidden.setText(str(product['id']))
             self.product_name_input.setText(product['name'])
             self.product_category_combo.setCurrentText(product['category'] or "Divers")
             self.product_price_input.setText(str(product['price']))
             self.product_stock_input.setText(str(product['stock']))
             self.scan_product_status.setText(
-                f"Produit trouvé: <b>{product['name']}</b>. Modifiez les détails si nécessaire ou cliquez sur 'Mettre à jour Produit'.")
-            self.save_product_btn.setText("Mettre à jour Produit")  # Update button text
+                f"Produit trouvé: <b>{product['name']}</b>. "
+                f"Modifiez les détails si nécessaire."
+            )
+            self.save_product_btn.setText("Mettre à jour Produit")
         else:
-            self.product_id_hidden.setText("")  # No ID for a new product
-            # Keep the scanned barcode in the input for a new addition
+            # Produit non trouvé - mode ajout
+            self.product_id_hidden.setText("")
             self.scan_product_status.setText(
-                f"Code-barres <b>{barcode_value}</b> non trouvé. Remplissez les détails pour ajouter ce nouveau produit avec ce code.")
-            self.save_product_btn.setText("Ajouter Nouveau Produit")  # Update button text
-
-        # Here, external_barcode_input is not cleared, as the user might want to
-        # add a new product with this code or modify it.
+                f"Code-barres <b>{barcode_value}</b> non trouvé. "
+                f"Remplissez les détails pour ajouter ce nouveau produit."
+            )
+            self.save_product_btn.setText("Ajouter Nouveau Produit")
 
     def _save_scanned_or_new_product(self):
-        """Saves product details with the scanned/entered barcode."""
-        # For adding or updating, the barcode must be in the input
-        barcode_value_to_save = self.external_barcode_input.text().strip()
-        if not barcode_value_to_save:
-            QMessageBox.warning(self, "Erreur",
-                                "Le code-barres est manquant. Veuillez scanner/saisir un code-barres avant d'ajouter ou de mettre à jour.")
+        """Sauvegarde ou met à jour un produit avec le code-barres scanné."""
+        barcode_value = self.external_barcode_input.text().strip()
+        if not barcode_value:
+            QMessageBox.warning(
+                self, "Erreur",
+                "Le code-barres est manquant. Scannez/saisissez un code d'abord."
+            )
             return
 
         name = self.product_name_input.text().strip()
@@ -413,7 +476,10 @@ class ProductBarcodeManagementTab(QWidget):
             price = float(self.product_price_input.text().strip() or "0")
             stock = int(self.product_stock_input.text().strip() or "0")
         except ValueError:
-            QMessageBox.warning(self, "Erreur", "Le prix et le stock doivent être des nombres valides.")
+            QMessageBox.warning(
+                self, "Erreur",
+                "Le prix et le stock doivent être des nombres valides."
+            )
             return
 
         if not name:
@@ -421,57 +487,66 @@ class ProductBarcodeManagementTab(QWidget):
             return
 
         product_id = self.product_id_hidden.text()
-        if product_id:  # Existing product, update
+        if product_id:
+            # Mise à jour
             if self.db.update_product_details(int(product_id), name, category, price, stock):
-                QMessageBox.information(self, "Succès", f"Produit '{name}' mis à jour avec succès.")
+                QMessageBox.information(self, "Succès", f"Produit '{name}' mis à jour.")
             else:
-                QMessageBox.warning(self, "Erreur", f"Échec de la mise à jour du produit '{name}'.")
-        else:  # New product
-            # Use the barcode directly from the input for the new addition
-            if self.db.add_product(barcode_value_to_save, name, category, price, stock, is_internal_barcode=False):
-                QMessageBox.information(self, "Succès",
-                                        f"Produit '{name}' ajouté avec le code-barres: {barcode_value_to_save}.")
+                QMessageBox.warning(self, "Erreur", f"Échec mise à jour '{name}'.")
+        else:
+            # Ajout
+            if self.db.add_product(barcode_value, name, category, price, stock, False):
+                QMessageBox.information(
+                    self, "Succès",
+                    f"Produit '{name}' ajouté avec code: {barcode_value}"
+                )
             else:
-                QMessageBox.warning(self, "Erreur",
-                                    f"Impossible d'ajouter le produit '{name}' (le code-barres existe peut-être déjà).")
+                QMessageBox.warning(self, "Erreur", f"Échec ajout '{name}'.")
 
-        self._clear_product_form(clear_input_field=True)  # Reset form completely after saving
+        self._clear_product_form(clear_input_field=True)
         self.scan_product_status.setText("Prêt pour un nouveau scan ou ajout.")
-        self.save_product_btn.setText("Ajouter Produit (avec code scanné/saisi)")  # Default button text
+        self.save_product_btn.setText("Ajouter Produit (avec code scanné/saisi)")
 
     def _generate_internal_barcode(self):
-        """Generates an internal barcode for a new product."""
+        """Génère un code-barres interne pour un nouveau produit."""
         name = self.product_name_input.text().strip()
         if not name:
-            QMessageBox.warning(self, "Erreur", "Veuillez entrer un nom de produit pour générer un code interne.")
+            QMessageBox.warning(
+                self, "Erreur",
+                "Veuillez entrer un nom de produit pour générer un code interne."
+            )
             return
 
         try:
             price = float(self.product_price_input.text().strip() or "0")
             stock = int(self.product_stock_input.text().strip() or "0")
         except ValueError:
-            QMessageBox.warning(self, "Erreur",
-                                "Veuillez entrer des valeurs numériques valides pour le prix et le stock.")
+            QMessageBox.warning(
+                self, "Erreur",
+                "Valeurs numériques invalides pour prix et/ou stock."
+            )
             return
 
         category = self.product_category_combo.currentText()
 
-        # Generate a unique code (LIB prefix for "Librairie")
+        # Générer code unique (préfixe LIB)
         new_barcode = f"LIB{random.randint(100000, 999999)}"
-        while self.db.get_product(new_barcode):  # Ensure uniqueness
+        while self.db.get_product(new_barcode):
             new_barcode = f"LIB{random.randint(100000, 999999)}"
 
-        # Save the product with the generated internal code
-        if self.db.add_product(new_barcode, name, category, price, stock, is_internal_barcode=True):
+        # Enregistrer le produit
+        if self.db.add_product(new_barcode, name, category, price, stock, True):
             try:
-                # Generate Code128 barcode image
+                # Générer l'image du code-barres
                 ean = barcode.get('code128', new_barcode, writer=ImageWriter())
-                filename = os.path.join("barcodes", new_barcode)
-                ean.save(filename)
+                filename = self.barcodes_dir / new_barcode
+                ean.save(str(filename))
 
-                # Display the barcode in the interface
-                pixmap = QPixmap(f"{filename}.png")
-                self.barcode_preview.setPixmap(pixmap.scaledToWidth(300, Qt.SmoothTransformation))
+                # Afficher l'aperçu
+                pixmap = QPixmap(str(filename) + ".png")
+                self.barcode_preview.setPixmap(
+                    pixmap.scaledToWidth(300, Qt.SmoothTransformation)
+                )
                 self.barcode_value_display.setText(new_barcode)
                 self.current_barcode_for_print = new_barcode
                 self.current_product_name_for_print = name
@@ -481,35 +556,41 @@ class ProductBarcodeManagementTab(QWidget):
                     self, "Succès",
                     f"Produit '{name}' enregistré avec code interne:\n{new_barcode}"
                 )
-                self._clear_product_form(clear_input_field=True)  # Reset form after generation
+                self._clear_product_form(clear_input_field=True)
             except Exception as e:
-                QMessageBox.critical(self, "Erreur de Génération",
-                                     f"Erreur lors de la génération de l'image ou de l'enregistrement: {str(e)}")
+                QMessageBox.critical(
+                    self, "Erreur",
+                    f"Erreur lors de la génération de l'image: {str(e)}"
+                )
         else:
-            QMessageBox.warning(self, "Erreur", "Impossible d'enregistrer ce produit avec le code interne généré.")
+            QMessageBox.warning(
+                self, "Erreur",
+                "Impossible d'enregistrer ce produit."
+            )
 
     def _print_generated_barcode(self):
-        """Simulates printing the generated internal barcode."""
+        """Simule l'impression de l'étiquette code-barres."""
         if self.current_barcode_for_print and self.current_product_name_for_print:
             QMessageBox.information(
                 self, "Impression d'Étiquette",
                 f"Simulation d'impression pour:\n"
                 f"Nom: {self.current_product_name_for_print}\n"
                 f"Code: {self.current_barcode_for_print}\n"
-                f"Vérifiez le dossier 'barcodes' pour l'image générée."
+                f"Vérifiez le dossier 'barcodes' pour l'image."
             )
         else:
-            QMessageBox.warning(self, "Rien à Imprimer", "Aucun code-barres interne généré récemment.")
+            QMessageBox.warning(
+                self, "Rien à Imprimer",
+                "Aucun code-barres interne généré récemment."
+            )
 
     def _clear_product_form(self, clear_input_field=True):
-        """
-        Resets product add/edit form fields.
-        `clear_input_field`: If True, also clears the external barcode input field.
-        """
+        """Réinitialise le formulaire produit."""
         if clear_input_field:
             self.external_barcode_input.clear()
             self.scan_product_status.setText(
-                "Utilisez le champ ci-dessus pour scanner ou saisir un code-barres et rechercher un produit.")
+                "Utilisez le champ ci-dessus pour scanner ou saisir un code-barres."
+            )
             self.save_product_btn.setText("Ajouter Produit (avec code scanné/saisi)")
 
         self.product_id_hidden.setText("")
@@ -524,31 +605,28 @@ class ProductBarcodeManagementTab(QWidget):
         self.current_product_name_for_print = None
 
 
-# --- 3. Tab: Barcode Audit and Management (AuditBarcodeTab) ---
+# --- 3. Tab: Audit et Gestion des Codes-Barres ---
 class AuditBarcodeTab(QWidget):
-    """
-    Interface for listing, viewing, and editing product details.
-    Problem solved: Global visibility of stock and product information, easy editing.
-    """
+    """Interface pour lister, visualiser et éditer les détails des produits."""
 
     def __init__(self, db: BarcodeDatabase, parent=None):
         super().__init__(parent)
         self.db = db
         self.setup_ui()
         self.setup_connections()
-        self.load_products()  # Load products on startup
+        self.load_products()
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(7)  # ID, Barcode, Name, Category, Price, Stock, Internal
+        self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels([
             "ID", "Code-Barres", "Nom", "Catégorie", "Prix", "Stock", "Interne"
         ])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)  # Select entire row
-        self.table.setSelectionMode(QTableWidget.SingleSelection)  # Only one row at a time
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SingleSelection)
 
         btn_layout = QHBoxLayout()
         self.refresh_btn = QPushButton("Actualiser la Liste")
@@ -572,9 +650,10 @@ class AuditBarcodeTab(QWidget):
         self.delete_btn.clicked.connect(self.delete_selected_product)
 
     def load_products(self):
-        """Loads all products into the table."""
+        """Charge tous les produits dans le tableau."""
         products = self.db.get_all_products()
         self.table.setRowCount(len(products))
+        
         for row_idx, product in enumerate(products):
             self.table.setItem(row_idx, 0, QTableWidgetItem(str(product['id'])))
             self.table.setItem(row_idx, 1, QTableWidgetItem(product['barcode']))
@@ -584,9 +663,9 @@ class AuditBarcodeTab(QWidget):
             self.table.setItem(row_idx, 5, QTableWidgetItem(str(product['stock'])))
             self.table.setItem(row_idx, 6, QTableWidgetItem("Oui" if product['is_internal_barcode'] else "Non"))
 
-        # Add 10 dummy products if the database is empty
+        # Ajouter 10 produits factices si la BD est vide
         if not products:
-            print("Database is empty, adding initial dummy products...")
+            print("Base de données vide, ajout de produits factices...")
             dummy_products_data = [
                 ("LIVRE001", "Le Seigneur des Anneaux", "Livres", 25.50, 10, False),
                 ("LIVRE002", "Orgueil et Préjugés", "Livres", 15.00, 20, False),
@@ -600,17 +679,15 @@ class AuditBarcodeTab(QWidget):
                 ("LIB0007", "Écharpe en Laine", "Vêtements", 18.00, 25, True),
             ]
             for barcode, name, category, price, stock, is_internal in dummy_products_data:
-                # Check if barcode already exists before adding to avoid IntegrityError
                 if not self.db.get_product(barcode):
                     self.db.add_product(barcode, name, category, price, stock, is_internal)
-            # Reload products after adding dummies
             self.load_products()
-            print("Dummy products added and table reloaded.")
+            print("Produits factices ajoutés et tableau rechargé.")
 
-        print("Products loaded in audit table.")
+        print("Produits chargés dans le tableau d'audit.")
 
     def edit_selected_product(self):
-        """Opens a dialog to edit the selected product."""
+        """Ouvre une boîte de dialogue pour éditer le produit sélectionné."""
         selected_rows = self.table.selectionModel().selectedRows()
         if not selected_rows:
             QMessageBox.warning(self, "Sélection Requise", "Veuillez sélectionner un produit à éditer.")
@@ -635,12 +712,12 @@ class AuditBarcodeTab(QWidget):
                     updated_data['stock']
             ):
                 QMessageBox.information(self, "Succès", "Produit mis à jour.")
-                self.load_products()  # Reload list
+                self.load_products()
             else:
                 QMessageBox.warning(self, "Échec", "Erreur lors de la mise à jour du produit.")
 
     def delete_selected_product(self):
-        """Deletes the selected product."""
+        """Supprime le produit sélectionné."""
         selected_rows = self.table.selectionModel().selectedRows()
         if not selected_rows:
             QMessageBox.warning(self, "Sélection Requise", "Veuillez sélectionner un produit à supprimer.")
@@ -659,13 +736,13 @@ class AuditBarcodeTab(QWidget):
         if reply == QMessageBox.Yes:
             if self.db.delete_product(product_id):
                 QMessageBox.information(self, "Succès", "Produit supprimé.")
-                self.load_products()  # Reload list
+                self.load_products()
             else:
                 QMessageBox.warning(self, "Échec", "Erreur lors de la suppression du produit.")
 
 
 class ProductEditDialog(QDialog):
-    """Dialog for editing product details."""
+    """Dialogue pour éditer les détails d'un produit."""
 
     def __init__(self, product_data, parent=None):
         super().__init__(parent)
@@ -704,25 +781,21 @@ class ProductEditDialog(QDialog):
         }
 
 
-# --- 4. Tab: Cashier (CashierTab) ---
+# --- 4. Tab: Caisse ---
 class CashierTab(QWidget):
-    """
-    Point of Sale interface for scanning items, managing the cart
-    and finalizing sales.
-    Problem solved: Automation of sales process, fast calculation and invoice generation.
-    """
+    """Interface de point de vente pour scanner articles et gérer le panier."""
 
     def __init__(self, db: BarcodeDatabase, parent=None):
         super().__init__(parent)
         self.db = db
-        self.cart_items = []  # List of dictionaries {product_id, barcode, name, price, quantity}
+        self.cart_items = []
         self.setup_ui()
         self.setup_connections()
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
 
-        # Barcode input section
+        # Section saisie code-barres
         scan_layout = QHBoxLayout()
         barcode_label = QLabel("Code-barres du produit:")
         self.barcode_scan_input = QLineEdit()
@@ -733,15 +806,15 @@ class CashierTab(QWidget):
         scan_layout.addWidget(self.barcode_scan_input)
         main_layout.addLayout(scan_layout)
 
-        # Cart table
+        # Tableau du panier
         self.cart_table = QTableWidget()
-        self.cart_table.setColumnCount(4)  # Item, Qty, Unit Price, Subtotal
+        self.cart_table.setColumnCount(4)
         self.cart_table.setHorizontalHeaderLabels(["Article", "Quantité", "Prix Unitaire", "Sous-total"])
         self.cart_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.cart_table.setEditTriggers(QTableWidget.NoEditTriggers)  # Prevent direct editing
+        self.cart_table.setEditTriggers(QTableWidget.NoEditTriggers)
         main_layout.addWidget(self.cart_table)
 
-        # Total and action buttons
+        # Total et boutons d'action
         bottom_layout = QVBoxLayout()
 
         self.total_label = QLabel("<b>Total: 0.00 EUR</b>")
@@ -764,15 +837,15 @@ class CashierTab(QWidget):
 
         main_layout.addLayout(bottom_layout)
 
-        self.update_cart_display()  # Initialize display
+        self.update_cart_display()
 
     def setup_connections(self):
-        pass  # Connections are made directly in setup_ui
+        pass
 
     def add_product_to_cart_from_scan(self):
-        """Adds a product to the cart via barcode scan."""
+        """Ajoute un produit au panier via scan code-barres."""
         barcode_value = self.barcode_scan_input.text().strip()
-        self.barcode_scan_input.clear()  # Clear input after reading
+        self.barcode_scan_input.clear()
 
         if not barcode_value:
             return
@@ -780,7 +853,6 @@ class CashierTab(QWidget):
         product = self.db.get_product(barcode_value)
         if product:
             if product['stock'] > 0:
-                # Check if item is already in cart
                 found_in_cart = False
                 for item in self.cart_items:
                     if item['barcode'] == barcode_value:
@@ -789,7 +861,6 @@ class CashierTab(QWidget):
                         break
 
                 if not found_in_cart:
-                    # Add new item to cart
                     self.cart_items.append({
                         'id': product['id'],
                         'barcode': product['barcode'],
@@ -807,7 +878,7 @@ class CashierTab(QWidget):
             QMessageBox.warning(self, "Produit Inconnu", f"Aucun produit trouvé pour le code-barres: {barcode_value}.")
 
     def update_cart_display(self):
-        """Updates the cart table and total."""
+        """Met à jour le tableau du panier et le total."""
         self.cart_table.setRowCount(len(self.cart_items))
         total = 0.0
         for row_idx, item in enumerate(self.cart_items):
@@ -821,15 +892,15 @@ class CashierTab(QWidget):
         self.total_label.setText(f"<b>Total: {total:.2f} EUR</b>")
 
     def clear_cart(self):
-        """Clears the current cart."""
+        """Vide le panier actuel."""
         if QMessageBox.question(self, "Vider le Panier", "Voulez-vous vraiment vider le panier ?",
                                 QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
             self.cart_items = []
             self.update_cart_display()
-            QMessageBox.information(self, "Panier Vider", "Le panier a été vidé.")
+            QMessageBox.information(self, "Panier Vidé", "Le panier a été vidé.")
 
     def initiate_checkout(self):
-        """Starts the invoicing process."""
+        """Démarre le processus de facturation."""
         if not self.cart_items:
             QMessageBox.warning(self, "Panier Vide", "Le panier est vide. Impossible de facturer.")
             return
@@ -847,18 +918,16 @@ class CashierTab(QWidget):
             if invoice_number:
                 QMessageBox.information(self, "Facture Générée",
                                         f"Vente enregistrée ! Numéro de facture: {invoice_number}")
-                self.cart_items = []  # Clear cart after sale
-                self.update_cart_display()  # Update display
-                # Emit a signal to refresh Sales Audit tab
-                if hasattr(self.parent(), 'sales_audit_tab') and isinstance(self.parent().sales_audit_tab,
-                                                                            SalesAuditTab):
+                self.cart_items = []
+                self.update_cart_display()
+                if hasattr(self.parent(), 'sales_audit_tab'):
                     self.parent().sales_audit_tab.load_sales()
             else:
                 QMessageBox.critical(self, "Erreur de Facturation", "Erreur lors de l'enregistrement de la vente.")
 
 
 class InvoiceDialog(QDialog):
-    """Dialog for entering customer information during invoicing."""
+    """Dialogue pour saisir les informations client lors de la facturation."""
 
     def __init__(self, total_amount, parent=None):
         super().__init__(parent)
@@ -891,30 +960,27 @@ class InvoiceDialog(QDialog):
         }
 
 
-# --- 5. Tab: Sales Audit (SalesAuditTab) ---
+# --- 5. Tab: Audit des Ventes ---
 class SalesAuditTab(QWidget):
-    """
-    Interface for viewing sales/invoice history with filters.
-    Problem solved: Overview of past transactions for analysis and audit.
-    """
+    """Interface pour visualiser l'historique des ventes/factures avec filtres."""
 
     def __init__(self, db: BarcodeDatabase, parent=None):
         super().__init__(parent)
         self.db = db
         self.setup_ui()
         self.setup_connections()
-        self.load_sales()  # Load sales on startup
+        self.load_sales()
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
 
-        # Date and customer name filters
+        # Filtres de date et nom client
         filter_group = QGroupBox("Filtrer les ventes")
-        filter_layout = QFormLayout(filter_group)  # Use QFormLayout for better layout
+        filter_layout = QFormLayout(filter_group)
 
         date_filter_layout = QHBoxLayout()
         date_filter_layout.addWidget(QLabel("Du:"))
-        self.start_date_edit = QDateEdit(QDate.currentDate().addMonths(-1))  # Default: last month
+        self.start_date_edit = QDateEdit(QDate.currentDate().addMonths(-1))
         self.start_date_edit.setCalendarPopup(True)
         self.start_date_edit.setDisplayFormat("dd/MM/yyyy")
         date_filter_layout.addWidget(self.start_date_edit)
@@ -926,22 +992,22 @@ class SalesAuditTab(QWidget):
         date_filter_layout.addWidget(self.end_date_edit)
         date_filter_layout.addStretch()
 
-        filter_layout.addRow("Période:", date_filter_layout)  # Add date layout to form
+        filter_layout.addRow("Période:", date_filter_layout)
 
         self.customer_name_filter_input = QLineEdit()
         self.customer_name_filter_input.setPlaceholderText("Nom du client")
-        self.customer_name_filter_input.returnPressed.connect(self.load_sales)  # Apply filter on Enter
+        self.customer_name_filter_input.returnPressed.connect(self.load_sales)
         filter_layout.addRow("Nom du client:", self.customer_name_filter_input)
 
         self_refresh_btn = QPushButton("Appliquer les Filtres")
         self_refresh_btn.clicked.connect(self.load_sales)
-        filter_layout.addRow(self_refresh_btn)  # Add button to form
+        filter_layout.addRow(self_refresh_btn)
 
         main_layout.addWidget(filter_group)
 
-        # Sales table
+        # Tableau des ventes
         self.sales_table = QTableWidget()
-        self.sales_table.setColumnCount(5)  # Invoice Number, Client, Contact, Total Amount, Date
+        self.sales_table.setColumnCount(5)
         self.sales_table.setHorizontalHeaderLabels([
             "Num Facture", "Client", "Contact", "Montant Total", "Date"
         ])
@@ -950,7 +1016,7 @@ class SalesAuditTab(QWidget):
         self.sales_table.setSelectionMode(QTableWidget.SingleSelection)
         main_layout.addWidget(self.sales_table)
 
-        # Action buttons for sales
+        # Boutons d'action
         bottom_btn_layout = QHBoxLayout()
         self.view_details_btn = QPushButton("Voir Détails Vente")
         self.view_details_btn.clicked.connect(self.view_sale_details)
@@ -960,11 +1026,10 @@ class SalesAuditTab(QWidget):
         main_layout.addLayout(bottom_btn_layout)
 
     def setup_connections(self):
-        # Connection made in setup_ui
         pass
 
     def load_sales(self):
-        """Loads sales into the table with date and customer name filters."""
+        """Charge les ventes dans le tableau avec filtres."""
         start_date = self.start_date_edit.date()
         end_date = self.end_date_edit.date()
         customer_name_filter = self.customer_name_filter_input.text().strip()
@@ -982,24 +1047,21 @@ class SalesAuditTab(QWidget):
             self.sales_table.setItem(row_idx, 2, QTableWidgetItem(sale['customer_contact'] or "N/A"))
             self.sales_table.setItem(row_idx, 3, QTableWidgetItem(f"{sale['total_amount']:.2f}"))
 
-            # Format date for better display
             sale_dt = datetime.fromisoformat(sale['sale_date'])
             self.sales_table.setItem(row_idx, 4, QTableWidgetItem(sale_dt.strftime("%d/%m/%Y %H:%M")))
 
-            # Store sale ID in the item for easy access later
             self.sales_table.item(row_idx, 0).setData(Qt.UserRole, sale['id'])
-        print(
-            f"Ventes chargées pour la période: {start_date.toString('dd/MM/yyyy')} - {end_date.toString('dd/MM/yyyy')}")
+        print(f"Ventes chargées pour la période: {start_date.toString('dd/MM/yyyy')} - {end_date.toString('dd/MM/yyyy')}")
 
     def view_sale_details(self):
-        """Opens a dialog to display details of a selected sale."""
+        """Ouvre une boîte de dialogue pour afficher les détails d'une vente."""
         selected_rows = self.sales_table.selectionModel().selectedRows()
         if not selected_rows:
             QMessageBox.warning(self, "Sélection Requise", "Veuillez sélectionner une vente pour voir les détails.")
             return
 
         row = selected_rows[0].row()
-        sale_id = self.sales_table.item(row, 0).data(Qt.UserRole)  # Retrieve stored ID
+        sale_id = self.sales_table.item(row, 0).data(Qt.UserRole)
         invoice_number = self.sales_table.item(row, 0).text()
 
         sale_items = self.db.get_sale_items(sale_id)
@@ -1011,7 +1073,7 @@ class SalesAuditTab(QWidget):
 
 
 class SaleDetailsDialog(QDialog):
-    """Dialog for displaying items of a specific sale."""
+    """Dialogue pour afficher les articles d'une vente spécifique."""
 
     def __init__(self, invoice_number, items_data, parent=None):
         super().__init__(parent)
@@ -1042,65 +1104,62 @@ class SaleDetailsDialog(QDialog):
         layout.addWidget(buttons)
 
 
-# --- 6. Main Window (MainWindow) ---
+# --- 6. Fenêtre Principale ---
 class ModernBarcodeManager(QMainWindow):
-    """
-    Main application window with tabbed navigation.
-    Problem solved: Organization of different functionalities in a coherent interface.
-    """
+    """Fenêtre principale de l'application avec navigation par onglets."""
 
     def __init__(self):
         super().__init__()
-        self.version = "1.0"
-        self.db = BarcodeDatabase()  # Initialize database once
+        self.version = "2.0"
+        self.db = BarcodeDatabase()
         self.setWindowTitle("Application de Gestion de Librairie")
         self.setMinimumSize(900, 700)
 
         self.tab_widget = QTabWidget()
         self.setCentralWidget(self.tab_widget)
 
-        # Create tabs
+        # Créer les onglets
         self.product_mgmt_tab = ProductBarcodeManagementTab(self.db)
         self.audit_barcode_tab = AuditBarcodeTab(self.db)
         self.cashier_tab = CashierTab(self.db)
-        self.sales_audit_tab = SalesAuditTab(self.db)  # Keep a reference for refresh
+        self.sales_audit_tab = SalesAuditTab(self.db)
 
         self.tab_widget.addTab(self.product_mgmt_tab, "Ajouter/Gérer Codes-Barres")
         self.tab_widget.addTab(self.audit_barcode_tab, "Audit & Édition Produits")
         self.tab_widget.addTab(self.cashier_tab, "Caisse (Point de Vente)")
         self.tab_widget.addTab(self.sales_audit_tab, "Audit des Ventes")
 
-        # Apply styles
+        # Appliquer les styles
         self.tab_widget.setStyleSheet("""
             QTabWidget {
-                margin-top: 20px; /* Espace vertical pour séparer du menu principal */
+                margin-top: 20px;
             }
-            QTabWidget::pane { /* The tab widget frame */
+            QTabWidget::pane {
                 border: 1px solid #ccc;
                 border-top: 1px solid #ccc;
                 border-bottom-left-radius: 5px;
                 border-bottom-right-radius: 5px;
             }
             QTabWidget::tab-bar {
-                left: 5px; /* move to the right by 5px */
+                left: 5px;
             }
             QTabBar::tab {
                 background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
                                             stop: 0 #E1E1E1, stop: 1 #FAFAFA);
                 border: 1px solid #C4C4C3;
-                border-bottom-color: #C2C2C2; /* same as pane color */
+                border-bottom-color: #C2C2C2;
                 border-top-left-radius: 4px;
                 border-top-right-radius: 4px;
                 min-width: 120px;
                 padding: 8px 15px;
-                color: #333; /* Rendre le texte des onglets visible */
+                color: #333;
             }
             QTabBar::tab:selected {
                 background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
-                                            stop: 0 #e0d0c0, stop: 1 #c0a080); /* Teinte marron douce */
+                                            stop: 0 #e0d0c0, stop: 1 #c0a080);
                 border-color: #9B9B9B;
-                border-bottom-color: #e0d0c0; /* make the selected tab look like it's connected to the pane */
-                color: #000; /* Texte noir pour l'onglet actif */
+                border-bottom-color: #e0d0c0;
+                color: #000;
                 font-weight: bold;
             }
             QTabBar::tab:hover {
@@ -1109,37 +1168,13 @@ class ModernBarcodeManager(QMainWindow):
         """)
 
     def closeEvent(self, event):
-        """Overrides application close to close DB connection."""
-        print("Closing application...")
+        """Surcharge de la fermeture pour fermer la connexion BD."""
+        print("Fermeture de l'application...")
         self.db.close()
         event.accept()
-
 
     def get_ui(self):
         return self
 
     def refresh(self):
         pass
-
-
-
-
-
-
-# # --- Application Entry Point ---
-# if __name__ == "__main__":
-#     app = QApplication(sys.argv)
-#
-#     # Create barcode folder if it doesn't exist
-#     os.makedirs("barcodes", exist_ok=True)
-#
-#     main_win = MainWindow()
-#     main_win.show()
-#
-#     sys.exit(app.exec())
-
-
-
-
-
-

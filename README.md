@@ -98,6 +98,34 @@ LIBRAIRIE_PAPETERIE/
     ├── architecture.md        # Documentation de l'architecture
     ├── user_manual.md         # Manuel utilisateur
     └── dev_manual.md          # Guide développeur
+
+
+
+------
+
+ou avec les Manager
+
+------
+
+    src/
+├── ui/
+│   └── views/
+│       ├── accueil_view.py 
+│       ├── stock_view.py 
+│       ├── sales_view.py 
+│       ├── barcode_view.py 
+│       └── report_view.py 
+├── managers/
+│   ├── accueil_manager.py 
+│   ├── stock/
+│   │   └── stock_manager.py 
+│   ├── sales/
+│   │   └── sales_manager.py 
+│   ├── barcode/
+│   │   └── barcode_manager.py 
+│   └── report/
+│       └── report_manager.py 
+
 ```
 
 ### 📋 Description des Modules
