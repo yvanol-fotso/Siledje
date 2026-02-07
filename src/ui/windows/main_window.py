@@ -17,8 +17,8 @@ from src.utils.compat import (
 from src.managers.stock.stock_manager import StockManager
 from src.managers.sales.sales_manager import SalesManager
 from src.managers.security.security_manager import SecurityManager
-from src.managers.report.report_manager import ReportSystem
-from src.managers.barcode.barcode_manager import ModernBarcodeManager
+from src.managers.report.report_manager import ReportManager
+from src.managers.barcode.barcode_manager import BarcodeManager
 from src.managers.ai.ai_manager import AIManager
 from src.managers.accueil_manage import AccueilManager
 
@@ -108,8 +108,8 @@ class MainWindow(QMainWindow):
             'stock': StockManager(),
             'sales': SalesManager(),
             'security': SecurityManager(),
-            'reports': ReportSystem(),
-            'barcode_test': ModernBarcodeManager(),
+            'reports': ReportManager(),
+            'barcode_test': BarcodeManager(self),
             'ai': AIManager()
         }
 

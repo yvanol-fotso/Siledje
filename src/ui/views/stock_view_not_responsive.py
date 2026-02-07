@@ -1,22 +1,31 @@
 """
-Vue de la gestion du stock - Interface utilisateur ultra-responsive.
+Vue de la gestion du stock - Interface utilisateur uniquement.
 Séparation complète de la logique métier.
-Support complet mode Dark/Light avec design moderne.
+Utilise des icônes SVG au lieu d'emojis.
 """
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableView,
     QPushButton, QLineEdit, QComboBox, QLabel,
-    QDateEdit, QRadioButton, QButtonGroup, QGroupBox, QGridLayout,QSizePolicy 
+    QDateEdit, QRadioButton, QButtonGroup, QSpacerItem, QSizePolicy
 )
-from PySide6.QtCore import Qt, Signal, QDate, QSize
+from PySide6.QtCore import Qt, Signal, QDate
 from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QColor, QBrush, QPen
 from pathlib import Path
 from src.utils.helpers import get_asset_path
 
 
 def load_svg_icon(icon_name: str, size: int = 24) -> QPixmap:
-    """Charge une icône SVG et la convertit en QPixmap."""
+    """
+    Charge une icône SVG et la convertit en QPixmap.
+    
+    Args:
+        icon_name: Nom de l'icône (sans .svg)
+        size: Taille en pixels
+        
+    Returns:
+        QPixmap de l'icône ou QPixmap vide si erreur
+    """
     try:
         icon_path = get_asset_path("icons", f"{icon_name}.svg")
         
@@ -41,7 +50,16 @@ def load_svg_icon(icon_name: str, size: int = 24) -> QPixmap:
 
 
 def create_placeholder_pixmap(size: int, letter: str) -> QPixmap:
-    """Crée un placeholder visuel avec une lettre."""
+    """
+    Crée un placeholder visuel avec une lettre.
+    
+    Args:
+        size: Taille du pixmap
+        letter: Lettre à afficher
+        
+    Returns:
+        QPixmap avec fond coloré et lettre
+    """
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     
@@ -64,8 +82,8 @@ def create_placeholder_pixmap(size: int, letter: str) -> QPixmap:
 
 class StockView(QWidget):
     """
-    Vue de gestion du stock ultra-responsive.
-    S'adapte automatiquement aux modes Dark/Light.
+    Vue de gestion du stock - Affichage uniquement.
+    Émet des signaux pour communiquer avec le manager.
     """
     
     # Signaux pour communiquer avec le manager
@@ -97,71 +115,58 @@ class StockView(QWidget):
         self.init_ui()
     
     def init_ui(self):
-        """Construit l'interface utilisateur responsive."""
+        """Construit l'interface utilisateur."""
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(15)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(12)
         
         # En-tête
         header_layout = self._create_header()
         main_layout.addLayout(header_layout)
         
-        # Barre de recherche
+        # Barre de recherche + Ajouter
         search_layout = self._create_search_section()
         main_layout.addLayout(search_layout)
         
-        # Filtres dans un GroupBox
-        filters_group = self._create_filters_section()
-        main_layout.addWidget(filters_group)
+        main_layout.addSpacing(15)
+        
+        # Filtres (Ligne 1)
+        filter_row1 = self._create_filter_row1()
+        main_layout.addLayout(filter_row1)
+        
+        main_layout.addSpacing(8)
+        
+        # Filtres (Ligne 2 - Dates)
+        filter_row2 = self._create_filter_row2()
+        main_layout.addLayout(filter_row2)
+        
+        main_layout.addSpacing(15)
         
         # Table
         self.table_view = QTableView()
         self.table_view.setSelectionBehavior(QTableView.SelectRows)
         self.table_view.setSelectionMode(QTableView.SingleSelection)
-        self.table_view.setAlternatingRowColors(True)
-        # self.table_view.setSizePolicy(QWidget().sizePolicy().Expanding, QWidget().sizePolicy().Expanding)
-        # self.table_view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.table_view.setMinimumHeight(400)
-        
-        # Style adaptatif pour mode dark/light
-        self.table_view.setObjectName("stockTable")
         self.table_view.setStyleSheet("""
-            QTableView#stockTable {
-                border: 2px solid palette(mid);
-                border-radius: 10px;
-                font-size: 14px;
-                gridline-color: palette(mid);
-                selection-background-color: palette(highlight);
-                selection-color: palette(highlighted-text);
-            }
-            QTableView#stockTable::item {
-                padding: 8px;
-                border-bottom: 1px solid palette(midlight);
-            }
-            QTableView#stockTable::item:alternate {
-                background-color: palette(alternate-base);
-            }
-            QTableView#stockTable::item:selected {
-                background-color: palette(highlight);
-                color: palette(highlighted-text);
-            }
-            QTableView#stockTable::item:hover {
-                background-color: palette(light);
+            QTableView {
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                font-size: 13px;
             }
             QHeaderView::section {
                 background-color: #3498db;
                 color: white;
                 font-weight: bold;
-                font-size: 14px;
-                padding: 10px;
+                font-size: 13px;
+                padding: 8px;
                 border: none;
-                border-right: 1px solid #2980b9;
             }
-            QHeaderView::section:last {
-                border-right: none;
+            QTableView::item {
+                padding: 5px;
             }
         """)
         main_layout.addWidget(self.table_view)
+        
+        main_layout.addSpacing(12)
         
         # Boutons d'action
         btn_layout = self._create_action_buttons()
@@ -173,314 +178,241 @@ class StockView(QWidget):
         self._connect_signals()
     
     def _create_header(self) -> QHBoxLayout:
-        """Crée l'en-tête responsive."""
+        """Crée l'en-tête de la page."""
         layout = QHBoxLayout()
-        layout.setSpacing(15)
         
-        # Icône + Titre
+        # Conteneur pour icône + titre
+        header_container = QHBoxLayout()
+        header_container.setSpacing(12)
+        
+        # Icône
         icon_label = QLabel()
-        icon_label.setFixedSize(40, 40)
-        icon_label.setPixmap(load_svg_icon("package", size=40))
+        icon_label.setFixedSize(32, 32)
+        icon_label.setPixmap(load_svg_icon("package", size=32))
+        header_container.addWidget(icon_label)
         
+        # Titre
         title = QLabel("Gestion du Stock")
-        title.setObjectName("pageTitle")
-        title.setStyleSheet("""
-            QLabel#pageTitle {
-                font-size: 28px;
-                font-weight: bold;
-                color: palette(text);
-            }
-        """)
+        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50;")
+        header_container.addWidget(title)
         
-        layout.addWidget(icon_label)
-        layout.addWidget(title)
+        layout.addLayout(header_container)
         layout.addStretch()
         
         return layout
     
     def _create_search_section(self) -> QHBoxLayout:
-        """Crée la section de recherche responsive."""
+        """Crée la section de recherche."""
         layout = QHBoxLayout()
-        layout.setSpacing(12)
+        layout.setSpacing(10)
         
-        # Champ de recherche
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Rechercher un produit...")
-        self.search_input.setMinimumHeight(45)
-        self.search_input.setObjectName("searchInput")
+        self.search_input.setMinimumHeight(38)
         self.search_input.setStyleSheet("""
-            QLineEdit#searchInput {
-                padding: 10px 15px;
-                border: 2px solid palette(mid);
-                border-radius: 10px;
-                font-size: 15px;
-                background-color: palette(base);
-                color: palette(text);
+            QLineEdit {
+                padding: 8px 12px;
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                font-size: 14px;
             }
-            QLineEdit#searchInput:focus {
+            QLineEdit:focus {
                 border: 2px solid #3498db;
             }
         """)
         
-        # Bouton Rechercher
         search_btn = QPushButton("Rechercher")
-        search_btn.setMinimumHeight(45)
-        search_btn.setMinimumWidth(140)
+        search_btn.setMinimumHeight(38)
+        search_btn.setFixedWidth(120)
         search_btn.setCursor(Qt.PointingHandCursor)
-        search_btn.setObjectName("searchButton")
         
-        search_icon = load_svg_icon("search", size=18)
+        # Ajouter icône au bouton
+        search_icon = load_svg_icon("search", size=16)
         search_btn.setIcon(QIcon(search_icon))
-        search_btn.setIconSize(QSize(18, 18))
+        search_btn.setIconSize(search_icon.size())
         
         search_btn.setStyleSheet("""
-            QPushButton#searchButton {
+            QPushButton {
                 background-color: #3498db;
                 color: white;
-                padding: 10px 20px;
+                padding: 8px 16px;
                 border: none;
-                border-radius: 10px;
+                border-radius: 8px;
                 font-weight: bold;
-                font-size: 14px;
+                font-size: 13px;
             }
-            QPushButton#searchButton:hover {
+            QPushButton:hover {
                 background-color: #2980b9;
             }
-            QPushButton#searchButton:pressed {
+            QPushButton:pressed {
                 background-color: #21618c;
             }
         """)
         search_btn.clicked.connect(self._on_search_clicked)
         
-        # Bouton Ajouter
         add_btn = QPushButton("Ajouter Produit")
-        add_btn.setMinimumHeight(45)
-        add_btn.setMinimumWidth(160)
+        add_btn.setMinimumHeight(38)
+        add_btn.setFixedWidth(150)
         add_btn.setCursor(Qt.PointingHandCursor)
-        add_btn.setObjectName("addButton")
         
-        add_icon = load_svg_icon("plus-circle", size=18)
+        # Ajouter icône au bouton
+        add_icon = load_svg_icon("plus-circle", size=16)
         add_btn.setIcon(QIcon(add_icon))
-        add_btn.setIconSize(QSize(18, 18))
+        add_btn.setIconSize(add_icon.size())
         
         add_btn.setStyleSheet("""
-            QPushButton#addButton {
+            QPushButton {
                 background-color: #2ecc71;
                 color: white;
-                padding: 10px 20px;
+                padding: 8px 16px;
                 border: none;
-                border-radius: 10px;
+                border-radius: 8px;
                 font-weight: bold;
-                font-size: 14px;
+                font-size: 13px;
             }
-            QPushButton#addButton:hover {
+            QPushButton:hover {
                 background-color: #27ae60;
             }
-            QPushButton#addButton:pressed {
+            QPushButton:pressed {
                 background-color: #1e8449;
             }
         """)
         add_btn.clicked.connect(lambda: self.add_product_requested.emit())
         
-        layout.addWidget(self.search_input, 3)
-        layout.addWidget(search_btn, 1)
-        layout.addWidget(add_btn, 1)
+        layout.addWidget(self.search_input)
+        layout.addWidget(search_btn)
+        layout.addStretch()
+        layout.addWidget(add_btn)
         
         return layout
     
-    def _create_filters_section(self) -> QGroupBox:
-        """Crée la section des filtres responsive dans un GroupBox."""
-        filters_group = QGroupBox("Filtres de Recherche")
-        filters_group.setObjectName("filtersGroup")
-        filters_group.setStyleSheet("""
-            QGroupBox#filtersGroup {
-                font-size: 15px;
-                font-weight: bold;
-                border: 2px solid palette(mid);
-                border-radius: 10px;
-                margin-top: 15px;
-                padding-top: 20px;
-                color: palette(text);
-            }
-            QGroupBox#filtersGroup::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 5px 15px;
-                background-color: palette(base);
-            }
-        """)
-        
-        filters_layout = QGridLayout()
-        filters_layout.setSpacing(15)
-        filters_layout.setContentsMargins(20, 20, 20, 20)
-        
-        # Ligne 1: Catégorie + Fournisseur
-        row = 0
+    def _create_filter_row1(self) -> QHBoxLayout:
+        """Crée la première ligne de filtres."""
+        layout = QHBoxLayout()
+        layout.setSpacing(15)
         
         # Catégorie
         cat_label = QLabel("Catégorie:")
-        cat_label.setStyleSheet("font-weight: bold; font-size: 14px; color: palette(text);")
-        filters_layout.addWidget(cat_label, row, 0)
+        cat_label.setStyleSheet("font-weight: bold; font-size: 13px;")
+        layout.addWidget(cat_label)
         
         self.category_filter_combo = QComboBox()
         self.category_filter_combo.addItem("Toutes")
-        self.category_filter_combo.setMinimumHeight(38)
-        self.category_filter_combo.setObjectName("filterCombo")
-        self.category_filter_combo.setStyleSheet("""
-            QComboBox#filterCombo {
-                font-size: 14px;
-                padding: 8px;
-                border: 2px solid palette(mid);
-                border-radius: 8px;
-                background-color: palette(base);
-                color: palette(text);
-            }
-            QComboBox#filterCombo:hover {
-                border-color: #3498db;
-            }
-            QComboBox#filterCombo::drop-down {
-                border: none;
-                padding-right: 10px;
-            }
-        """)
-        filters_layout.addWidget(self.category_filter_combo, row, 1)
+        self.category_filter_combo.setFixedWidth(140)
+        self.category_filter_combo.setMinimumHeight(32)
+        self.category_filter_combo.setStyleSheet("font-size: 13px; padding: 5px;")
+        layout.addWidget(self.category_filter_combo)
+        
+        layout.addSpacing(20)
         
         # Fournisseur
         sup_label = QLabel("Fournisseur:")
-        sup_label.setStyleSheet("font-weight: bold; font-size: 14px; color: palette(text);")
-        filters_layout.addWidget(sup_label, row, 2)
+        sup_label.setStyleSheet("font-weight: bold; font-size: 13px;")
+        layout.addWidget(sup_label)
         
         self.supplier_filter_combo = QComboBox()
         self.supplier_filter_combo.addItem("Tous")
-        self.supplier_filter_combo.setMinimumHeight(38)
-        self.supplier_filter_combo.setObjectName("filterCombo")
-        filters_layout.addWidget(self.supplier_filter_combo, row, 3)
+        self.supplier_filter_combo.setFixedWidth(140)
+        self.supplier_filter_combo.setMinimumHeight(32)
+        self.supplier_filter_combo.setStyleSheet("font-size: 13px; padding: 5px;")
+        layout.addWidget(self.supplier_filter_combo)
         
-        # Ligne 2: Type d'emballage (Radio buttons sur une ligne)
-        row += 1
+        layout.addSpacing(20)
+        
+        # Type d'emballage
         pack_label = QLabel("Type d'emballage:")
-        pack_label.setStyleSheet("font-weight: bold; font-size: 14px; color: palette(text);")
-        filters_layout.addWidget(pack_label, row, 0)
+        pack_label.setStyleSheet("font-weight: bold; font-size: 13px;")
+        layout.addWidget(pack_label)
         
-        packaging_layout = QHBoxLayout()
         self.packaging_group = QButtonGroup(self)
         packaging_options = ["Tous", "Carton", "Unité", "Pièce", "Lot", "Autre"]
-        
         for option in packaging_options:
             radio_btn = QRadioButton(option)
-            radio_btn.setObjectName("packagingRadio")
-            radio_btn.setStyleSheet("""
-                QRadioButton#packagingRadio {
-                    font-size: 13px;
-                    color: palette(text);
-                    spacing: 8px;
-                }
-                QRadioButton#packagingRadio::indicator {
-                    width: 18px;
-                    height: 18px;
-                }
-            """)
-            packaging_layout.addWidget(radio_btn)
+            radio_btn.setStyleSheet("font-size: 13px;")
+            layout.addWidget(radio_btn)
             self.packaging_group.addButton(radio_btn)
             if option == "Tous":
                 radio_btn.setChecked(True)
         
-        packaging_layout.addStretch()
-        filters_layout.addLayout(packaging_layout, row, 1, 1, 3)
+        layout.addSpacing(20)
         
-        # Ligne 3: Classe + Dates
-        row += 1
-        
-        # Classe
+        # Classe (pour Manuels)
         class_label = QLabel("Classe:")
-        class_label.setStyleSheet("font-weight: bold; font-size: 14px; color: palette(text);")
-        filters_layout.addWidget(class_label, row, 0)
+        class_label.setStyleSheet("font-weight: bold; font-size: 13px;")
+        layout.addWidget(class_label)
         
         self.class_filter_combo = QComboBox()
         self.class_filter_combo.addItem("Toutes")
-        self.class_filter_combo.setMinimumHeight(38)
-        self.class_filter_combo.setObjectName("filterCombo")
-        filters_layout.addWidget(self.class_filter_combo, row, 1)
+        self.class_filter_combo.setFixedWidth(140)
+        self.class_filter_combo.setMinimumHeight(32)
+        self.class_filter_combo.setStyleSheet("font-size: 13px; padding: 5px;")
+        layout.addWidget(self.class_filter_combo)
         
-        # Dates
-        date_label = QLabel("Période:")
-        date_label.setStyleSheet("font-weight: bold; font-size: 14px; color: palette(text);")
-        filters_layout.addWidget(date_label, row, 2)
+        layout.addStretch()
         
-        dates_layout = QHBoxLayout()
+        return layout
+    
+    def _create_filter_row2(self) -> QHBoxLayout:
+        """Crée la deuxième ligne de filtres (dates)."""
+        layout = QHBoxLayout()
+        
+        date_label = QLabel("Date d'ajout (Du):")
+        date_label.setStyleSheet("font-weight: bold; font-size: 13px;")
+        layout.addWidget(date_label)
         
         self.start_date_edit = QDateEdit(calendarPopup=True)
         self.start_date_edit.setMinimumDate(QDate(2000, 1, 1))
         self.start_date_edit.setDate(QDate(2024, 1, 1))
         self.start_date_edit.setDisplayFormat("dd/MM/yyyy")
-        self.start_date_edit.setMinimumHeight(38)
-        self.start_date_edit.setObjectName("dateEdit")
-        self.start_date_edit.setStyleSheet("""
-            QDateEdit#dateEdit {
-                font-size: 14px;
-                padding: 8px;
-                border: 2px solid palette(mid);
-                border-radius: 8px;
-                background-color: palette(base);
-                color: palette(text);
-            }
-            QDateEdit#dateEdit:hover {
-                border-color: #3498db;
-            }
-        """)
+        self.start_date_edit.setFixedWidth(130)
+        self.start_date_edit.setMinimumHeight(32)
+        self.start_date_edit.setStyleSheet("font-size: 13px; padding: 5px;")
+        layout.addWidget(self.start_date_edit)
         
-        to_label = QLabel("→")
-        to_label.setStyleSheet("font-size: 16px; font-weight: bold; color: palette(text);")
+        to_label = QLabel("Au:")
+        to_label.setStyleSheet("font-weight: bold; font-size: 13px;")
+        layout.addWidget(to_label)
         
         self.end_date_edit = QDateEdit(calendarPopup=True)
         self.end_date_edit.setDate(QDate.currentDate())
         self.end_date_edit.setDisplayFormat("dd/MM/yyyy")
-        self.end_date_edit.setMinimumHeight(38)
-        self.end_date_edit.setObjectName("dateEdit")
+        self.end_date_edit.setFixedWidth(130)
+        self.end_date_edit.setMinimumHeight(32)
+        self.end_date_edit.setStyleSheet("font-size: 13px; padding: 5px;")
+        layout.addWidget(self.end_date_edit)
         
-        dates_layout.addWidget(self.start_date_edit)
-        dates_layout.addWidget(to_label)
-        dates_layout.addWidget(self.end_date_edit)
+        layout.addStretch()
         
-        filters_layout.addLayout(dates_layout, row, 3)
-        
-        # Configuration responsive
-        filters_layout.setColumnStretch(1, 2)
-        filters_layout.setColumnStretch(3, 2)
-        
-        filters_group.setLayout(filters_layout)
-        return filters_group
+        return layout
     
     def _create_action_buttons(self) -> QHBoxLayout:
-        """Crée les boutons d'action responsive."""
+        """Crée les boutons d'action."""
         layout = QHBoxLayout()
-        layout.setSpacing(12)
         
         # Bouton Modifier
         edit_btn = QPushButton("Modifier")
-        edit_btn.setMinimumHeight(45)
-        edit_btn.setMinimumWidth(140)
+        edit_btn.setMinimumHeight(40)
+        edit_btn.setFixedWidth(130)
         edit_btn.setCursor(Qt.PointingHandCursor)
-        edit_btn.setObjectName("editButton")
         
-        edit_icon = load_svg_icon("edit", size=18)
+        edit_icon = load_svg_icon("edit", size=16)
         edit_btn.setIcon(QIcon(edit_icon))
-        edit_btn.setIconSize(QSize(18, 18))
+        edit_btn.setIconSize(edit_icon.size())
         
         edit_btn.setStyleSheet("""
-            QPushButton#editButton {
+            QPushButton {
                 background-color: #f39c12;
                 color: white;
-                padding: 10px 20px;
+                padding: 8px 16px;
                 border: none;
-                border-radius: 10px;
+                border-radius: 8px;
                 font-weight: bold;
-                font-size: 14px;
+                font-size: 13px;
             }
-            QPushButton#editButton:hover {
+            QPushButton:hover {
                 background-color: #e67e22;
             }
-            QPushButton#editButton:pressed {
+            QPushButton:pressed {
                 background-color: #d35400;
             }
         """)
@@ -488,29 +420,28 @@ class StockView(QWidget):
         
         # Bouton Supprimer
         delete_btn = QPushButton("Supprimer")
-        delete_btn.setMinimumHeight(45)
-        delete_btn.setMinimumWidth(140)
+        delete_btn.setMinimumHeight(40)
+        delete_btn.setFixedWidth(130)
         delete_btn.setCursor(Qt.PointingHandCursor)
-        delete_btn.setObjectName("deleteButton")
         
-        delete_icon = load_svg_icon("trash", size=18)
+        delete_icon = load_svg_icon("trash", size=16)
         delete_btn.setIcon(QIcon(delete_icon))
-        delete_btn.setIconSize(QSize(18, 18))
+        delete_btn.setIconSize(delete_icon.size())
         
         delete_btn.setStyleSheet("""
-            QPushButton#deleteButton {
+            QPushButton {
                 background-color: #e74c3c;
                 color: white;
-                padding: 10px 20px;
+                padding: 8px 16px;
                 border: none;
-                border-radius: 10px;
+                border-radius: 8px;
                 font-weight: bold;
-                font-size: 14px;
+                font-size: 13px;
             }
-            QPushButton#deleteButton:hover {
+            QPushButton:hover {
                 background-color: #c0392b;
             }
-            QPushButton#deleteButton:pressed {
+            QPushButton:pressed {
                 background-color: #a93226;
             }
         """)
@@ -518,29 +449,28 @@ class StockView(QWidget):
         
         # Bouton Actualiser
         refresh_btn = QPushButton("Actualiser")
-        refresh_btn.setMinimumHeight(45)
-        refresh_btn.setMinimumWidth(140)
+        refresh_btn.setMinimumHeight(40)
+        refresh_btn.setFixedWidth(130)
         refresh_btn.setCursor(Qt.PointingHandCursor)
-        refresh_btn.setObjectName("refreshButton")
         
-        refresh_icon = load_svg_icon("refresh", size=18)
+        refresh_icon = load_svg_icon("refresh", size=16)
         refresh_btn.setIcon(QIcon(refresh_icon))
-        refresh_btn.setIconSize(QSize(18, 18))
+        refresh_btn.setIconSize(refresh_icon.size())
         
         refresh_btn.setStyleSheet("""
-            QPushButton#refreshButton {
+            QPushButton {
                 background-color: #95a5a6;
                 color: white;
-                padding: 10px 20px;
+                padding: 8px 16px;
                 border: none;
-                border-radius: 10px;
+                border-radius: 8px;
                 font-weight: bold;
-                font-size: 14px;
+                font-size: 13px;
             }
-            QPushButton#refreshButton:hover {
+            QPushButton:hover {
                 background-color: #7f8c8d;
             }
-            QPushButton#refreshButton:pressed {
+            QPushButton:pressed {
                 background-color: #707b7c;
             }
         """)
@@ -601,7 +531,6 @@ class StockView(QWidget):
     def set_table_model(self, model):
         """Définit le modèle du tableau."""
         self.table_view.setModel(model)
-        self.table_view.resizeColumnsToContents()
     
     def update_categories(self, categories: list):
         """Met à jour la liste des catégories."""
@@ -610,6 +539,7 @@ class StockView(QWidget):
         self.category_filter_combo.addItem("Toutes")
         self.category_filter_combo.addItems(categories)
         
+        # Restaurer la sélection
         index = self.category_filter_combo.findText(current)
         if index >= 0:
             self.category_filter_combo.setCurrentIndex(index)
@@ -621,6 +551,7 @@ class StockView(QWidget):
         self.supplier_filter_combo.addItem("Tous")
         self.supplier_filter_combo.addItems(suppliers)
         
+        # Restaurer la sélection
         index = self.supplier_filter_combo.findText(current)
         if index >= 0:
             self.supplier_filter_combo.setCurrentIndex(index)
@@ -632,6 +563,7 @@ class StockView(QWidget):
         self.class_filter_combo.addItem("Toutes")
         self.class_filter_combo.addItems(classes)
         
+        # Restaurer la sélection
         index = self.class_filter_combo.findText(current)
         if index >= 0:
             self.class_filter_combo.setCurrentIndex(index)

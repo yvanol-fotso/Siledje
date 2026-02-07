@@ -176,28 +176,7 @@ class SalesView(QWidget):
         self.type_filter.addItem("Cartons (CRT)", "carton")
         self.type_filter.setFixedWidth(180)
         self.type_filter.setMinimumHeight(36)
-        self.type_filter.setStyleSheet("""
-            QComboBox {
-                padding: 6px 10px;
-                border: 2px solid #bdc3c7;
-                border-radius: 6px;
-                font-size: 13px;
-            }
-            QComboBox:hover {
-                border-color: #3498db;
-            }
-            QComboBox::drop-down {
-                border: none;
-                width: 30px;
-            }
-            QComboBox::down-arrow {
-                image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 6px solid #34495e;
-                margin-right: 8px;
-            }
-        """)
+        self.type_filter.setStyleSheet("font-size: 16px; padding: 8px; border-radius: 5px;")
         
         # Barre recherche
         self.search_input = QLineEdit()
