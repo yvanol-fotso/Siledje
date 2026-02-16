@@ -6,7 +6,7 @@ Séparation de la logique et de la présentation.
 from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QHBoxLayout, QFrame, QTableWidget, QTableWidgetItem,
-    QRadioButton, QCheckBox, QComboBox, QSpacerItem, QSizePolicy
+    QRadioButton, QCheckBox, QComboBox, QSpacerItem, QSizePolicy, QHeaderView
 )
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QBrush, QFont
 from PySide6.QtCore import Qt, Signal, QMargins
@@ -49,12 +49,9 @@ class AccueilView(QWidget):
     
     def init_ui(self):
         """Construit l'interface utilisateur."""
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(15, 10, 15, 10)  # Marges réduites
-        main_layout.setSpacing(15)  # Espacement réduit
-
-        # Note: Header (Avatar + Bienvenue) retiré pour gagner de l'espace
-        # L'utilisateur est déjà visible dans la toolbar de main_window
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(15, 10, 15, 10)
+        main_layout.setSpacing(15)
 
         # Statistiques avec graphiques QtCharts (RAPIDE)
         stats_layout = self._create_stats_section_qtcharts()
@@ -71,45 +68,12 @@ class AccueilView(QWidget):
         filter_layout = self._create_filters_section()
         main_layout.addLayout(filter_layout)
 
-        # Table des livres
+        # Table des livres - PREND TOUT L'ESPACE RESTANT
         self.table_widget = self._create_table()
-        main_layout.addWidget(self.table_widget)
-
-        main_layout.addStretch()
-        self.setLayout(main_layout)
+        main_layout.addWidget(self.table_widget, 1)  # Le "1" = stretch factor
         
         # Connecter les signaux
         self._connect_signals()
-    
-    def _create_header(self) -> QHBoxLayout:
-        """Crée l'en-tête avec avatar et message de bienvenue."""
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(15)
-
-        # Avatar
-        avatar_path = get_asset_path("images", "avatar.jpeg")
-        avatar_label = create_circular_avatar_label(avatar_path, size=48)
-
-        # Textes de bienvenue
-        texts = QVBoxLayout()
-        user_name = getattr(self.parent.current_user, "name", "Utilisateur") if self.parent else "Utilisateur"
-        user_role = getattr(self.parent.current_user, "role", "Rôle inconnu") if self.parent else "Rôle inconnu"
-        
-        self.welcome_label = QLabel(f"Bienvenue {user_name}")
-        self.welcome_label.setStyleSheet("font-size: 24px; font-weight: bold;")
-        
-        role_label = QLabel(f"Rôle : {user_role}")
-        role_label.setStyleSheet("font-size: 16px; color: #888;")
-        
-        texts.addWidget(self.welcome_label)
-        texts.addWidget(role_label)
-
-        header_layout.addWidget(avatar_label)
-        header_layout.addSpacerItem(QSpacerItem(10, 0, QSizePolicy.Fixed, QSizePolicy.Minimum))
-        header_layout.addLayout(texts)
-        header_layout.addStretch()
-        
-        return header_layout
     
     def _create_stats_section_qtcharts(self) -> QHBoxLayout:
         """Crée la section des statistiques avec QtCharts (ULTRA RAPIDE + RESPONSIVE)."""
@@ -166,10 +130,10 @@ class AccueilView(QWidget):
             
             # Label avec pourcentage ET valeur sur 2 lignes séparées
             percentage = (value / total) * 100
-            slice.setLabel(f"{label} {percentage:.0f}%\n{value} art")  # Format court
+            slice.setLabel(f"{label} {percentage:.0f}%\n{value} art")
             
             # Police du label
-            label_font = QFont("Segoe UI", 8, QFont.Bold)  # Réduit à 8pt
+            label_font = QFont("Segoe UI", 8, QFont.Bold)
             slice.setLabelFont(label_font)
             slice.setLabelColor(QColor("#2c3e50"))
         
@@ -179,7 +143,7 @@ class AccueilView(QWidget):
         
         # Titre court avec total
         chart.setTitle(f"{title}\n{total} articles")
-        chart.setTitleFont(QFont("Segoe UI", 10, QFont.Bold))  # Réduit à 10pt
+        chart.setTitleFont(QFont("Segoe UI", 10, QFont.Bold))
         chart.setTitleBrush(QBrush(QColor("#2c3e50")))
         chart.setAnimationOptions(QChart.SeriesAnimations)
         chart.legend().setVisible(False)
@@ -228,7 +192,7 @@ class AccueilView(QWidget):
         
         # Titre court
         chart.setTitle(f"{title}\n{total_k:.0f}k FCFA")
-        chart.setTitleFont(QFont("Segoe UI", 10, QFont.Bold))  # Réduit à 10pt
+        chart.setTitleFont(QFont("Segoe UI", 10, QFont.Bold))
         chart.setTitleBrush(QBrush(QColor("#2c3e50")))
         chart.setAnimationOptions(QChart.SeriesAnimations)
         chart.setBackgroundBrush(QBrush(QColor("#ffffff")))
@@ -265,7 +229,7 @@ class AccueilView(QWidget):
                 background-color: white;
             }
         """)
-        chart_view.setFixedSize(350, 240)  # Taille réduite
+        chart_view.setFixedSize(350, 240)
         
         return chart_view
     
@@ -277,19 +241,19 @@ class AccueilView(QWidget):
         
         # Créer la série
         series = QPieSeries()
-        series.setHoleSize(0.5)  # Taille du trou (50%)
+        series.setHoleSize(0.5)
         
         # Slice réalisé avec infos compactes
-        achieved_k = achieved / 1000  # Convertir en milliers
+        achieved_k = achieved / 1000
         slice_achieved = series.append(f"{percentage:.0f}%", achieved)
         slice_achieved.setBrush(QColor(color))
         slice_achieved.setPen(QPen(QColor("#ffffff"), 3))
         slice_achieved.setLabelVisible(True)
-        slice_achieved.setLabelFont(QFont("Segoe UI", 9, QFont.Bold))  # Réduit à 9pt
+        slice_achieved.setLabelFont(QFont("Segoe UI", 9, QFont.Bold))
         slice_achieved.setLabelColor(QColor("#2c3e50"))
         slice_achieved.setExploded(True)
         slice_achieved.setExplodeDistanceFactor(0.05)
-        slice_achieved.setLabel(f"{percentage:.0f}%\n{achieved_k:.0f}k")  # Format court
+        slice_achieved.setLabel(f"{percentage:.0f}%\n{achieved_k:.0f}k")
         
         # Slice restant
         remaining_k = remaining / 1000
@@ -305,7 +269,7 @@ class AccueilView(QWidget):
         # Titre court
         target_k = target / 1000
         chart.setTitle(f"{title}\n{target_k:.0f}k FCFA")
-        chart.setTitleFont(QFont("Segoe UI", 10, QFont.Bold))  # Réduit à 10pt
+        chart.setTitleFont(QFont("Segoe UI", 10, QFont.Bold))
         chart.setTitleBrush(QBrush(QColor("#2c3e50")))
         chart.setAnimationOptions(QChart.SeriesAnimations)
         chart.legend().setVisible(False)
@@ -357,45 +321,339 @@ class AccueilView(QWidget):
         
         return filter_layout
     
+
     def _create_table(self) -> QTableWidget:
-        """Crée la table pour afficher les livres."""
+        """Crée la table pour afficher les livres - RESPONSIVE avec style dark permanent."""
         table = QTableWidget()
         table.setColumnCount(5)
         table.setHorizontalHeaderLabels(["Titre", "Éditeur", "Édition", "Prix", "Intitulé"])
+        
+        # IMPORTANT: Politique de taille pour que le tableau grandisse
+        table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        # Style DARK PERMANENT avec VIOLET en alternance
         table.setStyleSheet("""
-            font-size: 16px; 
-            border: 2px solid #bdc3c7; 
-            border-radius: 8px;
+            QTableWidget {
+                font-size: 16px; 
+                border: 2px solid #34495e;
+                border-radius: 8px;
+                gridline-color: #34495e;
+                background-color: #2c3e50;
+                color: white;
+            }
             QTableWidget::item { 
-                padding: 5px;
-                height: 35px;
+                padding: 8px;
+                border-bottom: 1px solid #34495e;
+                color: white;
+                background-color: #2c3e50;
+            }
+            QTableWidget::item:alternate {
+                background-color: #9b59b6;
+                color: white;
+            }
+            QTableWidget::item:selected {
+                background-color: #3498db;
+                color: white;
+            }
+            QHeaderView::section {
+                background-color: #1a252f;
+                color: white;
+                padding: 10px;
+                border: 1px solid #34495e;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QHeaderView::section:vertical {
+                background-color: #2c3e50;
+                color: white;
+                border: 1px solid #34495e;
             }
             QScrollBar:vertical {
-                border: 2px solid #bdc3c7;
-                background: #f0f0f0;
+                border: 2px solid #34495e;
+                background: #2c3e50;
                 width: 15px;
-                margin: 0px 0px 0px 0px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #9b59b6;
+                min-height: 20px;
+                border-radius: 7px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #8e44ad;
+            }
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
+        
+        # Configuration des en-têtes
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Interactive)  # Titre
+        header.setSectionResizeMode(1, QHeaderView.Interactive)  # Éditeur
+        header.setSectionResizeMode(2, QHeaderView.Fixed)        # Édition
+        header.setSectionResizeMode(3, QHeaderView.Fixed)        # Prix
+        header.setSectionResizeMode(4, QHeaderView.Stretch)      # Intitulé (prend l'espace restant)
+        
+        # Largeurs initiales
+        table.setColumnWidth(0, 280)  # Titre
+        table.setColumnWidth(1, 240)  # Éditeur
+        table.setColumnWidth(2, 120)  # Édition
+        table.setColumnWidth(3, 120)  # Prix
+        # Colonne 4 (Intitulé) s'adapte automatiquement
+        
+        # En-tête vertical (numérotation)
+        v_header = table.verticalHeader()
+        v_header.setFixedWidth(30)
+        v_header.setDefaultSectionSize(40)  # Hauteur des lignes
+        
+        # Alternance de couleurs des lignes ACTIVÉE
+        table.setAlternatingRowColors(True)
+        
+        return table
+        """Cée la table pour afficher les livres - RESPONSIVE et adaptée au thème."""
+        table = QTableWidget()
+        table.setColumnCount(5)
+        table.setHorizontalHeaderLabels(["Titre", "Éditeur", "Édition", "Prix", "Intitulé"])
+        
+        # IMPORTANT: Politique de taille pour que le tableau grandisse
+        table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        # Style avec NOIR et VIOLET en alternance
+        table.setStyleSheet("""
+            QTableWidget {
+                font-size: 16px; 
+                border: 2px solid #34495e;
+                border-radius: 8px;
+                gridline-color: #34495e;
+                background-color: #2c3e50;
+                color: white;
+            }
+            QTableWidget::item { 
+                padding: 8px;
+                border-bottom: 1px solid #34495e;
+                color: white;
+                background-color: #2c3e50;
+            }
+            QTableWidget::item:alternate {
+                background-color: #9b59b6;
+            }
+            QTableWidget::item:selected {
+                background-color: #3498db;
+                color: white;
+            }
+            QHeaderView::section {
+                background-color: #1a1a1a;
+                color: white;
+                padding: 10px;
+                border: 1px solid #34495e;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QScrollBar:vertical {
+                border: 2px solid #34495e;
+                background: #2c3e50;
+                width: 15px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #9b59b6;
+                min-height: 20px;
+                border-radius: 7px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #8e44ad;
+            }
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
+        
+        # Configuration des en-têtes
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Interactive)  # Titre
+        header.setSectionResizeMode(1, QHeaderView.Interactive)  # Éditeur
+        header.setSectionResizeMode(2, QHeaderView.Fixed)        # Édition
+        header.setSectionResizeMode(3, QHeaderView.Fixed)        # Prix
+        header.setSectionResizeMode(4, QHeaderView.Stretch)      # Intitulé (prend l'espace restant)
+        
+        # Largeurs initiales
+        table.setColumnWidth(0, 280)  # Titre
+        table.setColumnWidth(1, 240)  # Éditeur
+        table.setColumnWidth(2, 120)  # Édition
+        table.setColumnWidth(3, 120)  # Prix
+        # Colonne 4 (Intitulé) s'adapte automatiquement
+        
+        # En-tête vertical plus petit
+        table.verticalHeader().setFixedWidth(30)
+        table.verticalHeader().setDefaultSectionSize(40)  # Hauteur des lignes
+        
+        # Alternance de couleurs des lignes ACTIVÉE
+        table.setAlternatingRowColors(True)
+        
+        return table
+        """Crée la table pour afficher les livres - RESPONSIVE et adaptée au thème."""
+        table = QTableWidget()
+        table.setColumnCount(5)
+        table.setHorizontalHeaderLabels(["Titre", "Éditeur", "Édition", "Prix", "Intitulé"])
+        
+        # IMPORTANT: Politique de taille pour que le tableau grandisse
+        table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        # Style amélioré avec palette() pour s'adapter au thème
+        table.setStyleSheet("""
+            QTableWidget {
+                font-size: 16px; 
+                border: 2px solid palette(mid);
+                border-radius: 8px;
+                gridline-color: palette(mid);
+                background-color: palette(base);
+                color: palette(text);
+                alternate-background-color: palette(alternate-base);
+            }
+            QTableWidget::item { 
+                padding: 8px;
+                border-bottom: 1px solid palette(mid);
+                color: palette(text);
+                background-color: palette(base);
+            }
+            QTableWidget::item:alternate {
+                background-color: palette(alternate-base);
+            }
+            QTableWidget::item:selected {
+                background-color: #3498db;
+                color: white;
+            }
+            QHeaderView::section {
+                background-color: #34495e;
+                color: white;
+                padding: 10px;
+                border: 1px solid #2c3e50;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QScrollBar:vertical {
+                border: 2px solid palette(mid);
+                background: palette(alternate-base);
+                width: 15px;
+                margin: 0px;
             }
             QScrollBar::handle:vertical {
                 background: #3498db;
                 min-height: 20px;
                 border-radius: 7px;
             }
-            QScrollBar::add-line:vertical {
-                height: 0px;
+            QScrollBar::handle:vertical:hover {
+                background: #2980b9;
             }
+            QScrollBar::add-line:vertical,
             QScrollBar::sub-line:vertical {
                 height: 0px;
             }
         """)
-        table.horizontalHeader().setStyleSheet("font-size: 16px; font-weight: bold;")
+        
+        # Configuration des en-têtes
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Interactive)  # Titre
+        header.setSectionResizeMode(1, QHeaderView.Interactive)  # Éditeur
+        header.setSectionResizeMode(2, QHeaderView.Fixed)        # Édition
+        header.setSectionResizeMode(3, QHeaderView.Fixed)        # Prix
+        header.setSectionResizeMode(4, QHeaderView.Stretch)      # Intitulé (prend l'espace restant)
+        
+        # Largeurs initiales
+        table.setColumnWidth(0, 280)  # Titre
+        table.setColumnWidth(1, 240)  # Éditeur
+        table.setColumnWidth(2, 120)  # Édition
+        table.setColumnWidth(3, 120)  # Prix
+        # Colonne 4 (Intitulé) s'adapte automatiquement
+        
+        # En-tête vertical plus petit
         table.verticalHeader().setFixedWidth(30)
-        table.setColumnWidth(0, 280)
-        table.setColumnWidth(1, 240)
-        table.setColumnWidth(2, 180)
-        table.setColumnWidth(3, 150)
-        table.setColumnWidth(4, 500)
-        table.setMinimumHeight(250)
+        table.verticalHeader().setDefaultSectionSize(40)  # Hauteur des lignes
+        
+        # Alternance de couleurs des lignes ACTIVÉE
+        table.setAlternatingRowColors(True)
+        
+        return table
+
+        """Crée la table pour afficher les livres - RESPONSIVE et adaptée au thème."""
+        table = QTableWidget()
+        table.setColumnCount(5)
+        table.setHorizontalHeaderLabels(["Titre", "Éditeur", "Édition", "Prix", "Intitulé"])
+        
+        # IMPORTANT: Politique de taille pour que le tableau grandisse
+        table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        # Style amélioré avec palette() pour s'adapter au thème
+        table.setStyleSheet("""
+            QTableWidget {
+                font-size: 16px; 
+                border: 2px solid palette(mid);
+                border-radius: 8px;
+                gridline-color: palette(mid);
+                background-color: palette(base);
+                color: palette(text);
+            }
+            QTableWidget::item { 
+                padding: 8px;
+                border-bottom: 1px solid palette(mid);
+                color: palette(text);
+            }
+            QTableWidget::item:selected {
+                background-color: #3498db;
+                color: white;
+            }
+            QHeaderView::section {
+                background-color: palette(dark);
+                color: palette(bright-text);
+                padding: 10px;
+                border: none;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QScrollBar:vertical {
+                border: 2px solid palette(mid);
+                background: palette(alternate-base);
+                width: 15px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #3498db;
+                min-height: 20px;
+                border-radius: 7px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #2980b9;
+            }
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
+        
+        # Configuration des en-têtes
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Interactive)  # Titre
+        header.setSectionResizeMode(1, QHeaderView.Interactive)  # Éditeur
+        header.setSectionResizeMode(2, QHeaderView.Fixed)        # Édition
+        header.setSectionResizeMode(3, QHeaderView.Fixed)        # Prix
+        header.setSectionResizeMode(4, QHeaderView.Stretch)      # Intitulé (prend l'espace restant)
+        
+        # Largeurs initiales
+        table.setColumnWidth(0, 280)  # Titre
+        table.setColumnWidth(1, 240)  # Éditeur
+        table.setColumnWidth(2, 120)  # Édition (réduit)
+        table.setColumnWidth(3, 120)  # Prix (réduit)
+        # Colonne 4 (Intitulé) s'adapte automatiquement
+        
+        # En-tête vertical plus petit
+        table.verticalHeader().setFixedWidth(30)
+        table.verticalHeader().setDefaultSectionSize(40)  # Hauteur des lignes
+        
+        # Alternance de couleurs des lignes
+        table.setAlternatingRowColors(True)
         
         return table
     

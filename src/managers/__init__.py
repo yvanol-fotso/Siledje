@@ -10,6 +10,8 @@ from .security.security_manager import SecurityManager
 from .report.report_manager import ReportManager
 from .barcode.barcode_manager import BarcodeManager
 from .ai.ai_manager import AIManager
+from .database import DatabaseSettingsManager
+from .notifications import NotificationSettingsManager
 
 __all__ = [
     'StockManager',
@@ -18,5 +20,7 @@ __all__ = [
     'SecurityManager',
     'ReportManager',
     'BarcodeManager',
-    'AIManager'
+    'AIManager',
+    'DatabaseSettingsManager',
+    'NotificationSettingsManager'
 ]

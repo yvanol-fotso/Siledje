@@ -22,6 +22,8 @@ from src.managers.report.report_manager import ReportManager
 from src.managers.barcode.barcode_manager import BarcodeManager
 from src.managers.ai.ai_manager import AIManager
 from src.managers.accueil_manage import AccueilManager
+from src.managers.database import DatabaseSettingsManager  # NOUVEAU
+from src.managers.notifications import NotificationSettingsManager  # NOUVEAU
 
 # Utilitaires
 from src.database.manager import DatabaseManager
@@ -112,7 +114,9 @@ class MainWindow(QMainWindow):
             'security': SecurityManager(self),
             'reports': ReportManager(),
             'barcode_test': BarcodeManager(self),
-            'ai': AIManager(self)
+            'ai': AIManager(self),
+            'database_settings': DatabaseSettingsManager(self),       # NOUVEAU
+            'notification_settings': NotificationSettingsManager(self) # NOUVEAU
         }
 
     def setup_main_content(self):
@@ -231,26 +235,21 @@ class MainWindow(QMainWindow):
         action_ai.triggered.connect(lambda: self.switch_to_module('ai'))
         admin_menu.addAction(action_ai)
 
-        # ========== MENU PARAMETRES ==========
+        # ========== MENU PARAMETRES (NETTOYÉ) ==========
         settings_menu = menubar.addMenu("&Paramètres")
         
         # Configuration générale
         settings_menu.addAction(self.create_action("Configuration générale", "Ctrl+,", self.open_general_settings))
-        settings_menu.addAction(self.create_action("Préférences utilisateur", "", self.open_user_preferences))
         
         settings_menu.addSeparator()
         
         # Base de données
-        db_menu = settings_menu.addMenu("Base de données")
-        db_menu.addAction(self.create_action("Configuration connexion", "", self.configure_database))
-        db_menu.addAction(self.create_action("Optimiser la base", "", self.optimize_database))
-        db_menu.addAction(self.create_action("Vérifier l'intégrité", "", self.check_database_integrity))
+        settings_menu.addAction(self.create_action("Gestion de la base de données", "", self.open_database_settings))
         
         settings_menu.addSeparator()
         
         # Notifications
-        settings_menu.addAction(self.create_action("Gérer les notifications", "", self.manage_notifications))
-        settings_menu.addAction(self.create_action("Préférences d'impression", "", self.printer_settings))
+        settings_menu.addAction(self.create_action("Gestion des notifications", "", self.open_notification_settings))
 
         # ========== MENU AFFICHAGE ==========
         view_menu = menubar.addMenu("&Affichage")
@@ -463,7 +462,11 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent):
         """Gère la fermeture de l'application."""
-        if self.config.get("confirm_exit", False):
+        # Utiliser QSettings directement
+        settings = QSettings("VotreEntreprise", "LibrairiePapeterie")
+        confirm_exit = settings.value("confirm_exit", False, type=bool)
+        
+        if confirm_exit:
             reply = QMessageBox.question(
                 self, 
                 "Confirmation", 
@@ -623,7 +626,7 @@ class MainWindow(QMainWindow):
         
         # Note d'information
         info_label = QLabel(
-            "💡 L'importation écrasera les données existantes.\n"
+            "L'importation écrasera les données existantes.\n"
             "Pensez à créer une sauvegarde avant d'importer."
         )
         info_label.setStyleSheet("""
@@ -760,7 +763,7 @@ class MainWindow(QMainWindow):
         
         # Note d'information
         info_label = QLabel(
-            "💡 Les données seront exportées au format sélectionné.\n"
+            "Les données seront exportées au format sélectionné.\n"
             "L'export peut prendre quelques instants pour les gros volumes."
         )
         info_label.setStyleSheet("""
@@ -820,7 +823,7 @@ class MainWindow(QMainWindow):
         """Restaure une sauvegarde."""
         QMessageBox.information(self, "Restauration", "Fonctionnalité de restauration en cours de développement.")
 
-    # ========== SLOTS - MENU PARAMETRES ==========
+    # ========== SLOTS - MENU PARAMETRES (MODULES INTÉGRÉS) ==========
     
     @Slot()
     def open_general_settings(self):
@@ -842,7 +845,7 @@ class MainWindow(QMainWindow):
         form_layout.setSpacing(20)
         form_layout.setContentsMargins(20, 20, 20, 20)
         
-        # ===== STYLES CORRIGÉS (SÉPARÉS) =====
+        # Styles
         label_style = "font-weight: bold; font-size: 14px; color: #2c3e50; padding: 5px;"
         
         input_base_style = """
@@ -860,36 +863,36 @@ class MainWindow(QMainWindow):
             }
         """
         
-        # Fonction helper pour créer des labels lisibles
         def create_label(text):
             label = QLabel(text)
             label.setStyleSheet(label_style)
             return label
         
-        # ===== NOM DE L'ENTREPRISE =====
+        # Nom de l'entreprise
         company_input = QLineEdit()
         company_input.setText("SILEDJE")
         company_input.setStyleSheet(input_base_style)
         company_input.setPlaceholderText("Nom de votre entreprise")
         form_layout.addRow(create_label("Nom de l'entreprise:"), company_input)
         
-        # ===== LANGUE =====
+        # Langue
         language_combo = QComboBox()
         language_combo.addItems(["Français", "English", "Español"])
         language_combo.setCurrentText("Français")
         language_combo.setStyleSheet(input_base_style)
         form_layout.addRow(create_label("Langue:"), language_combo)
         
-        # ===== DEVISE =====
+        # Devise
         currency_combo = QComboBox()
         currency_combo.addItems(["FCFA", "EUR", "USD"])
         currency_combo.setCurrentText("FCFA")
         currency_combo.setStyleSheet(input_base_style)
         form_layout.addRow(create_label("Devise:"), currency_combo)
         
-        # ===== CONFIRMATION DE SORTIE =====
+        # Confirmation de sortie
+        settings = QSettings("VotreEntreprise", "LibrairiePapeterie")
         confirm_exit_check = QCheckBox("Demander confirmation avant de quitter")
-        confirm_exit_check.setChecked(self.config.get("confirm_exit", False))
+        confirm_exit_check.setChecked(settings.value("confirm_exit", False, type=bool))
         confirm_exit_check.setStyleSheet("""
             QCheckBox {
                 font-size: 14px;
@@ -915,50 +918,28 @@ class MainWindow(QMainWindow):
         content.setLayout(form_layout)
         modal.set_content(content)
         
-        # Stocker les widgets pour récupération
-        modal.company_input = company_input
-        modal.language_combo = language_combo
-        modal.currency_combo = currency_combo
-        modal.confirm_exit_check = confirm_exit_check
-        
-        def save_settings():
-            self.config.set("confirm_exit", confirm_exit_check.isChecked())
+        def save_settings_func():
+            # Utiliser QSettings directement
+            settings = QSettings("VotreEntreprise", "LibrairiePapeterie")
+            settings.setValue("confirm_exit", confirm_exit_check.isChecked())
+            settings.sync()
+            
             self.save_persistent_settings()
             modal.accept()
             QMessageBox.information(self, "Succès", "Paramètres enregistrés avec succès.")
         
-        modal.ok_clicked.connect(save_settings)
+        modal.ok_clicked.connect(save_settings_func)
         modal.exec()
     
     @Slot()
-    def open_user_preferences(self):
-        """Ouvre les préférences utilisateur."""
-        QMessageBox.information(self, "Préférences", "Fonctionnalité de préférences utilisateur en cours de développement.")
+    def open_database_settings(self):
+        """Ouvre la gestion de la base de données."""
+        self.switch_to_module('database_settings')  # MODIFIÉ - utilise le module
     
     @Slot()
-    def configure_database(self):
-        """Configure la connexion à la base de données."""
-        QMessageBox.information(self, "Base de données", "Configuration de la base de données en cours de développement.")
-    
-    @Slot()
-    def optimize_database(self):
-        """Optimise la base de données."""
-        QMessageBox.information(self, "Optimisation", "Optimisation de la base de données en cours de développement.")
-    
-    @Slot()
-    def check_database_integrity(self):
-        """Vérifie l'intégrité de la base de données."""
-        QMessageBox.information(self, "Intégrité", "Vérification de l'intégrité en cours de développement.")
-    
-    @Slot()
-    def manage_notifications(self):
-        """Gère les notifications."""
-        QMessageBox.information(self, "Notifications", "Gestion des notifications en cours de développement.")
-    
-    @Slot()
-    def printer_settings(self):
-        """Paramètres d'impression."""
-        QMessageBox.information(self, "Impression", "Paramètres d'impression en cours de développement.")
+    def open_notification_settings(self):
+        """Ouvre la gestion des notifications."""
+        self.switch_to_module('notification_settings')  # MODIFIÉ - utilise le module
 
     # ========== SLOTS - MENU AFFICHAGE ==========
     
@@ -1104,6 +1085,8 @@ class MainWindow(QMainWindow):
             <li>Rapports: {self.modules['reports'].version}</li>
             <li>Barcode: {self.modules['barcode_test'].version}</li>
             <li>Assistant IA: {self.modules['ai'].version}</li>
+            <li>Base de données: {self.modules['database_settings'].version}</li>
+            <li>Notifications: {self.modules['notification_settings'].version}</li>
         </ul>
         
         <p><b>Développé par :</b> Mr FOTSO TATCHUM Yvanol Rosly</p>
