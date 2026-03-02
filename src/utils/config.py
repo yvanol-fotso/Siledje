@@ -57,12 +57,12 @@ class AppConfig:
                     config_data = json.load(f)
                 
                 # Informations de base
-                self.app_name = config_data.get('app_name', 'Librairie-Papeterie')
+                self.app_name = config_data.get('app_name', 'Siledje')
                 self.version = config_data.get('version', '1.0.0')
                 
                 # Configuration de la base de données
                 db_config = config_data.get('database', {})
-                self.db_name = db_config.get('name', 'data/librairie.db')
+                self.db_name = db_config.get('name', 'data/siledje.db')
                 self.auto_backup = db_config.get('auto_backup', True)
                 self.backup_path = db_config.get('backup_path', 'data/backups/')
                 
@@ -93,11 +93,11 @@ class AppConfig:
     def _set_default_config(self):
         """Définit les valeurs par défaut."""
         # Informations de base
-        self.app_name = "Librairie-Papeterie"
+        self.app_name = "Siledje"
         self.version = "2.0.0"
         
         # Base de données
-        self.db_name = "data/librairie.db"
+        self.db_name = "data/siledje.db"
         self.auto_backup = True
         self.backup_path = "data/backups/"
         

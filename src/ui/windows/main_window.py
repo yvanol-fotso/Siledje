@@ -26,7 +26,8 @@ from src.managers.database import DatabaseSettingsManager
 from src.managers.notifications import NotificationSettingsManager
 from src.managers.zoom import ZoomManager
 from src.managers.help import BugReportManager
-from src.managers.file import FileManager          # ← MODULE FICHIER
+from src.managers.file import FileManager
+from src.managers.supplier.supplier_manager import SupplierManager
 
 # ── Utilitaires ────────────────────────────────────────────────────────
 from src.database.manager import DatabaseManager
@@ -43,8 +44,8 @@ class MainWindow(QMainWindow):
 
     def __init__(self, config=None, theme_manager=None, current_user=None):
         super().__init__()
-        QCoreApplication.setOrganizationName("VotreEntreprise")
-        QCoreApplication.setApplicationName("LibrairiePapeterie")
+        QCoreApplication.setOrganizationName("Siledje")
+        QCoreApplication.setApplicationName("Siledje")
 
         self.config       = config if config else AppConfig()
         self.db           = DatabaseManager()
@@ -117,10 +118,11 @@ class MainWindow(QMainWindow):
             'reports':               ReportManager(),
             'barcode_test':          BarcodeManager(self),
             'ai':                    AIManager(self),
+            'suppliers':             SupplierManager(self),
             'database_settings':     DatabaseSettingsManager(self),
             'notification_settings': NotificationSettingsManager(self),
             'bug_report':            BugReportManager(self),
-            'file':                  FileManager(self),       # ← NOUVEAU
+            'file':                  FileManager(self),
         }
 
     def setup_main_content(self):
@@ -155,36 +157,26 @@ class MainWindow(QMainWindow):
         menubar.setCornerWidget(company_label, Qt.TopLeftCorner)
 
         # ══════════════════════════════════════════════════════════════
-        # MENU FICHIER — Tous les items fonctionnels
+        # MENU FICHIER
         # ══════════════════════════════════════════════════════════════
         file_menu = menubar.addMenu("&Fichier")
 
-        # ── Sous-menu Import/Export ──────────────────────────────────
         ie_menu = file_menu.addMenu("Import/Export")
-
-        ie_menu.addAction(self.create_action(
-            "Importer des données",    "", self.import_data))
-        ie_menu.addAction(self.create_action(
-            "Exporter des données",    "", self.export_data))
+        ie_menu.addAction(self.create_action("Importer des données",   "", self.import_data))
+        ie_menu.addAction(self.create_action("Exporter des données",   "", self.export_data))
         ie_menu.addSeparator()
-        ie_menu.addAction(self.create_action(
-            "Importer Stock (CSV)",    "", self.import_stock_csv))
-        ie_menu.addAction(self.create_action(
-            "Exporter Stock (CSV)",    "", self.export_stock_csv))
+        ie_menu.addAction(self.create_action("Importer Stock (CSV)",   "", self.import_stock_csv))
+        ie_menu.addAction(self.create_action("Exporter Stock (CSV)",   "", self.export_stock_csv))
 
         file_menu.addSeparator()
-
-        # ── Sauvegarde ───────────────────────────────────────────────
         file_menu.addAction(self.create_action(
-            "Sauvegarder la configuration", "Ctrl+S", self.save_config))
+            "Sauvegarder la configuration",  "Ctrl+S", self.save_config))
         file_menu.addAction(self.create_action(
             "Créer une sauvegarde complète", "",       self.create_backup))
         file_menu.addAction(self.create_action(
             "Restaurer une sauvegarde",      "",       self.restore_backup))
-
         file_menu.addSeparator()
 
-        # ── Quitter ──────────────────────────────────────────────────
         quit_action = QAction("Quitter", self)
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(self.close)
@@ -203,7 +195,6 @@ class MainWindow(QMainWindow):
         # MENU GESTION
         # ══════════════════════════════════════════════════════════════
         gestion_menu = menubar.addMenu("&Gestion")
-
         for label, shortcut, key in [
             ("Point de Vente",         "Ctrl+V",       'sales'),
             ("Gestion de Stock",       "Ctrl+Shift+S", 'stock'),
@@ -219,10 +210,10 @@ class MainWindow(QMainWindow):
         # MENU ADMINISTRATION
         # ══════════════════════════════════════════════════════════════
         admin_menu = menubar.addMenu("&Administration")
-
         for label, shortcut, key in [
             ("Gestion des Utilisateurs", "Ctrl+U",       'admin'),
             ("Rôles et Permissions",     "Ctrl+Shift+R", 'security'),
+            ("Configuration des Fournisseurs", "Ctrl+Shift+F", 'suppliers'),
             ("Paramètres IA",            "Ctrl+Shift+A", 'ai'),
         ]:
             a = QAction(label, self)
@@ -250,7 +241,6 @@ class MainWindow(QMainWindow):
         self.setup_theme_menu(view_menu)
         view_menu.addSeparator()
 
-        # ── Zoom ─────────────────────────────────────────────────────
         zoom_menu = view_menu.addMenu("Zoom")
 
         self.action_zoom_in = QAction("Zoom avant", self)
@@ -338,7 +328,6 @@ class MainWindow(QMainWindow):
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         toolbar.addWidget(spacer)
 
-        # Contrôles zoom
         self.btn_toolbar_zoom_out = QPushButton("A-")
         self.btn_toolbar_zoom_out.setFixedSize(34, 28)
         self.btn_toolbar_zoom_out.setToolTip("Zoom arrière  (Ctrl+-)")
@@ -378,7 +367,6 @@ class MainWindow(QMainWindow):
         sep.setFixedWidth(12)
         toolbar.addWidget(sep)
 
-        # Date/heure
         self.datetime_label = QLabel()
         self.datetime_label.setObjectName("datetime_info")
         self.datetime_label.setStyleSheet(
@@ -392,7 +380,6 @@ class MainWindow(QMainWindow):
         self.datetime_timer.start(1000)
         self.update_datetime()
 
-        # Avatar
         avatar_path = get_asset_path("images", "avatar.jpeg")
         toolbar.addWidget(create_circular_avatar_label(avatar_path, size=32))
 
@@ -400,7 +387,6 @@ class MainWindow(QMainWindow):
         sep2.setFixedWidth(10)
         toolbar.addWidget(sep2)
 
-        # Déconnexion
         logout_btn = QPushButton()
         logout_btn.setIcon(QIcon.fromTheme(
             "system-log-out", QIcon(str(get_asset_path("icons", "logout.png")))))
@@ -531,7 +517,7 @@ class MainWindow(QMainWindow):
     # ──────────────────────────────────────────────────────────────────
 
     def load_persistent_settings(self):
-        s = QSettings("VotreEntreprise", "LibrairiePapeterie")
+        s = QSettings("Siledje", "Siledje")
         geo = s.value("window_geometry")
         if geo:
             self.restoreGeometry(geo)
@@ -540,12 +526,12 @@ class MainWindow(QMainWindow):
             self.theme_manager.set_theme(saved_theme)
 
     def save_persistent_settings(self):
-        s = QSettings("VotreEntreprise", "LibrairiePapeterie")
+        s = QSettings("Siledje", "Siledje")
         s.setValue("window_geometry", self.saveGeometry())
         s.setValue("theme", self.theme_manager.get_current_theme())
 
     def closeEvent(self, event: QCloseEvent):
-        s = QSettings("VotreEntreprise", "LibrairiePapeterie")
+        s = QSettings("Siledje", "Siledje")
         if s.value("confirm_exit", False, type=bool):
             reply = QMessageBox.question(
                 self, "Confirmation", "Voulez-vous vraiment quitter ?",
@@ -568,48 +554,41 @@ class MainWindow(QMainWindow):
         return act
 
     # ══════════════════════════════════════════════════════════════════
-    # SLOTS — MENU FICHIER (tous fonctionnels)
+    # SLOTS — MENU FICHIER
     # ══════════════════════════════════════════════════════════════════
 
     @Slot()
     def import_data(self):
-        """Importer des données — ouvre le module Fichier (onglet import)."""
         self.switch_to_module('file')
         self.statusBar().showMessage("Module Fichier — Import CSV", 3000)
 
     @Slot()
     def export_data(self):
-        """Exporter des données — ouvre le module Fichier (onglet export)."""
         self.switch_to_module('file')
         self.statusBar().showMessage("Module Fichier — Export CSV", 3000)
 
     @Slot()
     def import_stock_csv(self):
-        """Import Stock CSV — sélecteur de fichier direct + import réel."""
         from PySide6.QtWidgets import QFileDialog
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Sélectionner le fichier CSV à importer", "",
             "CSV (*.csv);;Tous les fichiers (*)"
         )
         if file_path:
-            # Déléguer au FileManager
             self.modules['file'].import_stock_csv(file_path)
 
     @Slot()
     def export_stock_csv(self):
-        """Export Stock CSV — sélecteur de destination + export réel."""
         from PySide6.QtWidgets import QFileDialog
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Enregistrer le CSV", "stock_export.csv",
             "CSV (*.csv);;Tous les fichiers (*)"
         )
         if file_path:
-            # Déléguer au FileManager
             self.modules['file'].export_stock_csv(file_path)
 
     @Slot()
     def save_config(self):
-        """Sauvegarder la configuration — sauvegarde géométrie + thème."""
         self.save_persistent_settings()
         InfoDialog.success(
             self, "Configuration sauvegardée",
@@ -618,12 +597,10 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def create_backup(self):
-        """Créer une sauvegarde complète — délègue au FileManager."""
         self.modules['file'].create_backup()
 
     @Slot()
     def restore_backup(self):
-        """Restaurer une sauvegarde — ouvre le module Fichier (section backup)."""
         self.switch_to_module('file')
         self.statusBar().showMessage(
             "Sélectionnez une sauvegarde dans la liste puis cliquez Restaurer", 5000)
@@ -645,8 +622,8 @@ class MainWindow(QMainWindow):
         form.setSpacing(20)
         form.setContentsMargins(20, 20, 20, 20)
 
-        lbl_s  = "font-weight:bold; font-size:14px; color:#2c3e50; padding:5px;"
-        inp_s  = """
+        lbl_s = "font-weight:bold; font-size:14px; color:#2c3e50; padding:5px;"
+        inp_s = """
             QLineEdit, QComboBox { font-size:14px; padding:12px;
                 border:2px solid #bdc3c7; border-radius:8px;
                 background:#ffffff; color:#2c3e50; min-height:45px; }
@@ -670,7 +647,7 @@ class MainWindow(QMainWindow):
         currency.setStyleSheet(inp_s)
         form.addRow(lbl("Devise:"), currency)
 
-        settings = QSettings("VotreEntreprise", "LibrairiePapeterie")
+        settings = QSettings("Siledje", "Siledje")
         confirm_chk = QCheckBox("Demander confirmation avant de quitter")
         confirm_chk.setChecked(settings.value("confirm_exit", False, type=bool))
         confirm_chk.setStyleSheet("""
@@ -686,7 +663,7 @@ class MainWindow(QMainWindow):
         modal.set_content(content)
 
         def do_save():
-            s = QSettings("VotreEntreprise", "LibrairiePapeterie")
+            s = QSettings("Siledje", "Siledje")
             s.setValue("confirm_exit", confirm_chk.isChecked())
             s.sync()
             self.save_persistent_settings()
@@ -728,7 +705,7 @@ class MainWindow(QMainWindow):
             self.fullscreen_action.setChecked(True)
 
     # ══════════════════════════════════════════════════════════════════
-    # SLOTS — MENU AIDE (tous avec InfoDialog)
+    # SLOTS — MENU AIDE
     # ══════════════════════════════════════════════════════════════════
 
     @Slot()
@@ -761,7 +738,7 @@ class MainWindow(QMainWindow):
             lay.addWidget(d)
         lay.addStretch()
         content.setLayout(lay)
-        InfoDialog.rich(self, "Documentation – SILEDJE", content,
+        InfoDialog.rich(self, "Documentation – Siledje", content,
                         dialog_type=DialogType.INFO, width=680, height=520)
 
     @Slot()
@@ -846,7 +823,7 @@ class MainWindow(QMainWindow):
             w = QWidget(); w.setLayout(r)
             return w
 
-        hdr = QLabel("Support technique SILEDJE")
+        hdr = QLabel("Support technique Siledje")
         hdr.setStyleSheet("font-size:16px; font-weight:bold; color:#2c3e50; margin-bottom:8px;")
         lay.addWidget(hdr)
         lay.addWidget(QLabel("Disponibles pour vous aider."))
@@ -905,9 +882,9 @@ class MainWindow(QMainWindow):
             return l
 
         lay.addWidget(c("SILEDJE", "#3498db", 28, True))
-        lay.addWidget(c(f"Gestion Librairie-Papeterie  v{self.config.version}", "#7f8c8d", 13))
+        lay.addWidget(c(f"Siledje  v{self.config.version}", "#7f8c8d", 13))
         lay.addSpacing(6)
-        lay.addWidget(c("Application complète de gestion pour librairie et papeterie."))
+        lay.addWidget(c("Application complète de gestion pour Siledje."))
         lay.addSpacing(8)
 
         mods_lbl = QLabel("Modules actifs:")
@@ -943,10 +920,10 @@ class MainWindow(QMainWindow):
 
         lay.addSpacing(8)
         lay.addWidget(c("Développé par : Mr FOTSO TATCHUM Yvanol Rosly", "#2c3e50", 13, True))
-        lay.addWidget(c("© 2025 SileDje – Tous droits réservés", "#7f8c8d", 12))
+        lay.addWidget(c("© 2025 Siledje – Tous droits réservés", "#7f8c8d", 12))
         lay.addStretch()
         content.setLayout(lay)
-        InfoDialog.rich(self, "À propos de SILEDJE", content,
+        InfoDialog.rich(self, "À propos de Siledje", content,
                         dialog_type=DialogType.INFO, width=600, height=520)
 
     # ══════════════════════════════════════════════════════════════════

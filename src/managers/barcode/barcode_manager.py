@@ -31,18 +31,15 @@ class BarcodeManager(QObject):
         super().__init__(parent)
         self.parent = parent
         self.view = None
-        self.db = DatabaseManager()  # ✅ Votre DatabaseManager
+        self.db = DatabaseManager()
         
-        # Configuration
         config = get_config()
         self.barcodes_dir = config.base_dir / "barcodes"
         self.barcodes_dir.mkdir(exist_ok=True)
         
-        # État
         self.current_barcode_for_print = None
         self.current_product_name_for_print = None
         
-        # Créer table products si nécessaire (adaptation à votre structure)
         self._init_barcode_tables()
         
         print(f"[BarcodeManager v{self.version}] Initialisé")
@@ -52,17 +49,14 @@ class BarcodeManager(QObject):
         try:
             cursor = self.db.db.get_cursor()
             
-            # Vérifier si la colonne 'barcode' existe dans products
             cursor.execute("PRAGMA table_info(products)")
             columns = [col[1] for col in cursor.fetchall()]
             
             if 'barcode' not in columns:
-                # Ajouter la colonne barcode
                 cursor.execute("ALTER TABLE products ADD COLUMN barcode TEXT")
                 print("✅ Colonne 'barcode' ajoutée à la table products")
             
             if 'is_internal_barcode' not in columns:
-                # Ajouter la colonne is_internal_barcode
                 cursor.execute("ALTER TABLE products ADD COLUMN is_internal_barcode INTEGER DEFAULT 0")
                 print("✅ Colonne 'is_internal_barcode' ajoutée à la table products")
             
@@ -72,10 +66,7 @@ class BarcodeManager(QObject):
             print(f"⚠️ Erreur init tables barcode: {e}")
     
     def get_ui(self):
-        """
-        Retourne la vue associée à ce manager.
-        Crée la vue et connecte les signaux.
-        """
+        """Retourne la vue associée à ce manager."""
         if self.view is None:
             from src.ui.views.barcode_view import BarcodeView
             
@@ -114,11 +105,9 @@ class BarcodeManager(QObject):
             self.view.set_status_message("Veuillez entrer un code-barres.", is_error=True)
             return
         
-        # Rechercher le produit via barcode
         product = self.get_product_by_barcode(barcode_text)
         
         if product:
-            # Produit trouvé
             product_data = {
                 'id': product['id'],
                 'barcode': barcode_text,
@@ -129,7 +118,6 @@ class BarcodeManager(QObject):
             }
             self.view.update_product_form(product_data)
         else:
-            # Produit non trouvé
             product_data = {
                 'id': '',
                 'barcode': barcode_text,
@@ -152,11 +140,11 @@ class BarcodeManager(QObject):
     @Slot(dict)
     def on_save_product(self, data: dict):
         """Sauvegarde ou met à jour un produit."""
-        barcode = data.get('barcode', '').strip()
+        barcode_val = data.get('barcode', '').strip()
         name = data.get('name', '').strip()
         category = data.get('category', 'Divers')
         
-        if not barcode:
+        if not barcode_val:
             QMessageBox.warning(self.view, "Erreur", "Le code-barres est obligatoire.")
             return
         
@@ -174,16 +162,14 @@ class BarcodeManager(QObject):
         product_id = data.get('id', '').strip()
         
         if product_id:
-            # Mise à jour
-            if self.update_product_with_barcode(int(product_id), name, category, price, stock, barcode):
+            if self.update_product_with_barcode(int(product_id), name, category, price, stock, barcode_val):
                 QMessageBox.information(self.view, "Succès", f"Produit '{name}' mis à jour.")
                 self.view.clear_product_form()
                 self.load_products()
             else:
                 QMessageBox.warning(self.view, "Erreur", "Échec de la mise à jour.")
         else:
-            # Ajout
-            if self.add_product_with_barcode(barcode, name, category, price, stock, False):
+            if self.add_product_with_barcode(barcode_val, name, category, price, stock, False):
                 QMessageBox.information(self.view, "Succès", f"Produit '{name}' ajouté.")
                 self.view.clear_product_form()
                 self.load_products()
@@ -194,7 +180,7 @@ class BarcodeManager(QObject):
     
     @Slot(dict)
     def on_generate_internal_barcode(self, data: dict):
-        """Génère un code-barres interne."""
+        """Génère un code-barres interne et l'affiche sans modal ni effacement."""
         name = data.get('name', '').strip()
         
         if not name:
@@ -223,15 +209,14 @@ class BarcodeManager(QObject):
                 filename = self.barcodes_dir / new_barcode
                 ean.save(str(filename))
                 
-                # Mettre à jour l'aperçu
+                # ✅ Mettre à jour l'aperçu — SANS modal, SANS clear
                 image_path = str(filename) + ".png"
                 self.view.update_barcode_preview(new_barcode, image_path)
                 
                 self.current_barcode_for_print = new_barcode
                 self.current_product_name_for_print = name
                 
-                QMessageBox.information(self.view, "Succès", f"Code interne généré:\n{new_barcode}")
-                self.view.clear_product_form()
+                # Recharger la table audit uniquement
                 self.load_products()
                 
                 print(f"[BarcodeManager] Code généré: {new_barcode}")

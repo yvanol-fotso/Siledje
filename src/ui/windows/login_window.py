@@ -41,7 +41,6 @@ def load_svg_icon(icon_name: str, size: int = 24, debug: bool = False) -> QPixma
                 print(f"❌ Fichier SVG non trouvé : {icon_path}")
             return create_placeholder_pixmap(size, icon_name[0].upper())
         
-        # Charger le SVG via QIcon
         icon = QIcon(str(icon_path))
         
         if icon.isNull():
@@ -49,7 +48,6 @@ def load_svg_icon(icon_name: str, size: int = 24, debug: bool = False) -> QPixma
                 print(f"❌ QIcon est null pour {icon_name}")
             return create_placeholder_pixmap(size, icon_name[0].upper())
         
-        # Convertir en pixmap
         pixmap = icon.pixmap(QSize(size, size))
         
         if pixmap.isNull():
@@ -85,12 +83,10 @@ def create_placeholder_pixmap(size: int, letter: str) -> QPixmap:
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing)
     
-    # Fond coloré
     painter.setBrush(QBrush(QColor("#e74c3c")))
     painter.setPen(QPen(Qt.NoPen))
     painter.drawRoundedRect(0, 0, size, size, 4, 4)
     
-    # Lettre blanche
     painter.setPen(QColor("#ffffff"))
     font = QFont("Segoe UI", int(size * 0.5), QFont.Bold)
     painter.setFont(font)
@@ -137,11 +133,10 @@ class LoginDialog(QDialog):
     
     def _setup_window(self):
         """Configure la fenêtre."""
-        self.setWindowTitle("Connexion - Librairie-Papeterie")
+        self.setWindowTitle("Connexion - Siledje")
         self.setFixedSize(420, 560)
         self.setWindowFlags(Qt.Dialog | Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
         
-        # Définir l'icône de la fenêtre
         app_icon_path = get_asset_path("icons", "app.png")
         if app_icon_path.exists():
             self.setWindowIcon(QIcon(str(app_icon_path)))
@@ -151,19 +146,16 @@ class LoginDialog(QDialog):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Container principal
         self.container = QFrame()
         self.container.setObjectName("loginContainer")
         container_layout = QVBoxLayout(self.container)
         container_layout.setSpacing(0)
         container_layout.setContentsMargins(35, 30, 35, 25)
         
-        # Logo
         header_widget = self._create_header()
         container_layout.addWidget(header_widget)
         container_layout.addSpacing(20)
         
-        # Titre
         title_label = QLabel("Bienvenue")
         title_label.setObjectName("loginTitle")
         title_label.setAlignment(Qt.AlignCenter)
@@ -172,7 +164,6 @@ class LoginDialog(QDialog):
         
         container_layout.addSpacing(5)
         
-        # Sous-titre
         subtitle_label = QLabel("Connectez-vous pour continuer")
         subtitle_label.setObjectName("loginSubtitle")
         subtitle_label.setAlignment(Qt.AlignCenter)
@@ -181,13 +172,11 @@ class LoginDialog(QDialog):
         
         container_layout.addSpacing(30)
         
-        # Formulaire
         form_widget = self._create_form()
         container_layout.addWidget(form_widget)
         
         container_layout.addSpacing(15)
         
-        # Options
         options_layout = QHBoxLayout()
         options_layout.setSpacing(0)
         
@@ -206,10 +195,8 @@ class LoginDialog(QDialog):
         options_layout.addWidget(btn_forgot)
         
         container_layout.addLayout(options_layout)
-        
         container_layout.addSpacing(20)
         
-        # Bouton connexion
         self.btn_login = QPushButton("Se connecter")
         self.btn_login.setObjectName("primaryButton")
         self.btn_login.setMinimumHeight(44)
@@ -221,11 +208,9 @@ class LoginDialog(QDialog):
         
         container_layout.addStretch()
         
-        # Footer
         footer_layout = QVBoxLayout()
         footer_layout.setSpacing(10)
         
-        # Bouton thème
         theme_layout = QHBoxLayout()
         theme_layout.addStretch()
         
@@ -235,15 +220,12 @@ class LoginDialog(QDialog):
         self.btn_theme.setCursor(Qt.PointingHandCursor)
         self.btn_theme.setFixedSize(110, 32)
         self.btn_theme.clicked.connect(self._toggle_theme)
-        
-        # Ajouter l'icône au bouton thème
         self._update_theme_button_icon()
         
         theme_layout.addWidget(self.btn_theme)
         theme_layout.addStretch()
         footer_layout.addLayout(theme_layout)
         
-        # Version
         footer_label = QLabel(f"Version {self.config.version}")
         footer_label.setObjectName("loginFooter")
         footer_label.setAlignment(Qt.AlignCenter)
@@ -251,10 +233,8 @@ class LoginDialog(QDialog):
         footer_layout.addWidget(footer_label)
         
         container_layout.addLayout(footer_layout)
-        
         main_layout.addWidget(self.container)
         
-        # Raccourcis clavier
         self.txt_username.returnPressed.connect(lambda: self.txt_password.setFocus())
         self.txt_password.returnPressed.connect(self._authenticate)
     
@@ -266,7 +246,6 @@ class LoginDialog(QDialog):
         header_layout.setSpacing(0)
         header_layout.setAlignment(Qt.AlignCenter)
         
-        # Utiliser get_asset_path pour le logo
         logo_path = get_asset_path("images", "logo.jpg")
         
         self.logo_label = create_circular_avatar_label(
@@ -278,7 +257,6 @@ class LoginDialog(QDialog):
         )
         
         header_layout.addWidget(self.logo_label, 0, Qt.AlignCenter)
-        
         return header_widget
     
     def _create_form(self) -> QWidget:
@@ -288,14 +266,13 @@ class LoginDialog(QDialog):
         form_layout.setSpacing(0)
         form_layout.setContentsMargins(0, 0, 0, 0)
         
-        # ========== CHAMP UTILISATEUR ==========
+        # ── Champ utilisateur ──
         username_container = QFrame()
         username_container.setObjectName("inputContainer")
         username_layout = QHBoxLayout(username_container)
         username_layout.setContentsMargins(15, 0, 15, 0)
         username_layout.setSpacing(12)
         
-        # Icône utilisateur
         icon_user = QLabel()
         icon_user.setObjectName("iconLabel")
         icon_user.setFixedSize(24, 24)
@@ -310,14 +287,13 @@ class LoginDialog(QDialog):
         form_layout.addWidget(username_container)
         form_layout.addSpacing(16)
         
-        # ========== CHAMP MOT DE PASSE ==========
+        # ── Champ mot de passe ──
         password_container = QFrame()
         password_container.setObjectName("inputContainer")
         password_layout = QHBoxLayout(password_container)
         password_layout.setContentsMargins(15, 0, 15, 0)
         password_layout.setSpacing(12)
         
-        # Icône cadenas
         icon_pass = QLabel()
         icon_pass.setObjectName("iconLabel")
         icon_pass.setFixedSize(24, 24)
@@ -330,19 +306,15 @@ class LoginDialog(QDialog):
         self.txt_password.setFrame(False)
         password_layout.addWidget(self.txt_password, 1)
         
-        # Bouton afficher/masquer mot de passe
         self.btn_show_password = QPushButton()
         self.btn_show_password.setObjectName("iconButton")
         self.btn_show_password.setFixedSize(36, 36)
         self.btn_show_password.setCursor(Qt.PointingHandCursor)
         self.btn_show_password.setCheckable(True)
         self.btn_show_password.clicked.connect(self._toggle_password_visibility)
-        
-        # Définir l'icône initiale
         self._update_password_visibility_icon(checked=False)
         
         password_layout.addWidget(self.btn_show_password)
-        
         form_layout.addWidget(password_container)
         
         return form_widget
@@ -359,7 +331,6 @@ class LoginDialog(QDialog):
             self.btn_theme.setText("Mode sombre")
         
         self._update_theme_button_icon()
-        
         self.setStyleSheet(stylesheet)
         self.style().unpolish(self)
         self.style().polish(self)
@@ -368,7 +339,6 @@ class LoginDialog(QDialog):
         """Met à jour l'icône du bouton de thème."""
         icon_name = "sun" if self.theme_manager.get_current_theme() == 'dark' else "moon"
         pixmap = load_svg_icon(icon_name, size=16)
-        
         icon = QIcon(pixmap)
         self.btn_theme.setIcon(icon)
         self.btn_theme.setIconSize(QSize(16, 16))
@@ -377,7 +347,6 @@ class LoginDialog(QDialog):
         """Met à jour l'icône du bouton de visibilité du mot de passe."""
         icon_name = "eye-off" if checked else "eye"
         pixmap = load_svg_icon(icon_name, size=20)
-        
         icon = QIcon(pixmap)
         self.btn_show_password.setIcon(icon)
         self.btn_show_password.setIconSize(QSize(20, 20))
@@ -407,7 +376,6 @@ class LoginDialog(QDialog):
         self.animation.setKeyValueAt(0.3, pos + QPoint(-10, 0))
         self.animation.setKeyValueAt(0.4, pos + QPoint(10, 0))
         self.animation.setKeyValueAt(0.5, pos)
-        
         self.animation.start()
     
     def _authenticate(self):
@@ -483,7 +451,6 @@ class LoginDialog(QDialog):
             self.txt_password.setEchoMode(QLineEdit.Normal)
         else:
             self.txt_password.setEchoMode(QLineEdit.Password)
-        
         self._update_password_visibility_icon(self.btn_show_password.isChecked())
     
     def _toggle_theme(self):

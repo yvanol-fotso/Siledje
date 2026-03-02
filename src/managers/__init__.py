@@ -12,6 +12,7 @@ from .barcode.barcode_manager import BarcodeManager
 from .ai.ai_manager import AIManager
 from .database import DatabaseSettingsManager
 from .notifications import NotificationSettingsManager
+from .supplier.supplier_manager import SupplierManager          
 
 __all__ = [
     'StockManager',
@@ -22,5 +23,6 @@ __all__ = [
     'BarcodeManager',
     'AIManager',
     'DatabaseSettingsManager',
-    'NotificationSettingsManager'
+    'NotificationSettingsManager',
+    'SupplierManager',                                          
 ]

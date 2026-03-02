@@ -1,5 +1,5 @@
 """
-Point d'entrée principal de l'application Librairie-Papeterie.
+Point d'entrée principal de l'application Siledje.
 Gère l'initialisation de l'application, l'authentification et le lancement.
 """
 
@@ -26,15 +26,15 @@ def main():
     """
     
     print("=" * 50)
-    print("Démarrage de l'application...")
+    print("Démarrage de Siledje...")
     print("=" * 50)
     
     # Configuration de la plateforme Qt (Windows uniquement)
     os.environ["QT_QPA_PLATFORM"] = "windows"
  
     # Configuration de l'application Qt
-    QCoreApplication.setApplicationName("Librairie-Papeterie")
-    QCoreApplication.setOrganizationName("VotreEntreprise")
+    QCoreApplication.setApplicationName("Siledje")
+    QCoreApplication.setOrganizationName("Siledje")
     QCoreApplication.setApplicationVersion("1.0.0")
 
     # Créer l'application Qt

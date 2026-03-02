@@ -15,67 +15,35 @@ from src.utils.helpers import get_asset_path
 
 
 def load_svg_icon(icon_name: str, size: int = 24) -> QPixmap:
-    """
-    Charge une icône SVG et la convertit en QPixmap.
-    
-    Args:
-        icon_name: Nom de l'icône (sans .svg)
-        size: Taille en pixels
-        
-    Returns:
-        QPixmap de l'icône ou QPixmap vide si erreur
-    """
     try:
         icon_path = get_asset_path("icons", f"{icon_name}.svg")
-        
         if not icon_path.exists():
             return create_placeholder_pixmap(size, icon_name[0].upper())
-        
         icon = QIcon(str(icon_path))
-        
         if icon.isNull():
             return create_placeholder_pixmap(size, icon_name[0].upper())
-        
         pixmap = icon.pixmap(size, size)
-        
         if pixmap.isNull():
             return create_placeholder_pixmap(size, icon_name[0].upper())
-        
         return pixmap
-        
     except Exception as e:
         print(f"Erreur chargement icône {icon_name}: {e}")
         return create_placeholder_pixmap(size, icon_name[0].upper())
 
 
 def create_placeholder_pixmap(size: int, letter: str) -> QPixmap:
-    """
-    Crée un placeholder visuel avec une lettre.
-    
-    Args:
-        size: Taille du pixmap
-        letter: Lettre à afficher
-        
-    Returns:
-        QPixmap avec fond coloré et lettre
-    """
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
-    
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing)
-    
     painter.setBrush(QBrush(QColor("#3498db")))
     painter.setPen(QPen(Qt.NoPen))
     painter.drawRoundedRect(0, 0, size, size, 4, 4)
-    
     painter.setPen(QColor("#ffffff"))
     font = QFont("Segoe UI", int(size * 0.5), QFont.Bold)
     painter.setFont(font)
     painter.drawText(0, 0, size, size, Qt.AlignCenter, letter)
-    
     painter.end()
-    
     return pixmap
 
 
@@ -112,9 +80,19 @@ class SalesView(QWidget):
         main_layout.setSpacing(10)
         main_layout.setContentsMargins(15, 15, 15, 15)
         
-        # En-tête
-        header_layout = self._create_header()
+        # ── TITRE ajouté ──────────────────────────────────────────────
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(12)
+        icon_label = QLabel()
+        icon_label.setFixedSize(40, 40)
+        icon_label.setPixmap(load_svg_icon("shopping-cart", size=40))
+        title = QLabel("Point de Vente")
+        title.setStyleSheet("font-size: 28px; font-weight: bold;")
+        header_layout.addWidget(icon_label)
+        header_layout.addWidget(title)
+        header_layout.addStretch()
         main_layout.addLayout(header_layout)
+        # ─────────────────────────────────────────────────────────────
         
         # Zone de recherche
         search_group = self._create_search_group()
@@ -132,30 +110,6 @@ class SalesView(QWidget):
         
         # Connecter les signaux internes
         self._connect_signals()
-    
-    def _create_header(self) -> QHBoxLayout:
-        """Crée l'en-tête de la page."""
-        layout = QHBoxLayout()
-        
-        # Conteneur pour icône + titre
-        header_container = QHBoxLayout()
-        header_container.setSpacing(12)
-        
-        # Icône
-        icon_label = QLabel()
-        icon_label.setFixedSize(32, 32)
-        icon_label.setPixmap(load_svg_icon("shopping-cart", size=32))
-        header_container.addWidget(icon_label)
-        
-        # Titre
-        title = QLabel("Point de Vente")
-        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50;")
-        header_container.addWidget(title)
-        
-        layout.addLayout(header_container)
-        layout.addStretch()
-        
-        return layout
     
     def _create_search_group(self) -> QGroupBox:
         """Crée la section de recherche."""
@@ -200,12 +154,9 @@ class SalesView(QWidget):
         search_btn.setMinimumHeight(36)
         search_btn.setFixedWidth(110)
         search_btn.setCursor(Qt.PointingHandCursor)
-        
-        # Ajouter icône au bouton
         search_icon = load_svg_icon("search", size=16)
         search_btn.setIcon(QIcon(search_icon))
         search_btn.setIconSize(search_icon.size())
-        
         search_btn.setStyleSheet("""
             QPushButton {
                 background-color: #3498db;
@@ -216,12 +167,8 @@ class SalesView(QWidget):
                 font-weight: bold;
                 font-size: 13px;
             }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
-            QPushButton:pressed {
-                background-color: #21618c;
-            }
+            QPushButton:hover { background-color: #2980b9; }
+            QPushButton:pressed { background-color: #21618c; }
         """)
         search_btn.clicked.connect(lambda: self.search_requested.emit())
         
@@ -288,16 +235,11 @@ class SalesView(QWidget):
         self.total_label.setObjectName("totalLabel")
         self.total_label.setFont(QFont("Arial", 16, QFont.Bold))
         self.total_label.setAlignment(Qt.AlignRight)
-        self.total_label.setStyleSheet("""
-            QLabel#totalLabel {
-                padding: 10px;
-            }
-        """)
+        self.total_label.setStyleSheet("QLabel#totalLabel { padding: 10px; }")
         
         # Boutons
         btn_layout = QHBoxLayout()
         
-        # Bouton Ajouter
         self.add_btn = QPushButton("Ajouter (F1)")
         self.add_btn.setMinimumHeight(44)
         self.add_btn.setCursor(Qt.PointingHandCursor)
@@ -306,23 +248,14 @@ class SalesView(QWidget):
         self.add_btn.setIconSize(add_icon.size())
         self.add_btn.setStyleSheet("""
             QPushButton {
-                background-color: #2ecc71;
-                color: white;
-                padding: 10px 20px;
-                border: none;
-                border-radius: 6px;
-                font-weight: bold;
-                font-size: 13px;
+                background-color: #2ecc71; color: white;
+                padding: 10px 20px; border: none;
+                border-radius: 6px; font-weight: bold; font-size: 13px;
             }
-            QPushButton:hover {
-                background-color: #27ae60;
-            }
-            QPushButton:pressed {
-                background-color: #1e8449;
-            }
+            QPushButton:hover { background-color: #27ae60; }
+            QPushButton:pressed { background-color: #1e8449; }
         """)
         
-        # Bouton Retirer
         self.remove_btn = QPushButton("Retirer (F2)")
         self.remove_btn.setMinimumHeight(44)
         self.remove_btn.setCursor(Qt.PointingHandCursor)
@@ -331,23 +264,14 @@ class SalesView(QWidget):
         self.remove_btn.setIconSize(remove_icon.size())
         self.remove_btn.setStyleSheet("""
             QPushButton {
-                background-color: #e67e22;
-                color: white;
-                padding: 10px 20px;
-                border: none;
-                border-radius: 6px;
-                font-weight: bold;
-                font-size: 13px;
+                background-color: #e67e22; color: white;
+                padding: 10px 20px; border: none;
+                border-radius: 6px; font-weight: bold; font-size: 13px;
             }
-            QPushButton:hover {
-                background-color: #d35400;
-            }
-            QPushButton:pressed {
-                background-color: #ba4a00;
-            }
+            QPushButton:hover { background-color: #d35400; }
+            QPushButton:pressed { background-color: #ba4a00; }
         """)
         
-        # Bouton Vider
         self.clear_btn = QPushButton("Vider (F3)")
         self.clear_btn.setMinimumHeight(44)
         self.clear_btn.setCursor(Qt.PointingHandCursor)
@@ -356,23 +280,14 @@ class SalesView(QWidget):
         self.clear_btn.setIconSize(clear_icon.size())
         self.clear_btn.setStyleSheet("""
             QPushButton {
-                background-color: #95a5a6;
-                color: white;
-                padding: 10px 20px;
-                border: none;
-                border-radius: 6px;
-                font-weight: bold;
-                font-size: 13px;
+                background-color: #95a5a6; color: white;
+                padding: 10px 20px; border: none;
+                border-radius: 6px; font-weight: bold; font-size: 13px;
             }
-            QPushButton:hover {
-                background-color: #7f8c8d;
-            }
-            QPushButton:pressed {
-                background-color: #707b7c;
-            }
+            QPushButton:hover { background-color: #7f8c8d; }
+            QPushButton:pressed { background-color: #707b7c; }
         """)
         
-        # Bouton Paiement
         self.checkout_btn = QPushButton("Paiement (F4)")
         self.checkout_btn.setMinimumHeight(44)
         self.checkout_btn.setCursor(Qt.PointingHandCursor)
@@ -381,20 +296,12 @@ class SalesView(QWidget):
         self.checkout_btn.setIconSize(checkout_icon.size())
         self.checkout_btn.setStyleSheet("""
             QPushButton {
-                background-color: #9b59b6;
-                color: white;
-                padding: 10px 20px;
-                border: none;
-                border-radius: 6px;
-                font-weight: bold;
-                font-size: 14px;
+                background-color: #9b59b6; color: white;
+                padding: 10px 20px; border: none;
+                border-radius: 6px; font-weight: bold; font-size: 14px;
             }
-            QPushButton:hover {
-                background-color: #8e44ad;
-            }
-            QPushButton:pressed {
-                background-color: #7d3c98;
-            }
+            QPushButton:hover { background-color: #8e44ad; }
+            QPushButton:pressed { background-color: #7d3c98; }
         """)
         
         btn_layout.addWidget(self.add_btn)
@@ -413,23 +320,19 @@ class SalesView(QWidget):
         """Connecte les signaux internes des widgets."""
         self.search_input.returnPressed.connect(lambda: self.search_requested.emit())
         self.type_filter.currentIndexChanged.connect(
-            lambda: self.type_filter_changed.emit(self.type_filter.currentData())
-        )
-        
+            lambda: self.type_filter_changed.emit(self.type_filter.currentData()))
         self.add_btn.clicked.connect(self._on_add_clicked)
         self.remove_btn.clicked.connect(self._on_remove_clicked)
         self.clear_btn.clicked.connect(lambda: self.clear_cart_requested.emit())
         self.checkout_btn.clicked.connect(lambda: self.checkout_requested.emit())
     
     def _on_add_clicked(self):
-        """Gère le clic sur Ajouter."""
         selected_row = self.products_table.currentRow()
         if selected_row >= 0:
             product_id = int(self.products_table.item(selected_row, 0).text())
             self.add_to_cart_requested.emit(product_id)
     
     def _on_remove_clicked(self):
-        """Gère le clic sur Retirer."""
         selected_row = self.cart_table.currentRow()
         if selected_row >= 0:
             product_id = int(self.cart_table.item(selected_row, 0).text())
@@ -438,16 +341,11 @@ class SalesView(QWidget):
     # ========== MÉTHODES PUBLIQUES POUR LE MANAGER ==========
     
     def update_products_table(self, products: list):
-        """Met à jour le tableau des produits."""
         self.products_table.setRowCount(len(products))
-        
         for row, product in enumerate(products):
             type_display = {
-                "unitaire": "UNT",
-                "paquet": "PQT",
-                "carton": "CRT"
+                "unitaire": "UNT", "paquet": "PQT", "carton": "CRT"
             }.get(product.get("type", ""), product.get("type", ""))
-            
             self.products_table.setItem(row, 0, QTableWidgetItem(str(product.get("id", ""))))
             self.products_table.setItem(row, 1, QTableWidgetItem(product.get("barcode_test", "")))
             self.products_table.setItem(row, 2, QTableWidgetItem(product.get("name", "")))
@@ -456,26 +354,20 @@ class SalesView(QWidget):
             self.products_table.setItem(row, 5, QTableWidgetItem(str(product.get("stock", 0))))
     
     def update_cart_table(self, cart_items: list, total: float):
-        """Met à jour le tableau du panier et le total."""
         self.cart_table.setRowCount(len(cart_items))
-        
         for row, item in enumerate(cart_items):
             product = item['product']
             subtotal = product['price'] * item['quantity']
-            
             self.cart_table.setItem(row, 0, QTableWidgetItem(str(product['id'])))
             self.cart_table.setItem(row, 1, QTableWidgetItem(product['barcode_test']))
             self.cart_table.setItem(row, 2, QTableWidgetItem(product['name']))
             self.cart_table.setItem(row, 3, QTableWidgetItem(item['type_display']))
             self.cart_table.setItem(row, 4, QTableWidgetItem(str(item['quantity'])))
             self.cart_table.setItem(row, 5, QTableWidgetItem(f"{subtotal:.0f} FCFA"))
-        
         self.total_label.setText(f"Total: {total:.0f} FCFA")
     
     def get_search_term(self) -> str:
-        """Retourne le terme de recherche."""
         return self.search_input.text().lower()
     
     def get_type_filter(self):
-        """Retourne le filtre de type."""
         return self.type_filter.currentData()

@@ -1,6 +1,6 @@
 """
-Vue de gestion des utilisateurs - Interface utilisateur responsive.
-Style identique à stock_view : titre adaptatif dark/light, tableau propre.
+Vue de gestion des fournisseurs - Interface utilisateur responsive.
+Style identique à stock_view. Utilise ModalView générique.
 """
 
 from PySide6.QtWidgets import (
@@ -32,7 +32,7 @@ def _placeholder(size: int, letter: str) -> QPixmap:
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing)
-    painter.setBrush(QBrush(QColor("#9b59b6")))
+    painter.setBrush(QBrush(QColor("#16a085")))
     painter.setPen(QPen(Qt.NoPen))
     painter.drawRoundedRect(0, 0, size, size, 4, 4)
     painter.setPen(QColor("#ffffff"))
@@ -42,14 +42,14 @@ def _placeholder(size: int, letter: str) -> QPixmap:
     return pixmap
 
 
-class AdminView(QWidget):
-    """Vue de gestion des utilisateurs. Style identique à stock_view."""
+class SupplierView(QWidget):
+    """Vue de gestion des fournisseurs. Style identique à stock_view."""
 
-    search_requested    = Signal(str)
-    add_user_requested  = Signal()
-    edit_user_requested = Signal(int)
-    delete_user_requested = Signal(int)
-    refresh_requested   = Signal()
+    search_requested      = Signal(str)
+    add_supplier_requested    = Signal()
+    edit_supplier_requested   = Signal(int)
+    delete_supplier_requested = Signal(int)
+    refresh_requested     = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -70,7 +70,6 @@ class AdminView(QWidget):
         main_layout.addLayout(self._create_header())
         main_layout.addLayout(self._create_search_section())
 
-        # Tableau — prend tout l'espace restant
         self.table_view = self._create_table()
         main_layout.addWidget(self.table_view, 1)
 
@@ -79,7 +78,7 @@ class AdminView(QWidget):
         self._connect_signals()
 
     # ──────────────────────────────────────────────────────────────────
-    # EN-TÊTE — titre couleur palette(text) = blanc dark / noir light
+    # EN-TÊTE
     # ──────────────────────────────────────────────────────────────────
 
     def _create_header(self) -> QHBoxLayout:
@@ -88,10 +87,9 @@ class AdminView(QWidget):
 
         icon_label = QLabel()
         icon_label.setFixedSize(40, 40)
-        icon_label.setPixmap(load_svg_icon("users", size=40))
+        icon_label.setPixmap(load_svg_icon("truck", size=40))
 
-        title = QLabel("Gestion des Utilisateurs")
-        # Pas de couleur fixe → s'adapte automatiquement dark/light
+        title = QLabel("Configuration des Fournisseurs")
         title.setStyleSheet("font-size: 28px; font-weight: bold;")
 
         layout.addWidget(icon_label)
@@ -100,7 +98,7 @@ class AdminView(QWidget):
         return layout
 
     # ──────────────────────────────────────────────────────────────────
-    # RECHERCHE + BOUTON AJOUTER — identique à stock_view
+    # RECHERCHE + BOUTON AJOUTER
     # ──────────────────────────────────────────────────────────────────
 
     def _create_search_section(self) -> QHBoxLayout:
@@ -108,7 +106,7 @@ class AdminView(QWidget):
         layout.setSpacing(12)
 
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Rechercher un utilisateur...")
+        self.search_input.setPlaceholderText("Rechercher un fournisseur...")
         self.search_input.setMinimumHeight(42)
         self.search_input.setStyleSheet("""
             QLineEdit {
@@ -117,16 +115,16 @@ class AdminView(QWidget):
                 border-radius: 8px;
                 font-size: 14px;
             }
-            QLineEdit:focus { border-color: #9b59b6; }
+            QLineEdit:focus { border-color: #16a085; }
         """)
 
         search_btn = self._make_btn(
-            "Rechercher", "search", "#9b59b6", "#8e44ad", "#7d3c98", w=140)
+            "Rechercher", "search", "#16a085", "#1abc9c", "#0e8070", w=140)
         search_btn.clicked.connect(self._on_search_clicked)
 
         add_btn = self._make_btn(
-            "Nouvel Utilisateur", "user-plus", "#2ecc71", "#27ae60", "#1e8449", w=180)
-        add_btn.clicked.connect(lambda: self.add_user_requested.emit())
+            "Nouveau Fournisseur", "plus-circle", "#2ecc71", "#27ae60", "#1e8449", w=190)
+        add_btn.clicked.connect(lambda: self.add_supplier_requested.emit())
 
         layout.addWidget(self.search_input, 3)
         layout.addWidget(search_btn, 1)
@@ -135,7 +133,6 @@ class AdminView(QWidget):
 
     # ──────────────────────────────────────────────────────────────────
     # TABLEAU — copie exacte du style stock_view
-    # Pas de background fixe, pas de couleurs alternées bizarres
     # ──────────────────────────────────────────────────────────────────
 
     def _create_table(self) -> QTableView:
@@ -145,35 +142,35 @@ class AdminView(QWidget):
         table.setAlternatingRowColors(False)
         table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         table.setMinimumHeight(300)
-        table.setObjectName("adminTable")
+        table.setObjectName("supplierTable")
 
         table.setStyleSheet("""
-            QTableView#adminTable {
+            QTableView#supplierTable {
                 font-size: 13px;
                 font-weight: normal;
                 border: 2px solid #bdc3c7;
                 border-radius: 8px;
                 gridline-color: transparent;
             }
-            QTableView#adminTable::item {
+            QTableView#supplierTable::item {
                 padding: 6px 8px;
                 border-bottom: 1px solid rgba(150, 150, 150, 0.18);
             }
-            QTableView#adminTable::item:selected {
-                background-color: #9b59b6;
+            QTableView#supplierTable::item:selected {
+                background-color: #16a085;
                 color: white;
             }
-            QTableView#adminTable::item:hover {
-                background-color: rgba(155, 89, 182, 0.10);
+            QTableView#supplierTable::item:hover {
+                background-color: rgba(22, 160, 133, 0.10);
             }
             QHeaderView::section {
-                background-color: #9b59b6;
+                background-color: #16a085;
                 color: white;
                 font-weight: bold;
                 font-size: 13px;
                 padding: 8px;
                 border: none;
-                border-right: 1px solid #8e44ad;
+                border-right: 1px solid #0e8070;
             }
             QHeaderView::section:last { border-right: none; }
             QScrollBar:vertical {
@@ -199,7 +196,7 @@ class AdminView(QWidget):
         return table
 
     # ──────────────────────────────────────────────────────────────────
-    # BOUTONS D'ACTION — identique à stock_view
+    # BOUTONS D'ACTION
     # ──────────────────────────────────────────────────────────────────
 
     def _create_action_buttons(self) -> QHBoxLayout:
@@ -263,12 +260,12 @@ class AdminView(QWidget):
     def _on_edit_clicked(self):
         idx = self.table_view.currentIndex()
         if idx.isValid():
-            self.edit_user_requested.emit(idx.row())
+            self.edit_supplier_requested.emit(idx.row())
 
     def _on_delete_clicked(self):
         idx = self.table_view.currentIndex()
         if idx.isValid():
-            self.delete_user_requested.emit(idx.row())
+            self.delete_supplier_requested.emit(idx.row())
 
     # ──────────────────────────────────────────────────────────────────
     # METHODES PUBLIQUES POUR LE MANAGER
