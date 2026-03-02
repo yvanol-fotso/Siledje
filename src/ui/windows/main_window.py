@@ -1,6 +1,5 @@
 """
 Fenêtre principale — VERSION FINALE COMPLÈTE.
-Tous les menus et sous-menus sont 100% fonctionnels.
 """
 
 import sys
@@ -13,7 +12,6 @@ from src.utils.compat import (
     Slot, QTimer, QSettings, QSize, Qt, QCoreApplication
 )
 
-# ── Modules métier ─────────────────────────────────────────────────────
 from src.managers.stock.stock_manager import StockManager
 from src.managers.sales.sales_manager import SalesManager
 from src.managers.admin.admin_manager import AdminManager
@@ -29,7 +27,6 @@ from src.managers.help import BugReportManager
 from src.managers.file import FileManager
 from src.managers.supplier.supplier_manager import SupplierManager
 
-# ── Utilitaires ────────────────────────────────────────────────────────
 from src.database.manager import DatabaseManager
 from src.utils.config import AppConfig
 from src.utils.notifications import NotificationManager
@@ -40,18 +37,17 @@ from src.ui.widgets.InfoDialog import InfoDialog, DialogType
 
 
 class MainWindow(QMainWindow):
-    """Fenêtre principale de l'application."""
 
     def __init__(self, config=None, theme_manager=None, current_user=None):
         super().__init__()
         QCoreApplication.setOrganizationName("Siledje")
         QCoreApplication.setApplicationName("Siledje")
 
-        self.config       = config if config else AppConfig()
-        self.db           = DatabaseManager()
-        self.notifier     = NotificationManager()
+        self.config        = config if config else AppConfig()
+        self.db            = DatabaseManager()
+        self.notifier      = NotificationManager()
         self.theme_manager = theme_manager if theme_manager else ThemeManager(self.config)
-        self.current_user = current_user
+        self.current_user  = current_user
         self.authenticated = bool(current_user)
 
         self.zoom_manager = ZoomManager(self)
@@ -64,9 +60,7 @@ class MainWindow(QMainWindow):
             print(f"[MainWindow] Connecté: {self.current_user.username}")
             self.init_ui()
 
-    # ──────────────────────────────────────────────────────────────────
-    # AUTHENTIFICATION
-    # ──────────────────────────────────────────────────────────────────
+    # ── AUTH ──────────────────────────────────────────────────────────
 
     def show_login(self):
         login_dialog = LoginDialog(self.config, self.theme_manager, self)
@@ -83,21 +77,17 @@ class MainWindow(QMainWindow):
             sys.exit(0)
 
     def on_login_success(self, user):
-        self.current_user = user
+        self.current_user  = user
         self.authenticated = True
 
-    # ──────────────────────────────────────────────────────────────────
-    # INITIALISATION UI
-    # ──────────────────────────────────────────────────────────────────
+    # ── INIT UI ───────────────────────────────────────────────────────
 
     def init_ui(self):
         self.setWindowTitle(f"{self.config.app_name} v{self.config.version}")
         self.setMinimumSize(1024, 768)
-
         icon_path = get_asset_path("icons", "app.png")
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
-
         self.modules = self.init_modules()
         self.setup_menu()
         self.setup_toolbar()
@@ -141,59 +131,40 @@ class MainWindow(QMainWindow):
             self.current_module_widget = self.modules[module_name].get_ui()
             self.centralWidget().layout().addWidget(self.current_module_widget)
 
-    # ──────────────────────────────────────────────────────────────────
-    # MENU COMPLET
-    # ──────────────────────────────────────────────────────────────────
+    # ── MENUS ─────────────────────────────────────────────────────────
 
     def setup_menu(self):
         menubar = self.menuBar()
 
         company_label = QLabel("  SILEDJE  ")
         company_label.setObjectName("company_brand")
-        company_label.setStyleSheet("""
-            QLabel#company_brand { font-size: 18px; font-weight: 900;
-                color: #1abc9c; padding: 0px 15px; margin-right: 10px; }
-        """)
+        company_label.setStyleSheet(
+            "QLabel#company_brand { font-size:18px; font-weight:900;"
+            "color:#1abc9c; padding:0px 15px; margin-right:10px; }")
         menubar.setCornerWidget(company_label, Qt.TopLeftCorner)
 
-        # ══════════════════════════════════════════════════════════════
-        # MENU FICHIER
-        # ══════════════════════════════════════════════════════════════
+        # ── FICHIER ───────────────────────────────────────────────────
         file_menu = menubar.addMenu("&Fichier")
-
         ie_menu = file_menu.addMenu("Import/Export")
-        ie_menu.addAction(self.create_action("Importer des données",   "", self.import_data))
-        ie_menu.addAction(self.create_action("Exporter des données",   "", self.export_data))
+        ie_menu.addAction(self.create_action("Importer des données", "", self.import_data))
+        ie_menu.addAction(self.create_action("Exporter des données", "", self.export_data))
         ie_menu.addSeparator()
-        ie_menu.addAction(self.create_action("Importer Stock (CSV)",   "", self.import_stock_csv))
-        ie_menu.addAction(self.create_action("Exporter Stock (CSV)",   "", self.export_stock_csv))
-
+        ie_menu.addAction(self.create_action("Importer Stock (CSV)", "", self.import_stock_csv))
+        ie_menu.addAction(self.create_action("Exporter Stock (CSV)", "", self.export_stock_csv))
         file_menu.addSeparator()
-        file_menu.addAction(self.create_action(
-            "Sauvegarder la configuration",  "Ctrl+S", self.save_config))
-        file_menu.addAction(self.create_action(
-            "Créer une sauvegarde complète", "",       self.create_backup))
-        file_menu.addAction(self.create_action(
-            "Restaurer une sauvegarde",      "",       self.restore_backup))
-        file_menu.addSeparator()
-
         quit_action = QAction("Quitter", self)
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
 
-        # ══════════════════════════════════════════════════════════════
-        # MENU ACCUEIL
-        # ══════════════════════════════════════════════════════════════
+        # ── ACCUEIL ───────────────────────────────────────────────────
         accueil_menu = menubar.addMenu("&Accueil")
         a = QAction("Tableau de bord", self)
         a.setShortcut("Ctrl+H")
         a.triggered.connect(lambda: self.switch_to_module('accueil'))
         accueil_menu.addAction(a)
 
-        # ══════════════════════════════════════════════════════════════
-        # MENU GESTION
-        # ══════════════════════════════════════════════════════════════
+        # ── GESTION ───────────────────────────────────────────────────
         gestion_menu = menubar.addMenu("&Gestion")
         for label, shortcut, key in [
             ("Point de Vente",         "Ctrl+V",       'sales'),
@@ -206,24 +177,20 @@ class MainWindow(QMainWindow):
             a.triggered.connect(lambda checked, k=key: self.switch_to_module(k))
             gestion_menu.addAction(a)
 
-        # ══════════════════════════════════════════════════════════════
-        # MENU ADMINISTRATION
-        # ══════════════════════════════════════════════════════════════
+        # ── ADMINISTRATION ────────────────────────────────────────────
         admin_menu = menubar.addMenu("&Administration")
         for label, shortcut, key in [
-            ("Gestion des Utilisateurs", "Ctrl+U",       'admin'),
-            ("Rôles et Permissions",     "Ctrl+Shift+R", 'security'),
+            ("Gestion des Utilisateurs",       "Ctrl+U",       'admin'),
+            ("Rôles et Permissions",           "Ctrl+Shift+R", 'security'),
             ("Configuration des Fournisseurs", "Ctrl+Shift+F", 'suppliers'),
-            ("Paramètres IA",            "Ctrl+Shift+A", 'ai'),
+            ("Paramètres IA",                  "Ctrl+Shift+A", 'ai'),
         ]:
             a = QAction(label, self)
             a.setShortcut(shortcut)
             a.triggered.connect(lambda checked, k=key: self.switch_to_module(k))
             admin_menu.addAction(a)
 
-        # ══════════════════════════════════════════════════════════════
-        # MENU PARAMÈTRES
-        # ══════════════════════════════════════════════════════════════
+        # ── PARAMÈTRES ────────────────────────────────────────────────
         settings_menu = menubar.addMenu("&Paramètres")
         settings_menu.addAction(self.create_action(
             "Configuration générale",        "Ctrl+,", self.open_general_settings))
@@ -234,27 +201,21 @@ class MainWindow(QMainWindow):
         settings_menu.addAction(self.create_action(
             "Gestion des notifications",     "",       self.open_notification_settings))
 
-        # ══════════════════════════════════════════════════════════════
-        # MENU AFFICHAGE
-        # ══════════════════════════════════════════════════════════════
+        # ── AFFICHAGE ─────────────────────────────────────────────────
         view_menu = menubar.addMenu("&Affichage")
         self.setup_theme_menu(view_menu)
         view_menu.addSeparator()
 
         zoom_menu = view_menu.addMenu("Zoom")
-
         self.action_zoom_in = QAction("Zoom avant", self)
         self.action_zoom_in.setShortcut("Ctrl+=")
         self.action_zoom_in.triggered.connect(self.zoom_in)
         zoom_menu.addAction(self.action_zoom_in)
-
         self.action_zoom_out = QAction("Zoom arrière", self)
         self.action_zoom_out.setShortcut("Ctrl+-")
         self.action_zoom_out.triggered.connect(self.zoom_out)
         zoom_menu.addAction(self.action_zoom_out)
-
         zoom_menu.addSeparator()
-
         self.zoom_level_actions = {}
         zoom_levels_menu = zoom_menu.addMenu("Niveau de zoom")
         for level in ZoomManager.ZOOM_LEVELS:
@@ -263,42 +224,46 @@ class MainWindow(QMainWindow):
             act.triggered.connect(lambda checked, l=level: self.set_zoom_level(l))
             zoom_levels_menu.addAction(act)
             self.zoom_level_actions[level] = act
-
         zoom_menu.addSeparator()
         act_reset = QAction("Réinitialiser le zoom (100%)", self)
         act_reset.setShortcut("Ctrl+0")
         act_reset.triggered.connect(self.reset_zoom)
         zoom_menu.addAction(act_reset)
-
         self._update_zoom_actions()
 
         view_menu.addSeparator()
-        view_menu.addAction(self.create_action(
-            "Afficher/Masquer la barre d'outils", "", self.toggle_toolbar))
-        view_menu.addAction(self.create_action(
-            "Afficher/Masquer la barre d'état",   "", self.toggle_statusbar))
-        view_menu.addSeparator()
 
+        self.toolbar_action = QAction("Afficher/Masquer la barre d'outils", self)
+        self.toolbar_action.setCheckable(True)
+        self.toolbar_action.setChecked(True)
+        self.toolbar_action.triggered.connect(self.toggle_toolbar)
+        view_menu.addAction(self.toolbar_action)
+
+        self.statusbar_action = QAction("Afficher/Masquer la barre d'état", self)
+        self.statusbar_action.setCheckable(True)
+        self.statusbar_action.setChecked(True)
+        self.statusbar_action.triggered.connect(self.toggle_statusbar)
+        view_menu.addAction(self.statusbar_action)
+
+        view_menu.addSeparator()
         self.fullscreen_action = QAction("Mode plein écran", self)
         self.fullscreen_action.setShortcut("F11")
         self.fullscreen_action.setCheckable(True)
         self.fullscreen_action.triggered.connect(self.toggle_fullscreen)
         view_menu.addAction(self.fullscreen_action)
 
-        # ══════════════════════════════════════════════════════════════
-        # MENU AIDE
-        # ══════════════════════════════════════════════════════════════
+        # ── AIDE ──────────────────────────────────────────────────────
         help_menu = menubar.addMenu("&Aide")
-        help_menu.addAction(self.create_action("Documentation",              "F1", self.open_docs))
-        help_menu.addAction(self.create_action("Guide de démarrage rapide",  "",   self.open_quick_start))
-        help_menu.addAction(self.create_action("Tutoriels vidéo",            "",   self.open_video_tutorials))
+        help_menu.addAction(self.create_action("Documentation",             "F1", self.open_docs))
+        help_menu.addAction(self.create_action("Guide de démarrage rapide", "",   self.open_quick_start))
+        help_menu.addAction(self.create_action("Tutoriels vidéo",           "",   self.open_video_tutorials))
         help_menu.addSeparator()
-        help_menu.addAction(self.create_action("Vérifier les mises à jour",  "",   self.check_updates))
-        help_menu.addAction(self.create_action("Signaler un bug",            "",   self.report_bug))
-        help_menu.addAction(self.create_action("Contacter le support",       "",   self.contact_support))
+        help_menu.addAction(self.create_action("Vérifier les mises à jour", "",   self.check_updates))
+        help_menu.addAction(self.create_action("Signaler un bug",           "",   self.report_bug))
+        help_menu.addAction(self.create_action("Contacter le support",      "",   self.contact_support))
         help_menu.addSeparator()
-        help_menu.addAction(self.create_action("À propos",                   "",   self.show_about))
-        help_menu.addAction(self.create_action("Licences",                   "",   self.show_licenses))
+        help_menu.addAction(self.create_action("À propos",  "", self.show_about))
+        help_menu.addAction(self.create_action("Licences",  "", self.show_licenses))
 
     def setup_theme_menu(self, parent_menu):
         theme_menu = parent_menu.addMenu("&Thème")
@@ -314,9 +279,7 @@ class MainWindow(QMainWindow):
         theme_menu.addSeparator()
         theme_menu.addAction("Recharger le thème", self.reload_theme)
 
-    # ──────────────────────────────────────────────────────────────────
-    # TOOLBAR
-    # ──────────────────────────────────────────────────────────────────
+    # ── TOOLBAR ───────────────────────────────────────────────────────
 
     def setup_toolbar(self):
         toolbar = self.addToolBar("Outils principaux")
@@ -346,8 +309,7 @@ class MainWindow(QMainWindow):
         self.zoom_label.setAlignment(Qt.AlignCenter)
         self.zoom_label.setFixedWidth(55)
         self.zoom_label.setStyleSheet(
-            "QLabel#zoom_label { font-size:13px; font-weight:bold; color:#1abc9c; }"
-        )
+            "QLabel#zoom_label { font-size:13px; font-weight:bold; color:#1abc9c; }")
         toolbar.addWidget(self.zoom_label)
 
         self.btn_toolbar_zoom_in = QPushButton("A+")
@@ -363,18 +325,15 @@ class MainWindow(QMainWindow):
         self.btn_toolbar_zoom_in.clicked.connect(self.zoom_in)
         toolbar.addWidget(self.btn_toolbar_zoom_in)
 
-        sep = QWidget()
-        sep.setFixedWidth(12)
+        sep = QWidget(); sep.setFixedWidth(12)
         toolbar.addWidget(sep)
 
         self.datetime_label = QLabel()
         self.datetime_label.setObjectName("datetime_info")
         self.datetime_label.setStyleSheet(
             "QLabel#datetime_info { font-size:14px; font-weight:700;"
-            "color:#1abc9c; padding:0px 15px; }"
-        )
+            "color:#1abc9c; padding:0px 15px; }")
         toolbar.addWidget(self.datetime_label)
-
         self.datetime_timer = QTimer(self)
         self.datetime_timer.timeout.connect(self.update_datetime)
         self.datetime_timer.start(1000)
@@ -383,8 +342,7 @@ class MainWindow(QMainWindow):
         avatar_path = get_asset_path("images", "avatar.jpeg")
         toolbar.addWidget(create_circular_avatar_label(avatar_path, size=32))
 
-        sep2 = QWidget()
-        sep2.setFixedWidth(10)
+        sep2 = QWidget(); sep2.setFixedWidth(10)
         toolbar.addWidget(sep2)
 
         logout_btn = QPushButton()
@@ -400,21 +358,17 @@ class MainWindow(QMainWindow):
         logout_btn.clicked.connect(self.logout)
         toolbar.addWidget(logout_btn)
 
-    # ──────────────────────────────────────────────────────────────────
-    # ZOOM
-    # ──────────────────────────────────────────────────────────────────
+    # ── ZOOM ──────────────────────────────────────────────────────────
 
     @Slot()
     def zoom_in(self):
         if not self.zoom_manager.zoom_in():
-            self.statusBar().showMessage(
-                f"Zoom maximum ({self.zoom_manager.current_level}%)", 3000)
+            self.statusBar().showMessage(f"Zoom maximum ({self.zoom_manager.current_level}%)", 3000)
 
     @Slot()
     def zoom_out(self):
         if not self.zoom_manager.zoom_out():
-            self.statusBar().showMessage(
-                f"Zoom minimum ({self.zoom_manager.current_level}%)", 3000)
+            self.statusBar().showMessage(f"Zoom minimum ({self.zoom_manager.current_level}%)", 3000)
 
     @Slot()
     def reset_zoom(self):
@@ -444,9 +398,7 @@ class MainWindow(QMainWindow):
         for level, act in self.zoom_level_actions.items():
             act.setChecked(level == current)
 
-    # ──────────────────────────────────────────────────────────────────
-    # THÈME
-    # ──────────────────────────────────────────────────────────────────
+    # ── THÈME ─────────────────────────────────────────────────────────
 
     @Slot(str)
     def set_theme(self, theme):
@@ -463,22 +415,20 @@ class MainWindow(QMainWindow):
 
     def apply_current_theme(self):
         stylesheet = self.theme_manager.load_stylesheet('main_style')
-        current = self.theme_manager.get_current_theme()
+        current    = self.theme_manager.get_current_theme()
         self.setProperty("theme", current)
         self.setStyleSheet(stylesheet)
         self.style().unpolish(self)
         self.style().polish(self)
         self.update()
 
-    # ──────────────────────────────────────────────────────────────────
-    # STATUSBAR
-    # ──────────────────────────────────────────────────────────────────
+    # ── STATUSBAR ─────────────────────────────────────────────────────
 
     def setup_statusbar(self):
         sb = self.statusBar()
         sb.setObjectName("mainStatusbar")
         self.connection_status = QLabel("Connecté")
-        self.memory_status = QLabel("RAM: ...")
+        self.memory_status     = QLabel("RAM: ...")
         sb.addPermanentWidget(self.connection_status)
         sb.addPermanentWidget(self.memory_status)
         self.status_timer = QTimer(self)
@@ -492,29 +442,22 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def update_datetime(self):
-        self.datetime_label.setText(
-            datetime.now().strftime("%A %d %B %Y | %H:%M:%S"))
+        self.datetime_label.setText(datetime.now().strftime("%A %d %B %Y | %H:%M:%S"))
 
-    # ──────────────────────────────────────────────────────────────────
-    # RACCOURCIS
-    # ──────────────────────────────────────────────────────────────────
+    # ── RACCOURCIS ────────────────────────────────────────────────────
 
     def setup_shortcuts(self):
         sc = QShortcut
         sc(QKeySequence("Ctrl+Q"), self).activated.connect(self.close)
-        sc(QKeySequence("Ctrl+H"), self).activated.connect(
-            lambda: self.switch_to_module('accueil'))
+        sc(QKeySequence("Ctrl+H"), self).activated.connect(lambda: self.switch_to_module('accueil'))
         sc(QKeySequence("F11"),    self).activated.connect(self.toggle_fullscreen)
         sc(QKeySequence("Ctrl+="), self).activated.connect(self.zoom_in)
         sc(QKeySequence("Ctrl++"), self).activated.connect(self.zoom_in)
         sc(QKeySequence("Ctrl+-"), self).activated.connect(self.zoom_out)
         sc(QKeySequence("Ctrl+0"), self).activated.connect(self.reset_zoom)
-        sc(QKeySequence("Ctrl+F"), self).activated.connect(
-            lambda: self.switch_to_module('file'))
+        sc(QKeySequence("Ctrl+F"), self).activated.connect(lambda: self.switch_to_module('file'))
 
-    # ──────────────────────────────────────────────────────────────────
-    # PERSISTANCE
-    # ──────────────────────────────────────────────────────────────────
+    # ── PERSISTANCE ───────────────────────────────────────────────────
 
     def load_persistent_settings(self):
         s = QSettings("Siledje", "Siledje")
@@ -553,9 +496,7 @@ class MainWindow(QMainWindow):
         act.triggered.connect(callback)
         return act
 
-    # ══════════════════════════════════════════════════════════════════
-    # SLOTS — MENU FICHIER
-    # ══════════════════════════════════════════════════════════════════
+    # ── SLOTS FICHIER ─────────────────────────────────────────────────
 
     @Slot()
     def import_data(self):
@@ -572,8 +513,7 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QFileDialog
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Sélectionner le fichier CSV à importer", "",
-            "CSV (*.csv);;Tous les fichiers (*)"
-        )
+            "CSV (*.csv);;Tous les fichiers (*)")
         if file_path:
             self.modules['file'].import_stock_csv(file_path)
 
@@ -582,32 +522,15 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QFileDialog
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Enregistrer le CSV", "stock_export.csv",
-            "CSV (*.csv);;Tous les fichiers (*)"
-        )
+            "CSV (*.csv);;Tous les fichiers (*)")
         if file_path:
             self.modules['file'].export_stock_csv(file_path)
-
-    @Slot()
-    def save_config(self):
-        self.save_persistent_settings()
-        InfoDialog.success(
-            self, "Configuration sauvegardée",
-            "La configuration de la fenêtre et du thème a été sauvegardée."
-        )
 
     @Slot()
     def create_backup(self):
         self.modules['file'].create_backup()
 
-    @Slot()
-    def restore_backup(self):
-        self.switch_to_module('file')
-        self.statusBar().showMessage(
-            "Sélectionnez une sauvegarde dans la liste puis cliquez Restaurer", 5000)
-
-    # ══════════════════════════════════════════════════════════════════
-    # SLOTS — MENU PARAMÈTRES
-    # ══════════════════════════════════════════════════════════════════
+    # ── SLOTS PARAMÈTRES ──────────────────────────────────────────────
 
     @Slot()
     def open_general_settings(self):
@@ -629,12 +552,10 @@ class MainWindow(QMainWindow):
                 background:#ffffff; color:#2c3e50; min-height:45px; }
             QLineEdit:focus, QComboBox:focus { border:2px solid #3498db; }
         """
-
         def lbl(t):
             l = QLabel(t); l.setStyleSheet(lbl_s); return l
 
-        company = QLineEdit("SILEDJE")
-        company.setStyleSheet(inp_s)
+        company = QLineEdit("SILEDJE"); company.setStyleSheet(inp_s)
         form.addRow(lbl("Nom de l'entreprise:"), company)
 
         lang = QComboBox()
@@ -658,7 +579,6 @@ class MainWindow(QMainWindow):
             QCheckBox::indicator:checked { background:#3498db; border-color:#3498db; }
         """)
         form.addRow(QLabel(""), confirm_chk)
-
         content.setLayout(form)
         modal.set_content(content)
 
@@ -681,19 +601,23 @@ class MainWindow(QMainWindow):
     def open_notification_settings(self):
         self.switch_to_module('notification_settings')
 
-    # ══════════════════════════════════════════════════════════════════
-    # SLOTS — MENU AFFICHAGE
-    # ══════════════════════════════════════════════════════════════════
+    # ── SLOTS AFFICHAGE ───────────────────────────────────────────────
 
     @Slot()
     def toggle_toolbar(self):
         tb = self.findChild(QWidget, "mainToolbar")
         if tb:
-            tb.setVisible(not tb.isVisible())
+            visible = not tb.isVisible()
+            tb.setVisible(visible)
+            if hasattr(self, 'toolbar_action'):
+                self.toolbar_action.setChecked(visible)
 
     @Slot()
     def toggle_statusbar(self):
-        self.statusBar().setVisible(not self.statusBar().isVisible())
+        visible = not self.statusBar().isVisible()
+        self.statusBar().setVisible(visible)
+        if hasattr(self, 'statusbar_action'):
+            self.statusbar_action.setChecked(visible)
 
     @Slot()
     def toggle_fullscreen(self):
@@ -704,102 +628,63 @@ class MainWindow(QMainWindow):
             self.showFullScreen()
             self.fullscreen_action.setChecked(True)
 
-    # ══════════════════════════════════════════════════════════════════
-    # SLOTS — MENU AIDE
-    # ══════════════════════════════════════════════════════════════════
+    # ── SLOTS AIDE ────────────────────────────────────────────────────
 
     @Slot()
     def open_docs(self):
         content = QWidget()
-        lay = QVBoxLayout()
-        lay.setSpacing(14)
-        lay.setContentsMargins(0, 0, 0, 0)
-        sections = [
-            ("Gestion de Stock",
-             "Ajoutez, modifiez et suivez vos produits. Gérez les alertes de stock faible."),
-            ("Point de Vente",
-             "Effectuez des ventes rapides avec scan de codes-barres. Générez des reçus."),
-            ("Rapports",
-             "Visualisez vos statistiques de ventes et stock. Exportez en CSV, Excel ou PDF."),
-            ("Administration",
-             "Gérez les utilisateurs, rôles et permissions. Configurez la sécurité et l'IA."),
-            ("Raccourcis clavier",
-             "Ctrl+H Accueil | Ctrl+V Ventes | Ctrl+Shift+S Stock\n"
-             "Ctrl+R Rapports | Ctrl+U Utilisateurs | F11 Plein écran\n"
-             "Ctrl+F Fichiers | Ctrl+= Zoom+ | Ctrl+- Zoom- | Ctrl+0 Reset"),
-        ]
-        for title, desc in sections:
-            t = QLabel(title)
-            t.setStyleSheet("font-size:14px; font-weight:bold; color:#3498db; margin-top:4px;")
-            lay.addWidget(t)
-            d = QLabel(desc)
-            d.setWordWrap(True)
-            d.setStyleSheet("font-size:13px; color:#2c3e50; padding-left:12px;")
-            lay.addWidget(d)
-        lay.addStretch()
-        content.setLayout(lay)
-        InfoDialog.rich(self, "Documentation – Siledje", content,
-                        dialog_type=DialogType.INFO, width=680, height=520)
+        lay = QVBoxLayout(); lay.setSpacing(14); lay.setContentsMargins(0, 0, 0, 0)
+        for title, desc in [
+            ("Gestion de Stock", "Ajoutez, modifiez et suivez vos produits. Gérez les alertes de stock faible."),
+            ("Point de Vente",   "Effectuez des ventes rapides avec scan de codes-barres. Générez des reçus."),
+            ("Rapports",         "Visualisez vos statistiques de ventes et stock. Exportez en CSV, Excel ou PDF."),
+            ("Administration",   "Gérez les utilisateurs, rôles et permissions. Configurez la sécurité et l'IA."),
+            ("Raccourcis",       "Ctrl+H Accueil | Ctrl+V Ventes | Ctrl+Shift+S Stock\n"
+                                 "Ctrl+R Rapports | Ctrl+U Utilisateurs | F11 Plein écran\n"
+                                 "Ctrl+F Fichiers | Ctrl+= Zoom+ | Ctrl+- Zoom- | Ctrl+0 Reset"),
+        ]:
+            t = QLabel(title); t.setStyleSheet("font-size:14px; font-weight:bold; color:#3498db; margin-top:4px;"); lay.addWidget(t)
+            d = QLabel(desc);  d.setWordWrap(True); d.setStyleSheet("font-size:13px; color:#2c3e50; padding-left:12px;"); lay.addWidget(d)
+        lay.addStretch(); content.setLayout(lay)
+        InfoDialog.rich(self, "Documentation – Siledje", content, dialog_type=DialogType.INFO, width=680, height=520)
 
     @Slot()
     def open_quick_start(self):
         content = QWidget()
-        lay = QVBoxLayout()
-        lay.setSpacing(10)
-        lay.setContentsMargins(0, 0, 0, 0)
-        steps = [
-            ("1", "Connexion",          "Connectez-vous avec vos identifiants administrateur."),
-            ("2", "Configurer le stock","Gestion > Stock : ajoutez vos produits avec prix et quantités."),
-            ("3", "Codes-barres",       "Gestion > Barcode : générez et imprimez les étiquettes."),
-            ("4", "Première vente",     "Gestion > Point de Vente : scannez un produit et finalisez."),
-            ("5", "Rapports",           "Gestion > Rapports : visualisez vos statistiques."),
-            ("6", "Utilisateurs",       "Administration > Utilisateurs : créez des comptes."),
-        ]
-        for num, title, desc in steps:
+        lay = QVBoxLayout(); lay.setSpacing(10); lay.setContentsMargins(0, 0, 0, 0)
+        for num, title, desc in [
+            ("1", "Connexion",           "Connectez-vous avec vos identifiants administrateur."),
+            ("2", "Configurer le stock", "Gestion > Stock : ajoutez vos produits avec prix et quantités."),
+            ("3", "Codes-barres",        "Gestion > Barcode : générez et imprimez les étiquettes."),
+            ("4", "Première vente",      "Gestion > Point de Vente : scannez un produit et finalisez."),
+            ("5", "Rapports",            "Gestion > Rapports : visualisez vos statistiques."),
+            ("6", "Utilisateurs",        "Administration > Utilisateurs : créez des comptes."),
+        ]:
             row = QHBoxLayout()
-            badge = QLabel(num)
-            badge.setFixedSize(30, 30)
-            badge.setAlignment(Qt.AlignCenter)
-            badge.setStyleSheet("background:#2ecc71; color:white; border-radius:15px;"
-                                "font-weight:bold; font-size:14px;")
-            texts = QVBoxLayout()
-            texts.setSpacing(2)
-            t = QLabel(title)
-            t.setStyleSheet("font-size:13px; font-weight:bold; color:#2c3e50;")
-            d = QLabel(desc)
-            d.setWordWrap(True)
-            d.setStyleSheet("font-size:12px; color:#555;")
-            texts.addWidget(t)
-            texts.addWidget(d)
-            row.addWidget(badge)
-            row.addLayout(texts)
-            row.addStretch()
-            c = QWidget()
-            c.setLayout(row)
-            lay.addWidget(c)
-        lay.addStretch()
-        content.setLayout(lay)
-        InfoDialog.rich(self, "Guide de démarrage rapide", content,
-                        dialog_type=DialogType.SUCCESS, width=640, height=520)
+            badge = QLabel(num); badge.setFixedSize(30, 30); badge.setAlignment(Qt.AlignCenter)
+            badge.setStyleSheet("background:#2ecc71; color:white; border-radius:15px; font-weight:bold; font-size:14px;")
+            texts = QVBoxLayout(); texts.setSpacing(2)
+            t = QLabel(title); t.setStyleSheet("font-size:13px; font-weight:bold; color:#2c3e50;")
+            d = QLabel(desc);  d.setWordWrap(True); d.setStyleSheet("font-size:12px; color:#555;")
+            texts.addWidget(t); texts.addWidget(d)
+            row.addWidget(badge); row.addLayout(texts); row.addStretch()
+            c = QWidget(); c.setLayout(row); lay.addWidget(c)
+        lay.addStretch(); content.setLayout(lay)
+        InfoDialog.rich(self, "Guide de démarrage rapide", content, dialog_type=DialogType.SUCCESS, width=640, height=520)
 
     @Slot()
     def open_video_tutorials(self):
-        InfoDialog.info(
-            self, "Tutoriels vidéo",
+        InfoDialog.info(self, "Tutoriels vidéo",
             "Les tutoriels vidéo seront disponibles prochainement.\n\n"
-            "En attendant:\n"
-            "  • Aide > Documentation\n"
-            "  • Aide > Guide de démarrage rapide\n"
-            "  • Aide > Contacter le support",
+            "En attendant:\n  • Aide > Documentation\n"
+            "  • Aide > Guide de démarrage rapide\n  • Aide > Contacter le support",
             width=500, height=280)
 
     @Slot()
     def check_updates(self):
-        InfoDialog.success(
-            self, "Vérification des mises à jour",
+        InfoDialog.success(self, "Vérification des mises à jour",
             f"Version actuelle : {self.config.version}\n\n"
-            "Vous utilisez la dernière version disponible.",
-            width=480, height=240)
+            "Vous utilisez la dernière version disponible.", width=480, height=240)
 
     @Slot()
     def report_bug(self):
@@ -808,132 +693,83 @@ class MainWindow(QMainWindow):
     @Slot()
     def contact_support(self):
         content = QWidget()
-        lay = QVBoxLayout()
-        lay.setSpacing(8)
-        lay.setContentsMargins(0, 0, 0, 0)
-
+        lay = QVBoxLayout(); lay.setSpacing(8); lay.setContentsMargins(0, 0, 0, 0)
         def row(lbl_text, val_text):
             r = QHBoxLayout()
-            l = QLabel(lbl_text)
-            l.setFixedWidth(110)
-            l.setStyleSheet("font-size:13px; font-weight:bold; color:#3498db;")
-            v = QLabel(val_text)
-            v.setStyleSheet("font-size:13px; color:#2c3e50;")
+            l = QLabel(lbl_text); l.setFixedWidth(110); l.setStyleSheet("font-size:13px; font-weight:bold; color:#3498db;")
+            v = QLabel(val_text); v.setStyleSheet("font-size:13px; color:#2c3e50;")
             r.addWidget(l); r.addWidget(v); r.addStretch()
-            w = QWidget(); w.setLayout(r)
-            return w
-
+            w = QWidget(); w.setLayout(r); return w
         hdr = QLabel("Support technique Siledje")
         hdr.setStyleSheet("font-size:16px; font-weight:bold; color:#2c3e50; margin-bottom:8px;")
-        lay.addWidget(hdr)
-        lay.addWidget(QLabel("Disponibles pour vous aider."))
-        lay.addSpacing(10)
+        lay.addWidget(hdr); lay.addWidget(QLabel("Disponibles pour vous aider.")); lay.addSpacing(10)
         lay.addWidget(row("Email :",     "support@siledje.cm"))
         lay.addWidget(row("Téléphone :", "+237 694 122 436"))
         lay.addWidget(row("Lun–Ven :",   "08h00 – 18h00"))
         lay.addWidget(row("Samedi :",    "09h00 – 13h00"))
-        lay.addStretch()
-        content.setLayout(lay)
-        InfoDialog.rich(self, "Contacter le support", content,
-                        dialog_type=DialogType.INFO, width=500, height=360)
+        lay.addStretch(); content.setLayout(lay)
+        InfoDialog.rich(self, "Contacter le support", content, dialog_type=DialogType.INFO, width=500, height=360)
 
     @Slot()
     def show_licenses(self):
         content = QWidget()
-        lay = QVBoxLayout()
-        lay.setSpacing(6)
-        lay.setContentsMargins(0, 0, 0, 0)
+        lay = QVBoxLayout(); lay.setSpacing(6); lay.setContentsMargins(0, 0, 0, 0)
         hdr = QLabel("Licences des composants utilisés")
         hdr.setStyleSheet("font-size:14px; font-weight:bold; color:#2c3e50; margin-bottom:6px;")
         lay.addWidget(hdr)
         for name, lic, author in [
-            ("PySide6",    "LGPL v3.0",   "Qt Company"),
-            ("Python",     "PSF License", "Python Software Foundation"),
-            ("psutil",     "BSD License", "Giampaolo Rodola"),
-            ("openpyxl",   "MIT License", "Eric Gazoni"),
-            ("reportlab",  "BSD License", "ReportLab Inc."),
+            ("PySide6","LGPL v3.0","Qt Company"), ("Python","PSF License","Python Software Foundation"),
+            ("psutil","BSD License","Giampaolo Rodola"), ("openpyxl","MIT License","Eric Gazoni"),
+            ("reportlab","BSD License","ReportLab Inc."),
         ]:
-            rw = QWidget()
-            rl = QHBoxLayout()
-            rl.setContentsMargins(0, 2, 0, 2)
-            n = QLabel(name);   n.setFixedWidth(180); n.setStyleSheet("font-size:12px; font-weight:bold; color:#2c3e50;")
-            l = QLabel(lic);    l.setFixedWidth(130); l.setStyleSheet("font-size:12px; color:#e74c3c;")
+            rw = QWidget(); rl = QHBoxLayout(); rl.setContentsMargins(0, 2, 0, 2)
+            n = QLabel(name); n.setFixedWidth(180); n.setStyleSheet("font-size:12px; font-weight:bold; color:#2c3e50;")
+            l = QLabel(lic);  l.setFixedWidth(130); l.setStyleSheet("font-size:12px; color:#e74c3c;")
             a = QLabel(author); a.setStyleSheet("font-size:12px; color:#7f8c8d;")
             rl.addWidget(n); rl.addWidget(l); rl.addWidget(a); rl.addStretch()
-            rw.setLayout(rl)
-            lay.addWidget(rw)
-        lay.addStretch()
-        content.setLayout(lay)
-        InfoDialog.rich(self, "Licences", content,
-                        dialog_type=DialogType.INFO, width=600, height=380)
+            rw.setLayout(rl); lay.addWidget(rw)
+        lay.addStretch(); content.setLayout(lay)
+        InfoDialog.rich(self, "Licences", content, dialog_type=DialogType.INFO, width=600, height=380)
 
     @Slot()
     def show_about(self):
         content = QWidget()
-        lay = QVBoxLayout()
-        lay.setSpacing(6)
-        lay.setContentsMargins(0, 0, 0, 0)
-
+        lay = QVBoxLayout(); lay.setSpacing(6); lay.setContentsMargins(0, 0, 0, 0)
         def c(text, color="#2c3e50", size=13, bold=False):
-            l = QLabel(text)
-            l.setAlignment(Qt.AlignCenter)
-            l.setWordWrap(True)
-            l.setStyleSheet(f"font-size:{size}px; font-weight:{'bold' if bold else 'normal'}; color:{color};")
-            return l
-
+            l = QLabel(text); l.setAlignment(Qt.AlignCenter); l.setWordWrap(True)
+            l.setStyleSheet(f"font-size:{size}px; font-weight:{'bold' if bold else 'normal'}; color:{color};"); return l
         lay.addWidget(c("SILEDJE", "#3498db", 28, True))
         lay.addWidget(c(f"Siledje  v{self.config.version}", "#7f8c8d", 13))
-        lay.addSpacing(6)
-        lay.addWidget(c("Application complète de gestion pour Siledje."))
-        lay.addSpacing(8)
-
-        mods_lbl = QLabel("Modules actifs:")
-        mods_lbl.setAlignment(Qt.AlignCenter)
-        mods_lbl.setStyleSheet("font-size:13px; font-weight:bold; color:#2c3e50;")
-        lay.addWidget(mods_lbl)
-
+        lay.addSpacing(6); lay.addWidget(c("Application complète de gestion pour Siledje.")); lay.addSpacing(8)
+        mods_lbl = QLabel("Modules actifs:"); mods_lbl.setAlignment(Qt.AlignCenter)
+        mods_lbl.setStyleSheet("font-size:13px; font-weight:bold; color:#2c3e50;"); lay.addWidget(mods_lbl)
         mods = [
-            ("Accueil",       self.modules['accueil'].version),
-            ("Stock",         self.modules['stock'].version),
-            ("Ventes",        self.modules['sales'].version),
-            ("Admin",         self.modules['admin'].version),
-            ("Sécurité",      self.modules['security'].version),
-            ("Rapports",      self.modules['reports'].version),
-            ("Barcode",       self.modules['barcode_test'].version),
-            ("IA",            self.modules['ai'].version),
-            ("Base données",  self.modules['database_settings'].version),
+            ("Accueil", self.modules['accueil'].version), ("Stock", self.modules['stock'].version),
+            ("Ventes", self.modules['sales'].version), ("Admin", self.modules['admin'].version),
+            ("Sécurité", self.modules['security'].version), ("Rapports", self.modules['reports'].version),
+            ("Barcode", self.modules['barcode_test'].version), ("IA", self.modules['ai'].version),
+            ("Base données", self.modules['database_settings'].version),
             ("Notifications", self.modules['notification_settings'].version),
-            ("Bug Report",    self.modules['bug_report'].version),
-            ("Fichier",       self.modules['file'].version),
+            ("Bug Report", self.modules['bug_report'].version), ("Fichier", self.modules['file'].version),
         ]
-        grid = QWidget()
-        gl = QHBoxLayout()
-        gl.setContentsMargins(0, 0, 0, 0)
+        grid = QWidget(); gl = QHBoxLayout(); gl.setContentsMargins(0, 0, 0, 0)
         col1, col2 = QVBoxLayout(), QVBoxLayout()
         for i, (name, ver) in enumerate(mods):
-            lb = QLabel(f"• {name}: v{ver}")
-            lb.setStyleSheet("font-size:12px; color:#555;")
+            lb = QLabel(f"• {name}: v{ver}"); lb.setStyleSheet("font-size:12px; color:#555;")
             (col1 if i < 6 else col2).addWidget(lb)
-        gl.addLayout(col1); gl.addLayout(col2)
-        grid.setLayout(gl)
-        lay.addWidget(grid)
-
+        gl.addLayout(col1); gl.addLayout(col2); grid.setLayout(gl); lay.addWidget(grid)
         lay.addSpacing(8)
         lay.addWidget(c("Développé par : Mr FOTSO TATCHUM Yvanol Rosly", "#2c3e50", 13, True))
         lay.addWidget(c("© 2025 Siledje – Tous droits réservés", "#7f8c8d", 12))
-        lay.addStretch()
-        content.setLayout(lay)
-        InfoDialog.rich(self, "À propos de Siledje", content,
-                        dialog_type=DialogType.INFO, width=600, height=520)
+        lay.addStretch(); content.setLayout(lay)
+        InfoDialog.rich(self, "À propos de Siledje", content, dialog_type=DialogType.INFO, width=600, height=520)
 
-    # ══════════════════════════════════════════════════════════════════
-    # SYSTÈME
-    # ══════════════════════════════════════════════════════════════════
+    # ── SYSTÈME ───────────────────────────────────────────────────────
 
     @Slot()
     def logout(self):
-        reply = QMessageBox.question(
-            self, "Déconnexion", "Voulez-vous vraiment vous déconnecter ?",
+        reply = QMessageBox.question(self, "Déconnexion",
+            "Voulez-vous vraiment vous déconnecter ?",
             QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
             self.authenticated = False
@@ -952,8 +788,7 @@ class MainWindow(QMainWindow):
     def tray_icon_clicked(self, reason):
         if reason == QSystemTrayIcon.Trigger:
             if self.isMinimized() or not self.isVisible():
-                self.showNormal()
-                self.activateWindow()
+                self.showNormal(); self.activateWindow()
             else:
                 self.hide()
 

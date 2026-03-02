@@ -5,7 +5,7 @@ Gère les thèmes clair et sombre
 import os
 from pathlib import Path
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, QSettings
 
 
 class ThemeManager(QObject):
@@ -20,29 +20,40 @@ class ThemeManager(QObject):
         super().__init__()
         
         self.config = config
-        self._current_theme = "light"  # Thème par défaut
         
         # Chemins vers les fichiers de style
         self.styles_dir = Path(__file__).parent.parent.parent / "assets" / "styles"
         
         print(f"[ThemeManager] Initialisé")
         print(f"[ThemeManager] Dossier styles: {self.styles_dir}")
-        print(f"[ThemeManager] Thème par défaut: {self._current_theme}")
         
-        # Charger le thème sauvegardé (si disponible)
-        self._load_saved_theme()
+        # Charger le thème sauvegardé AVANT de définir le thème par défaut
+        self._current_theme = self._load_saved_theme()
+        
+        print(f"[ThemeManager] Thème chargé: {self._current_theme}")
     
-    def _load_saved_theme(self):
-        """Charge le thème sauvegardé depuis la configuration"""
+    def _load_saved_theme(self) -> str:
+        """
+        Charge le thème sauvegardé depuis QSettings
+        
+        Returns:
+            str: Le thème sauvegardé ('light' ou 'dark'), 'light' par défaut
+        """
         try:
-            # TODO: Charger depuis un fichier de config ou base de données
-            # Pour l'instant, on utilise le thème par défaut
-            saved_theme = getattr(self.config, 'default_theme', 'light')
-            if saved_theme in ['light', 'dark']:
-                self._current_theme = saved_theme
-                print(f"[ThemeManager] Thème chargé: {self._current_theme}")
+            settings = QSettings("Siledje", "Siledje")
+            saved_theme = settings.value("theme", "light", type=str)
+            
+            # Validation du thème
+            if saved_theme not in ['light', 'dark']:
+                print(f"[ThemeManager] ⚠ Thème invalide dans QSettings: {saved_theme}")
+                saved_theme = "light"
+            
+            print(f"[ThemeManager] Thème chargé depuis QSettings: {saved_theme}")
+            return saved_theme
+            
         except Exception as e:
-            print(f"[ThemeManager] Erreur chargement thème: {e}")
+            print(f"[ThemeManager] ⚠ Erreur chargement thème depuis QSettings: {e}")
+            return "light"
     
     def get_current_theme(self) -> str:
         """Retourne le thème actuel ('light' ou 'dark')"""
@@ -56,12 +67,20 @@ class ThemeManager(QObject):
             theme (str): 'light' ou 'dark'
         """
         if theme not in ['light', 'dark']:
-            print(f"[ThemeManager] Thème invalide: {theme}")
+            print(f"[ThemeManager] ⚠ Thème invalide: {theme}")
+            return
+        
+        # Ne rien faire si le thème est déjà le même
+        if theme == self._current_theme:
+            print(f"[ThemeManager] Thème déjà actif: {theme}")
             return
         
         print(f"[ThemeManager] Changement de thème: {self._current_theme} → {theme}")
         
         self._current_theme = theme
+        
+        # Sauvegarder IMMÉDIATEMENT dans QSettings
+        self._save_theme()
         
         # Appliquer le thème global à l'application
         self._apply_global_theme()
@@ -69,10 +88,7 @@ class ThemeManager(QObject):
         # Émettre le signal de changement
         self.theme_changed.emit(theme)
         
-        # Sauvegarder le thème
-        self._save_theme()
-        
-        print(f"[ThemeManager] Thème appliqué: {theme}")
+        print(f"[ThemeManager] ✅ Thème appliqué et sauvegardé: {theme}")
     
     def toggle_theme(self):
         """Bascule entre thème clair et sombre"""
@@ -85,12 +101,12 @@ class ThemeManager(QObject):
             app = QApplication.instance()
             if app:
                 # Charger le stylesheet principal (si existant)
-                main_stylesheet = self.load_stylesheet('main')
+                main_stylesheet = self.load_stylesheet('main_style')
                 if main_stylesheet:
                     app.setStyleSheet(main_stylesheet)
                     print(f"[ThemeManager] Stylesheet global appliqué")
         except Exception as e:
-            print(f"[ThemeManager] Erreur application thème global: {e}")
+            print(f"[ThemeManager] ⚠ Erreur application thème global: {e}")
     
     def load_stylesheet(self, name: str) -> str:
         """
@@ -118,13 +134,14 @@ class ThemeManager(QObject):
             return ""
     
     def _save_theme(self):
-        """Sauvegarde le thème actuel"""
+        """Sauvegarde le thème actuel dans QSettings"""
         try:
-            # TODO: Sauvegarder dans un fichier de config ou base de données
-            # Pour l'instant, juste un log
-            print(f"[ThemeManager] Thème sauvegardé: {self._current_theme}")
+            settings = QSettings("Siledje", "Siledje")
+            settings.setValue("theme", self._current_theme)
+            settings.sync()  # Forcer la synchronisation immédiate
+            print(f"[ThemeManager] ✅ Thème sauvegardé dans QSettings: {self._current_theme}")
         except Exception as e:
-            print(f"[ThemeManager] Erreur sauvegarde thème: {e}")
+            print(f"[ThemeManager] ⚠ Erreur sauvegarde thème: {e}")
     
     def get_color(self, color_name: str) -> str:
         """
