@@ -239,10 +239,9 @@ class AccueilView(QWidget):
 
     # ──────────────────────────────────────────────────────────────────
     # TABLEAU
-    # Technique identique à sales_view.py :
-    #   → PAS de background-color sur QTableWidget ni sur ::item
-    #   → Qt applique automatiquement la couleur du thème light/dark
-    #   → PAS d'alternance
+    #   → Traits de grille ultra-fins et discrets
+    #   → Coin haut-gauche (QTableCornerButton) coloré comme le header
+    #   → Pas de background-color fixe → thème light/dark automatique
     #   → Scrollbars vertes
     # ──────────────────────────────────────────────────────────────────
 
@@ -256,19 +255,16 @@ class AccueilView(QWidget):
         table.setSelectionBehavior(QTableWidget.SelectRows)
         table.setSelectionMode(QTableWidget.SingleSelection)
 
-        # !! Pas de background-color fixe → le thème appliqué par ThemeManager
-        # colore automatiquement le fond (blanc en light, sombre en dark)
-        # exactement comme dans sales_view.py
         table.setStyleSheet("""
             QTableWidget {
                 font-size: 15px;
                 border: 2px solid #bdc3c7;
                 border-radius: 8px;
-                gridline-color: #d5d8dc;
+                gridline-color: rgba(150, 150, 150, 0.18);
             }
             QTableWidget::item {
                 padding: 8px;
-                border-bottom: 1px solid #d5d8dc;
+                border-bottom: 1px solid rgba(150, 150, 150, 0.15);
             }
             QTableWidget::item:selected {
                 background-color: #2ecc71;
@@ -286,9 +282,16 @@ class AccueilView(QWidget):
             QHeaderView::section:vertical {
                 background-color: #34495e;
                 color: #ffffff;
-                border: 1px solid #2c3e50;
+                border: none;
+                border-bottom: 1px solid #2c3e50;
                 font-size: 13px;
                 font-weight: bold;
+            }
+            /* ── Coin haut-gauche : même couleur que le header ── */
+            QTableWidget QAbstractScrollArea > QWidget > QAbstractButton,
+            QTableCornerButton::section {
+                background-color: #2c3e50;
+                border: none;
             }
             QScrollBar:vertical {
                 border: none;
