@@ -75,14 +75,17 @@ LIBRAIRIE_PAPETERIE/
 │   │   └── widgets/           # Composants réutilisables
 │   │       └── custom_button.py
 │   │
-│   ├── modules/               # Logique métier (Contrôleur)
-│   │   ├── __init__.py
-│   │   ├── sales.py           # Gestion des ventes
-│   │   ├── stock.py           # Gestion du stock
-│   │   ├── reports.py         # Génération de rapports
-│   │   ├── barcode.py         # Gestion codes-barres/QR
-│   │   └── security.py        # Authentification et sécurité
-│   │
+│   ├── managers/              # Logique métier (Contrôleur)
+│   ├── accueil_manager.py 
+│   ├── stock/
+│   │   └── stock_manager.py   # Génération de rapports
+│   ├── sales/
+│   │   └── sales_manager.py   # Gestion des ventes
+│   ├── barcode/
+│   │   └── barcode_manager.py # Gestion codes-barres/QR
+│   └── report/
+│       └── report_manager.py  # Génération de rapports
+|
 │   └── utils/                 # Utilitaires et helpers
 │       ├── __init__.py
 │       ├── config.py          # Gestion de la configuration
@@ -98,33 +101,6 @@ LIBRAIRIE_PAPETERIE/
     ├── architecture.md        # Documentation de l'architecture
     ├── user_manual.md         # Manuel utilisateur
     └── dev_manual.md          # Guide développeur
-
-
-
-------
-
-ou avec les Manager
-
-------
-
-    src/
-├── ui/
-│   └── views/
-│       ├── accueil_view.py 
-│       ├── stock_view.py 
-│       ├── sales_view.py 
-│       ├── barcode_view.py 
-│       └── report_view.py 
-├── managers/
-│   ├── accueil_manager.py 
-│   ├── stock/
-│   │   └── stock_manager.py 
-│   ├── sales/
-│   │   └── sales_manager.py 
-│   ├── barcode/
-│   │   └── barcode_manager.py 
-│   └── report/
-│       └── report_manager.py 
 
 ```
 

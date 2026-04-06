@@ -10,22 +10,21 @@ from src.utils.compat import (
     QGraphicsDropShadowEffect, Qt, QWidget, QIcon
 )
 
+import sys  # Ajouter en haut du fichier si pas déjà présent
 
 def get_asset_path(asset_type: str, filename: str) -> Path:
     """
     Retourne le chemin vers un asset.
-    
-    Args:
-        asset_type: Type d'asset ('icons', 'images', 'styles')
-        filename: Nom du fichier
-        
-    Returns:
-        Path vers l'asset
+    Compatible mode développement ET mode exe PyInstaller.
     """
-    base_dir = Path(__file__).parent.parent.parent
-    assets_dir = base_dir / "assets" / asset_type
-    return assets_dir / filename
+    if getattr(sys, 'frozen', False):
+        # Mode exe : fichiers extraits dans _MEIPASS
+        base_dir = Path(sys._MEIPASS)
+    else:
+        # Mode dev normal
+        base_dir = Path(__file__).parent.parent.parent
 
+    return base_dir / "assets" / asset_type / filename
 
 def create_circular_pixmap(
     image_path: Path,
