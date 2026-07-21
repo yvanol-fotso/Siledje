@@ -1,10 +1,10 @@
-# 📚 Gestion Librairie & Papeterie 📝
+# Gestion Librairie & Papeterie
 
 Un système de gestion intuitif et complet pour les librairies et papeteries, conçu pour simplifier la gestion quotidienne des stocks, des ventes, des clients et des fournisseurs. Développé avec une interface utilisateur moderne et réactive grâce à **PySide** et **PyQt5**.
 
 ---
 
-## ✨ Fonctionnalités
+## Fonctionnalités
 
 * **Gestion des Stocks :** Ajout, modification, suppression et recherche de livres et d'articles de papeterie. Suivi des quantités, des prix et des emplacements.
 * **Transactions de Vente :** Enregistrement rapide des ventes, calcul automatique des totaux, gestion des retours et des remboursements.
@@ -16,7 +16,7 @@ Un système de gestion intuitif et complet pour les librairies et papeteries, co
 
 ---
 
-## 🛠 Technologies Utilisées
+## Technologies Utilisées
 
 * **Python 3.x**
 * **PySide6 / PyQt5** (pour l'interface graphique)
@@ -28,7 +28,7 @@ Un système de gestion intuitif et complet pour les librairies et papeteries, co
 
 ---
 
-## 🏗️ Architecture du Projet
+## Architecture du Projet
 
 Le projet suit une architecture modulaire et organisée pour faciliter la maintenance et l'évolutivité :
 
@@ -104,7 +104,7 @@ LIBRAIRIE_PAPETERIE/
 
 ```
 
-### 📋 Description des Modules
+### Description des Modules
 
 **`models/`** : Contient les classes représentant les entités métier (Produit, Vente, Stock, Utilisateur). Ces classes définissent la structure des données et les règles de validation.
 
@@ -118,9 +118,9 @@ LIBRAIRIE_PAPETERIE/
 
 ---
 
-## 🚀 Installation et Lancement (Windows)
+## Installation et Lancement (Windows)
 
-**⚠️ ATTENTION : Ce projet ne fonctionne qu'avec Python 3.12. Vous devez absolument avoir cette version installée, même si vous en avez une autre sur votre machine.**
+**ATTENTION : Ce projet ne fonctionne qu'avec Python 3.12. Vous devez absolument avoir cette version installée, même si vous en avez une autre sur votre machine.**
 
 ### 1. Installation de Python 3.12
 
@@ -142,7 +142,7 @@ LIBRAIRIE_PAPETERIE/
 
 2.  **Se positionner à la racine du projet (là où se trouve le `src` et le `requirements.txt`) :**
     
-    ✅ **1️⃣ Aller dans ton projet**
+    **1. Aller dans ton projet**
     
     ```bash
     cd C:\Users\fotyv\Documents\Boite\librairie_papeterie\librairie_papeterie 
@@ -153,13 +153,13 @@ LIBRAIRIE_PAPETERIE/
 
     Utilisez explicitement la version 3.12 pour créer le `venv`.
     
-    ✅ **3️⃣ Créer un venv avec Python 3.12**
+    **3. Créer un venv avec Python 3.12**
     
     ```bash
     py -3.12 -m venv venv
     ```
     
-    ✅ **4️⃣ Activer l'environnement**
+    **4. Activer l'environnement**
     
     ```bash
     .\venv\Scripts\activate
@@ -168,21 +168,21 @@ LIBRAIRIE_PAPETERIE/
 
 4.  **Installer les dépendances :**
     
-    ✅ **5️⃣ Installer les dépendances**
+    **5. Installer les dépendances**
     
     ```bash
     pip install --upgrade pip
     pip install -r requirements.txt
     ```
-    👉 **Avec Python 3.12, PySide6 va s'installer sans erreur.**
+    Avec Python 3.12, PySide6 va s'installer sans erreur.
 
 ---
 
-## 🚀 Lancement de l'Application
+## Lancement de l'Application
 
 ### Option A : Depuis PyCharm (Recommandé pour le Dev)
 
-1.  **Ouvrir le projet dans PyCharm** et configurer l'interpréteur pour qu'il utilise le `venv` que vous venez de créer (voir section 💻 ci-dessous).
+1.  **Ouvrir le projet dans PyCharm** et configurer l'interpréteur pour qu'il utilise le `venv` que vous venez de créer (voir section Configuration ci-dessous).
 2.  Dans la structure du projet, faites un clic droit sur le fichier principal (qui se trouve dans le dossier `src`, par exemple `src/main.py` ou `src/app.py`).
 3.  Sélectionnez "**Run 'main'**" (ou le nom de votre fichier).
 4.  Pour arrêter, cliquez sur le bouton rouge **Stop** de la console de PyCharm.
@@ -203,15 +203,15 @@ Puisqu'il n'y a PAS de `main.py` à la racine mais dans le dossier `src`, vous d
     python -m src.main
     ```
     
-    💡 **Pourquoi ?** L'option `-m` traite `src.main` comme un chemin de module, permettant à Python de trouver le fichier `main.py` dans le dossier `src` et de lancer l'application.
+    **Pourquoi ?** L'option `-m` traite `src.main` comme un chemin de module, permettant à Python de trouver le fichier `main.py` dans le dossier `src` et de lancer l'application.
     
-    ❌ **Ne faites PAS** : `python src/main.py` (peut causer des problèmes d'importation de modules internes)
+    **Ne faites PAS** : `python src/main.py` (peut causer des problèmes d'importation de modules internes)
     
-    ❌ **Ne faites PAS** : `python3.12` ou `python` (vous devez utiliser le venv activé)
+    **Ne faites PAS** : `python3.12` ou `python` (vous devez utiliser le venv activé)
 
 ---
 
-## 💻 Configuration de l'Environnement de Développement (PyCharm)
+## Configuration de l'Environnement de Développement (PyCharm)
 
 Pour garantir un développement fluide et éviter les conflits de dépendances, il est recommandé d'ouvrir le projet dans PyCharm et de le configurer pour utiliser l'environnement virtuel (venv) créé précédemment.
 
@@ -220,7 +220,7 @@ Pour garantir un développement fluide et éviter les conflits de dépendances, 
 
 2.  **Configurer l'interpréteur Python sur l'environnement virtuel :**
     * Accédez à : `File > Settings > Project: librairie_papeterie > Python Interpreter` (ou `PyCharm > Preferences > Project: librairie_papeterie > Python Interpreter` sur macOS).
-    * Cliquez sur l'icône de la **roue dentée ⚙️** (en haut à droite de la section interpréteur) > "**Add...**"
+    * Cliquez sur l'icône de la **roue dentée** (en haut à droite de la section interpréteur) > "**Add...**"
     * Choisissez "**Existing environment**".
     * Indiquez le **chemin** vers votre environnement virtuel. Ce chemin pointe vers l'exécutable Python dans votre `venv` :
         * **Windows** : `.\venv\Scripts\python.exe`
@@ -236,11 +236,11 @@ Pour garantir un développement fluide et éviter les conflits de dépendances, 
 4.  **Lancer l'application depuis PyCharm :**
     Dans la fenêtre de PyCharm, naviguez dans la structure du projet, faites un clic droit sur `main.py` (ou le fichier Python principal de démarrage de votre application), puis sélectionnez "**Run 'main'**".
 
-✅ **Votre environnement est maintenant configuré proprement pour contribuer efficacement au projet !**
+Votre environnement est maintenant configuré proprement pour contribuer efficacement au projet !
 
 ---
 
-## 💡 Comment Contribuer
+## Comment Contribuer
 
 Nous accueillons avec plaisir les contributions ! Si vous souhaitez améliorer ce projet, veuillez suivre ces étapes :
 
@@ -265,14 +265,13 @@ Nous accueillons avec plaisir les contributions ! Si vous souhaitez améliorer c
 
 ---
 
-
-# 🧪 Tests de la Base de Données
+## Tests de la Base de Données
 
 Le projet inclut une suite de tests permettant de vérifier le bon fonctionnement de la base de données (connexion, opérations CRUD, gestion des stocks et association des codes-barres).
 
 ---
 
-### 📁 Emplacement des tests
+### Emplacement des tests
 
 Les tests se trouvent dans le dossier :
 
@@ -286,7 +285,7 @@ Se placer à la racine du projet
 python -m tests.test_database
 
 Résultats : 8/8 tests réussis
-🎉 TOUS LES TESTS SONT PASSÉS !
+TOUS LES TESTS SONT PASSÉS !
 
 ```
 ---
@@ -306,7 +305,7 @@ Vous trouverez ci-dessous des documents et captures d'écran illustrant les diff
 
 ---
 
-## 📄 Licence
+## Licence
 
 Ce projet est distribué sous la licence [**MIT License**]. Veuillez consulter le fichier `LICENSE` à la racine du dépôt pour plus de détails sur les conditions d'utilisation.
 
