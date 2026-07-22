@@ -2,7 +2,7 @@
 Interface de connexion moderne et professionnelle.
 Version optimisée - Utilisation cohérente de get_asset_path.
 """
-
+from src.Beans.User import User
 from src.utils.compat import (
     QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox,
     QWidget, QHBoxLayout, QFrame, QGraphicsOpacityEffect, QCheckBox,
@@ -13,7 +13,7 @@ from src.utils.helpers import (
     create_circular_avatar_label,
     get_asset_path
 )
-from src.models import User, UserRole
+
 
 
 def load_svg_icon(icon_name: str, size: int = 24, debug: bool = False) -> QPixmap:
@@ -115,11 +115,12 @@ class LoginDialog(QDialog):
     
     auth_success = Signal(object)
     
-    def __init__(self, config, theme_manager, parent=None):
+    def __init__(self, config, theme_manager,auth_manager,  parent=None):
         super().__init__(parent)
         
         self.config = config
         self.theme_manager = theme_manager
+        self.auth_manager = auth_manager
         self.authenticated_user = None
         self.attempt_count = 0
         self.max_attempts = 5
@@ -397,41 +398,36 @@ class LoginDialog(QDialog):
         self.btn_login.setText("Connexion...")
         
         QTimer.singleShot(500, lambda: self._check_credentials(username, password))
+
     
     def _check_credentials(self, username: str, password: str):
-        """Vérifie les identifiants."""
-        if username == "admin" and password == "admin":
-            self.authenticated_user = User.create(
-                username=username,
-                password=password,
-                role=UserRole.ADMIN
-            )
-            self.auth_success.emit(self.authenticated_user)
-            
+        """Vérifie les identifiants via AuthManager."""
+        user = self.auth_manager.authenticate(username, password)
+
+        if user:
+            self.authenticated_user = user
+            self.auth_success.emit(user)
+
             self.btn_login.setText("✓ Connexion réussie")
             self.btn_login.setStyleSheet("background-color: #27ae60;")
-            
+
             QTimer.singleShot(500, self.accept)
         else:
-            self.attempt_count += 1
-            remaining = self.max_attempts - self.attempt_count
-            
+            remaining = self.auth_manager.remaining_attempts(username)
+
             if remaining > 0:
-                self._show_error(
-                    f"Identifiants incorrects\nTentatives restantes : {remaining}"
-                )
+                self._show_error(f"{self.auth_manager.last_error}\nTentatives restantes : {remaining}")
                 self._shake_animation()
-                
+
                 self.btn_login.setEnabled(True)
                 self.btn_login.setText("Se connecter")
                 self.btn_login.setStyleSheet("")
-                
+
                 self.txt_password.clear()
                 self.txt_password.setFocus()
             else:
                 QMessageBox.critical(
-                    self,
-                    "Compte bloqué",
+                    self, "Compte bloqué",
                     "Trop de tentatives échouées.\nVeuillez contacter l'administrateur."
                 )
                 self.reject()
@@ -459,15 +455,17 @@ class LoginDialog(QDialog):
         self._apply_theme()
     
     def _forgot_password(self):
-        """Gère le mot de passe oublié."""
+        """Explique la procédure de réinitialisation."""
         QMessageBox.information(
             self,
             "Mot de passe oublié",
-            "Veuillez contacter l'administrateur système\npour réinitialiser votre mot de passe."
+            "Pour réinitialiser votre mot de passe, contactez un administrateur "
+            "du système.\n\nL'administrateur peut réinitialiser votre mot de passe "
+            "depuis : Administration → Gestion des Utilisateurs."
         )
     
-    def get_authenticated_user(self) -> User:
-        """Retourne l'utilisateur authentifié."""
+    def get_authenticated_user(self):
+        """Retourne l'utilisateur authentifié (Bean src.Beans.User.User)."""
         return self.authenticated_user
     
     def get_username(self) -> str:

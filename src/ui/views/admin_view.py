@@ -50,6 +50,7 @@ class AdminView(QWidget):
     edit_user_requested = Signal(int)
     delete_user_requested = Signal(int)
     refresh_requested   = Signal()
+    reset_password_requested = Signal(int)  
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -284,3 +285,30 @@ class AdminView(QWidget):
 
     def clear_search(self):
         self.search_input.clear()
+
+
+    def _on_reset_password_clicked(self):
+        idx = self.table_view.currentIndex()
+        if idx.isValid():
+            self.reset_password_requested.emit(idx.row())
+
+
+
+    def _create_action_buttons(self) -> QHBoxLayout:
+        layout = QHBoxLayout()
+        layout.setSpacing(10)
+
+        layout.addWidget(self._make_btn(
+            "Modifier",   "edit",    "#f39c12", "#e67e22", "#d35400", w=130,
+            slot=self._on_edit_clicked))
+        layout.addWidget(self._make_btn(
+            "Réinit. mot de passe", "key", "#3498db", "#2980b9", "#21618c", w=180,
+            slot=self._on_reset_password_clicked))
+        layout.addWidget(self._make_btn(
+            "Supprimer",  "trash",   "#e74c3c", "#c0392b", "#a93226", w=130,
+            slot=self._on_delete_clicked))
+        layout.addStretch()
+        layout.addWidget(self._make_btn(
+            "Actualiser", "refresh", "#95a5a6", "#7f8c8d", "#707b7c", w=130,
+            slot=lambda: self.refresh_requested.emit()))
+        return layout

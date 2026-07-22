@@ -1,7 +1,8 @@
 """
 Vue du module Fichier.
-Import/Export CSV, Sauvegarde et Restauration.
-Design fin, Dark/Light automatique, scrollable.
+Import/Export CSV (Produits, Fournisseurs, Catégories), Export Utilisateurs,
+Sauvegarde/Restauration, Activation de licence.
+Design sobre : une seule teinte d'accent, pas de dégradés multicolores.
 """
 
 from PySide6.QtWidgets import (
@@ -9,11 +10,18 @@ from PySide6.QtWidgets import (
     QPushButton, QGroupBox, QFileDialog,
     QLineEdit, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QFrame,
-    QScrollArea, QSizePolicy
+    QTabWidget, QSizePolicy
 )
 from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen
-from src.utils.helpers import get_asset_path
+from PySide6.QtGui import QIcon, QPixmap
+
+# ── Palette sobre : une seule teinte d'accent + niveaux de gris ───────
+ACCENT       = "#5B7A9D"   # bleu ardoise, seule couleur "vive" de l'écran
+ACCENT_DARK  = "#4A6480"
+BORDER       = "rgba(120, 130, 140, 0.35)"
+MUTED_TEXT   = "#8A9199"
+DANGER       = "#8A5555"   # rouge très désaturé, réservé aux actions destructrices
+DANGER_DARK  = "#734646"
 
 
 def load_svg_icon(icon_name: str, size: int = 24) -> QPixmap:
@@ -24,29 +32,28 @@ def load_svg_icon(icon_name: str, size: int = 24) -> QPixmap:
             return QPixmap()
         icon = QIcon(str(icon_path))
         return icon.pixmap(size, size) if not icon.isNull() else QPixmap()
-    except:
+    except Exception:
         return QPixmap()
 
 
-def _groupbox_style(accent: str) -> str:
+def _groupbox_style() -> str:
     return f"""
         QGroupBox {{
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
-            border: 2px solid {accent};
-            border-radius: 12px;
-            margin-top: 22px;
-            padding-top: 18px;
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(255,255,255,0.02), stop:1 rgba(255,255,255,0.01));
+            border: 1px solid {BORDER};
+            border-radius: 10px;
+            margin-top: 20px;
+            padding-top: 16px;
+            background: transparent;
         }}
         QGroupBox::title {{
             subcontrol-origin: margin;
             subcontrol-position: top left;
-            padding: 5px 18px;
-            left: 10px;
+            padding: 4px 14px;
+            left: 8px;
             top: -2px;
-            color: {accent};
+            color: {ACCENT};
             font-weight: 600;
             background: transparent;
         }}
@@ -54,26 +61,23 @@ def _groupbox_style(accent: str) -> str:
 
 
 def _input_style() -> str:
-    return """
-        QLineEdit {
+    return f"""
+        QLineEdit {{
             font-size: 13px;
-            padding: 8px 14px;
-            border: 2px solid rgba(150,150,150,0.3);
-            border-radius: 8px;
-            min-height: 24px;
+            padding: 8px 12px;
+            border: 1px solid {BORDER};
+            border-radius: 6px;
+            min-height: 22px;
             background: rgba(255,255,255,0.03);
-        }
-        QLineEdit:hover {
-            border: 2px solid rgba(52, 152, 219, 0.5);
-        }
-        QLineEdit:focus {
-            border: 2px solid #3498db;
-            background: rgba(52, 152, 219, 0.05);
-        }
+        }}
+        QLineEdit:focus {{
+            border: 1px solid {ACCENT};
+        }}
     """
 
 
-def _btn(label, bg, hover, h=38, w=None, icon_name=None) -> QPushButton:
+def _btn(label: str, primary: bool = True, danger: bool = False,
+         h: int = 36, w: int = None, icon_name: str = None) -> QPushButton:
     btn = QPushButton(label)
     btn.setMinimumHeight(h)
     btn.setMaximumHeight(h)
@@ -81,91 +85,460 @@ def _btn(label, bg, hover, h=38, w=None, icon_name=None) -> QPushButton:
         btn.setMinimumWidth(w)
     btn.setCursor(Qt.PointingHandCursor)
     if icon_name:
-        px = load_svg_icon(icon_name, 18)
+        px = load_svg_icon(icon_name, 16)
         if not px.isNull():
             btn.setIcon(QIcon(px))
-            btn.setIconSize(QSize(18, 18))
+            btn.setIconSize(QSize(16, 16))
+
+    if danger:
+        bg, hv, fg = "transparent", "rgba(138,85,85,0.12)", DANGER
+        border = f"1px solid {DANGER}"
+    elif primary:
+        bg, hv, fg = ACCENT, ACCENT_DARK, "white"
+        border = "none"
+    else:
+        bg, hv, fg = "transparent", "rgba(91,122,157,0.10)", ACCENT
+        border = f"1px solid {ACCENT}"
+
     btn.setStyleSheet(f"""
         QPushButton {{
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 {bg}, stop:1 {hover});
-            color: white;
-            border: none;
-            border-radius: 8px;
+            background: {bg};
+            color: {fg};
+            border: {border};
+            border-radius: 7px;
             font-weight: 600;
             font-size: 13px;
-            padding: 6px 20px;
+            padding: 6px 18px;
         }}
-        QPushButton:hover {{
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 {hover}, stop:1 {bg});
-        }}
-        QPushButton:pressed {{
-            background: {hover};
-            padding-top: 7px;
-            padding-bottom: 5px;
-        }}
+        QPushButton:hover {{ background: {hv}; }}
+        QPushButton:pressed {{ padding-top: 7px; padding-bottom: 5px; }}
     """)
     return btn
 
 
 def _browse_btn() -> QPushButton:
-    """Bouton Parcourir — design moderne et visible."""
-    btn = QPushButton("Parcourir")
-    btn.setMinimumHeight(38)
-    btn.setMaximumHeight(38)
-    btn.setMinimumWidth(100)
-    btn.setCursor(Qt.PointingHandCursor)
-    btn.setStyleSheet("""
-        QPushButton {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #95a5a6, stop:1 #7f8c8d);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: 600;
-            padding: 6px 16px;
-        }
-        QPushButton:hover {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #7f8c8d, stop:1 #95a5a6);
-        }
-        QPushButton:pressed {
-            background: #6c7a7b;
-            padding-top: 7px;
-            padding-bottom: 5px;
-        }
-    """)
-    return btn
+    return _btn("Parcourir", primary=False, w=100)
 
 
-def _info_box(text: str, accent: str) -> QLabel:
+def _info_box(text: str) -> QLabel:
     lbl = QLabel(text)
     lbl.setWordWrap(True)
     lbl.setStyleSheet(f"""
         font-size: 12px;
-        padding: 12px 16px;
+        padding: 10px 14px;
         border-radius: 8px;
-        border-left: 4px solid {accent};
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-            stop:0 rgba(230, 126, 34, 0.08), stop:1 rgba(230, 126, 34, 0.02));
-        color: {accent};
-        font-weight: 500;
+        border-left: 3px solid {ACCENT};
+        background: rgba(91, 122, 157, 0.06);
+        color: {MUTED_TEXT};
     """)
     return lbl
 
 
+def _table_style() -> str:
+    return f"""
+        QTableWidget {{
+            font-size: 12px;
+            border: 1px solid {BORDER};
+            border-radius: 8px;
+            gridline-color: transparent;
+            background: transparent;
+        }}
+        QTableWidget::item {{
+            padding: 9px 10px;
+            border-bottom: 1px solid {BORDER};
+        }}
+        QTableWidget::item:selected {{
+            background: {ACCENT};
+            color: white;
+        }}
+        QHeaderView::section {{
+            background: transparent;
+            color: {MUTED_TEXT};
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 10px;
+            border: none;
+            border-bottom: 1px solid {BORDER};
+        }}
+    """
+
+
+def fmt_int(n) -> str:
+    """Formate un entier avec espace comme séparateur de milliers (1234 -> '1 234')."""
+    try:
+        return f"{int(n):,}".replace(",", " ")
+    except (TypeError, ValueError):
+        return str(n)
+
+
+def fmt_money(n) -> str:
+    """Formate un montant en FCFA, sans décimales."""
+    try:
+        return f"{int(round(float(n))):,}".replace(",", " ") + " FCFA"
+    except (TypeError, ValueError):
+        return str(n)
+
+
+class StatsCard(QFrame):
+    """Mini tableau de bord (plusieurs indicateurs côte à côte) qui occupe
+    l'espace restant en bas d'un onglet — remplace une zone vide par de
+    l'information réellement utile, alimentée par les données de l'app."""
+
+    def __init__(self, title: str = "Aperçu", parent=None):
+        super().__init__(parent)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setMinimumHeight(120)
+        self.setStyleSheet(f"""
+            QFrame {{
+                border: 1px solid {BORDER};
+                border-radius: 12px;
+                background: rgba(91, 122, 157, 0.035);
+            }}
+        """)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(24, 18, 24, 20)
+        outer.setSpacing(10)
+
+        header = QLabel(title)
+        header.setStyleSheet(f"""
+            font-size: 11px; font-weight: 700; letter-spacing: 0.6px;
+            color: {MUTED_TEXT};
+        """)
+        outer.addWidget(header)
+
+        self._row = QHBoxLayout()
+        self._row.setSpacing(0)
+        outer.addLayout(self._row, 1)
+        self._tile_widgets = []
+
+    def set_stats(self, stats):
+        """stats : liste de tuples (valeur, libellé), ex. [("128", "Produits"), ...]."""
+        for w in self._tile_widgets:
+            w.setParent(None)
+            w.deleteLater()
+        self._tile_widgets = []
+
+        for i, (value, caption) in enumerate(stats):
+            if i > 0:
+                sep = QFrame()
+                sep.setFixedWidth(1)
+                sep.setStyleSheet(f"background: {BORDER};")
+                self._row.addWidget(sep)
+                self._tile_widgets.append(sep)
+
+            tile = QWidget()
+            tile_lay = QVBoxLayout(tile)
+            tile_lay.setContentsMargins(14, 0, 14, 0)
+            tile_lay.setSpacing(3)
+            tile_lay.addStretch(1)
+
+            val_lbl = QLabel(str(value))
+            val_lbl.setAlignment(Qt.AlignCenter)
+            val_lbl.setStyleSheet(f"font-size: 23px; font-weight: 700; color: {ACCENT};")
+            tile_lay.addWidget(val_lbl)
+
+            cap_lbl = QLabel(caption)
+            cap_lbl.setAlignment(Qt.AlignCenter)
+            cap_lbl.setWordWrap(True)
+            cap_lbl.setStyleSheet(f"font-size: 11px; color: {MUTED_TEXT}; font-weight: 600;")
+            tile_lay.addWidget(cap_lbl)
+
+            tile_lay.addStretch(1)
+            self._row.addWidget(tile, 1)
+            self._tile_widgets.append(tile)
+
+
+class _ImportExportPanel(QWidget):
+    """Bloc réutilisable : Import CSV + Export CSV + modèle, pour une entité donnée."""
+
+    import_requested = Signal(str)
+    export_requested = Signal(str)
+    template_requested = Signal(str)
+
+    def __init__(self, entity_label: str, hint_text: str, default_export_name: str,
+                 default_template_name: str, export_only: bool = False,
+                 stats_title: str = None, parent=None):
+        super().__init__(parent)
+        self.default_export_name = default_export_name
+        self.default_template_name = default_template_name
+        self.export_only = export_only
+        self._build_ui(entity_label, hint_text, stats_title or f"{entity_label} en bref")
+
+    def _build_ui(self, entity_label: str, hint_text: str, stats_title: str):
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(16)
+
+        if not self.export_only:
+            imp_grp = QGroupBox(f"Importer — {entity_label}")
+            imp_grp.setStyleSheet(_groupbox_style())
+            imp_lay = QVBoxLayout(imp_grp)
+            imp_lay.setSpacing(12)
+            imp_lay.setContentsMargins(18, 22, 18, 18)
+
+            row = QHBoxLayout()
+            row.setSpacing(10)
+            self.import_path_input = QLineEdit()
+            self.import_path_input.setPlaceholderText("Sélectionner un fichier .csv …")
+            self.import_path_input.setReadOnly(True)
+            self.import_path_input.setStyleSheet(_input_style())
+            bi = _browse_btn()
+            bi.clicked.connect(self._browse_import)
+            row.addWidget(self.import_path_input, 3)
+            row.addWidget(bi, 0)
+            imp_lay.addLayout(row)
+
+            btn_row = QHBoxLayout()
+            btn_row.setSpacing(10)
+            btn_import = _btn("Importer", primary=True, icon_name="upload")
+            btn_tpl = _btn("Télécharger le modèle", primary=False, icon_name="download")
+            btn_import.clicked.connect(self._do_import)
+            btn_tpl.clicked.connect(self._download_template)
+            btn_row.addWidget(btn_import)
+            btn_row.addWidget(btn_tpl)
+            imp_lay.addLayout(btn_row)
+
+            imp_lay.addWidget(_info_box(hint_text))
+            outer.addWidget(imp_grp)
+
+        exp_grp = QGroupBox(f"Exporter — {entity_label}")
+        exp_grp.setStyleSheet(_groupbox_style())
+        exp_lay = QVBoxLayout(exp_grp)
+        exp_lay.setSpacing(12)
+        exp_lay.setContentsMargins(18, 22, 18, 18)
+
+        row2 = QHBoxLayout()
+        row2.setSpacing(10)
+        self.export_path_input = QLineEdit()
+        self.export_path_input.setPlaceholderText("Choisir l'emplacement …")
+        self.export_path_input.setReadOnly(True)
+        self.export_path_input.setStyleSheet(_input_style())
+        be = _browse_btn()
+        be.clicked.connect(self._browse_export)
+        row2.addWidget(self.export_path_input, 3)
+        row2.addWidget(be, 0)
+        exp_lay.addLayout(row2)
+
+        btn_export = _btn("Exporter", primary=True, icon_name="download")
+        btn_export.clicked.connect(self._do_export)
+        exp_lay.addWidget(btn_export)
+        outer.addWidget(exp_grp)
+
+        # ── Mini tableau de bord qui occupe l'espace restant (alimenté via set_stats) ──
+        self.stats_card = StatsCard(stats_title)
+        outer.addWidget(self.stats_card, 1)
+
+    def set_stats(self, stats):
+        """stats : liste de tuples (valeur, libellé) affichés dans le tableau de bord."""
+        self.stats_card.set_stats(stats)
+
+    def _browse_import(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Sélectionner un fichier CSV", "", "CSV (*.csv);;Tous les fichiers (*)")
+        if path:
+            self.import_path_input.setText(path)
+
+    def _browse_export(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Enregistrer le CSV", self.default_export_name, "CSV (*.csv);;Tous les fichiers (*)")
+        if path:
+            self.export_path_input.setText(path)
+
+    def _do_import(self):
+        path = self.import_path_input.text().strip()
+        if not path:
+            from src.ui.widgets.InfoDialog import InfoDialog
+            InfoDialog.warning(self, "Fichier requis", "Veuillez sélectionner un fichier CSV à importer.")
+            return
+        self.import_requested.emit(path)
+
+    def _do_export(self):
+        path = self.export_path_input.text().strip()
+        if not path:
+            from src.ui.widgets.InfoDialog import InfoDialog
+            InfoDialog.warning(self, "Destination requise", "Veuillez choisir un emplacement pour le CSV.")
+            return
+        self.export_requested.emit(path)
+
+    def _download_template(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Sauvegarder le modèle CSV", self.default_template_name, "CSV (*.csv)")
+        if path:
+            self.template_requested.emit(path)
+
+
+class _LicensePanel(QWidget):
+    """Onglet Licence : saisie/chargement de clé + carte de statut."""
+
+    activate_requested = Signal(str)
+
+    _STATUS_COLORS = {
+        "valid":   ACCENT,
+        "expired": DANGER,
+        "invalid": DANGER,
+        "missing": MUTED_TEXT,
+    }
+    _STATUS_LABELS = {
+        "valid":   "ACTIVE",
+        "expired": "EXPIRÉE",
+        "invalid": "INVALIDE",
+        "missing": "AUCUNE",
+    }
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._build_ui()
+
+    def _build_ui(self):
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(16)
+
+        grp = QGroupBox("Activer une licence")
+        grp.setStyleSheet(_groupbox_style())
+        lay = QVBoxLayout(grp)
+        lay.setSpacing(12)
+        lay.setContentsMargins(18, 22, 18, 18)
+
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        self.key_input = QLineEdit()
+        self.key_input.setPlaceholderText("Coller la clé de licence (SILEDJE-...) ou charger un fichier …")
+        self.key_input.setStyleSheet(_input_style())
+        browse = _browse_btn()
+        browse.clicked.connect(self._browse_key_file)
+        row.addWidget(self.key_input, 3)
+        row.addWidget(browse, 0)
+        lay.addLayout(row)
+
+        btn_activate = _btn("Activer la licence", primary=True, icon_name="key")
+        btn_activate.clicked.connect(self._do_activate)
+        lay.addWidget(btn_activate)
+
+        lay.addWidget(_info_box(
+            "La clé est fournie par votre revendeur Siledje. Elle détermine le plan, "
+            "le nombre d'utilisateurs autorisés et la durée de validité."
+        ))
+        outer.addWidget(grp)
+
+        # ── Carte de statut ──
+        self.status_card = QFrame()
+        self.status_card.setStyleSheet(f"""
+            QFrame {{
+                border: 1px solid {BORDER};
+                border-radius: 10px;
+                background: rgba(91, 122, 157, 0.05);
+            }}
+        """)
+        card_lay = QVBoxLayout(self.status_card)
+        card_lay.setContentsMargins(20, 18, 20, 18)
+        card_lay.setSpacing(8)
+
+        top_row = QHBoxLayout()
+        top_row.setSpacing(10)
+        self.badge = QLabel("—")
+        self.badge.setStyleSheet(self._badge_style(MUTED_TEXT))
+        self.plan_label = QLabel("Aucune licence active")
+        self.plan_label.setStyleSheet("font-size: 15px; font-weight: 700;")
+        top_row.addWidget(self.badge, 0, Qt.AlignVCenter)
+        top_row.addWidget(self.plan_label, 0, Qt.AlignVCenter)
+        top_row.addStretch()
+        card_lay.addLayout(top_row)
+
+        self.detail_label = QLabel("Veuillez saisir une clé de licence pour activer l'application.")
+        self.detail_label.setWordWrap(True)
+        self.detail_label.setStyleSheet(f"font-size: 12px; color: {MUTED_TEXT};")
+        card_lay.addWidget(self.detail_label)
+        card_lay.addStretch(1)
+
+        outer.addWidget(self.status_card, 1)
+
+    @staticmethod
+    def _badge_style(color: str) -> str:
+        return f"""
+            font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+            padding: 4px 12px; border-radius: 10px;
+            background: {color}; color: white;
+        """
+
+    def _browse_key_file(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Charger une clé de licence", "",
+            "Fichiers de licence (*.txt *.lic *.key);;Tous les fichiers (*)")
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+            if content:
+                self.key_input.setText(content)
+        except Exception:
+            from src.ui.widgets.InfoDialog import InfoDialog
+            InfoDialog.warning(self, "Fichier illisible", "Impossible de lire le fichier sélectionné.")
+
+    def _do_activate(self):
+        key = self.key_input.text().strip()
+        if not key:
+            from src.ui.widgets.InfoDialog import InfoDialog
+            InfoDialog.warning(self, "Clé requise", "Veuillez saisir ou charger une clé de licence.")
+            return
+        self.activate_requested.emit(key)
+
+    def set_status(self, status: str, info: dict, days):
+        """Met à jour la carte de statut (appelé par FileManager)."""
+        color = self._STATUS_COLORS.get(status, MUTED_TEXT)
+        self.badge.setStyleSheet(self._badge_style(color))
+        self.badge.setText(self._STATUS_LABELS.get(status, str(status).upper()))
+
+        if info:
+            plan = str(info.get("plan", "")).capitalize()
+            client = info.get("client_name", "")
+            max_users = info.get("max_users", "")
+            title = f"Plan {plan}" if plan else "Licence"
+            if client:
+                title += f" — {client}"
+            self.plan_label.setText(title)
+
+            if days is None:
+                validity = "licence illimitée"
+            elif days >= 0:
+                validity = f"{days} jour(s) restant(s)"
+            else:
+                validity = f"expirée depuis {abs(days)} jour(s)"
+
+            self.detail_label.setText(f"{max_users} utilisateur(s) maximum · {validity}")
+        else:
+            self.plan_label.setText("Aucune licence active")
+            self.detail_label.setText("Veuillez saisir une clé de licence pour activer l'application.")
+
+
 class FileView(QWidget):
-    """Vue principale du module Fichier — Dark/Light auto."""
+    """Vue principale du module Fichier — design sobre, un seul accent."""
 
-    version = "1.0.0"
+    version = "2.1.0"
 
-    import_csv_requested     = Signal(str)
-    export_csv_requested     = Signal(str)
-    create_backup_requested  = Signal()
-    restore_backup_requested = Signal(str)
-    delete_backup_requested  = Signal(str)
+    import_products_requested   = Signal(str)
+    export_products_requested   = Signal(str)
+    template_products_requested = Signal(str)
+
+    import_suppliers_requested   = Signal(str)
+    export_suppliers_requested   = Signal(str)
+    template_suppliers_requested = Signal(str)
+
+    import_categories_requested   = Signal(str)
+    export_categories_requested   = Signal(str)
+    template_categories_requested = Signal(str)
+
+    export_users_requested = Signal(str)
+
+    activate_license_requested = Signal(str)
+
+    create_backup_requested   = Signal()
+    restore_backup_requested  = Signal(str)
+    delete_backup_requested   = Signal(str)
     refresh_backups_requested = Signal()
 
     def __init__(self, parent=None):
@@ -173,199 +546,111 @@ class FileView(QWidget):
         self._backup_data = []
         self.init_ui()
 
-    # ──────────────────────────────────────────────────────────────────
-    # INIT UI
-    # ──────────────────────────────────────────────────────────────────
-
     def init_ui(self):
         main = QVBoxLayout(self)
         main.setContentsMargins(28, 24, 28, 20)
-        main.setSpacing(18)
+        main.setSpacing(16)
 
-        # ── TITRE ────────────────────────────────────────────────────
         title = QLabel("Gestion des Fichiers")
-        title.setStyleSheet("font-size: 28px; font-weight: 700; letter-spacing: -0.5px;")
-        subtitle = QLabel("Import/Export CSV  •  Sauvegarde et Restauration")
-        subtitle.setStyleSheet("font-size: 14px; color: #7f8c8d; margin-top: 4px;")
+        title.setStyleSheet("font-size: 24px; font-weight: 700;")
+        subtitle = QLabel("Import / Export CSV  ·  Sauvegarde et restauration de la base de données  ·  Licence")
+        subtitle.setStyleSheet(f"font-size: 13px; color: {MUTED_TEXT}; margin-top: 2px;")
         main.addWidget(title)
         main.addWidget(subtitle)
-        
-        # Espacement après le titre
-        main.addSpacing(8)
+        main.addSpacing(6)
 
-        # ── SCROLL ───────────────────────────────────────────────────
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("""
-            QScrollArea { background: transparent; border: none; }
-            QScrollArea > QWidget > QWidget { background: transparent; }
-            QScrollBar:vertical {
-                border: none; background: rgba(52, 152, 219, 0.08);
-                width: 12px; border-radius: 6px;
-                margin: 2px;
-            }
-            QScrollBar::handle:vertical {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #3498db, stop:1 #2980b9);
-                min-height: 30px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #2980b9, stop:1 #3498db);
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+        tabs = QTabWidget()
+        tabs.setStyleSheet(f"""
+            QTabWidget::pane {{ border: none; }}
+            QTabBar::tab {{
+                background: transparent;
+                color: {MUTED_TEXT};
+                padding: 9px 18px;
+                margin-right: 4px;
+                border-bottom: 2px solid transparent;
+                font-weight: 600;
+                font-size: 13px;
+            }}
+            QTabBar::tab:selected {{
+                color: {ACCENT};
+                border-bottom: 2px solid {ACCENT};
+            }}
+            QTabBar::tab:hover {{ color: {ACCENT}; }}
         """)
-        scroll.viewport().setAutoFillBackground(False)
 
-        content = QWidget()
-        content.setAutoFillBackground(False)
-        lay = QHBoxLayout(content)
-        lay.setSpacing(20)
-        lay.setContentsMargins(0, 4, 12, 4)
+        self.products_panel = _ImportExportPanel(
+            "Produits",
+            "Colonnes : Nom ; Description ; Catégorie ; Fournisseur ; SKU ; Prix Achat ; "
+            "Prix Vente ; Stock ; Seuil Min ; Emplacement ; Conditionnement ; "
+            "Unités par Paquet ; Taux TVA ; Livre ; Notes\nSéparateur : point-virgule — Encodage : UTF-8",
+            "produits_export.csv", "modele_produits.csv",
+        )
+        self.products_panel.import_requested.connect(self.import_products_requested.emit)
+        self.products_panel.export_requested.connect(self.export_products_requested.emit)
+        self.products_panel.template_requested.connect(self.template_products_requested.emit)
+        tabs.addTab(self.products_panel, "Produits")
 
-        lay.addWidget(self._make_csv_group(), 1)
-        lay.addWidget(self._make_backup_group(), 1)
+        self.suppliers_panel = _ImportExportPanel(
+            "Fournisseurs",
+            "Colonnes : Nom ; Contact ; Email ; Téléphone ; Téléphone 2 ; Adresse ; "
+            "Ville ; Conditions Paiement ; Notes",
+            "fournisseurs_export.csv", "modele_fournisseurs.csv",
+        )
+        self.suppliers_panel.import_requested.connect(self.import_suppliers_requested.emit)
+        self.suppliers_panel.export_requested.connect(self.export_suppliers_requested.emit)
+        self.suppliers_panel.template_requested.connect(self.template_suppliers_requested.emit)
+        tabs.addTab(self.suppliers_panel, "Fournisseurs")
 
-        scroll.setWidget(content)
-        main.addWidget(scroll, 1)
+        self.categories_panel = _ImportExportPanel(
+            "Catégories",
+            "Colonnes : Nom ; Catégorie Parent ; Description ; Icône ; Couleur ; Ordre",
+            "categories_export.csv", "modele_categories.csv",
+        )
+        self.categories_panel.import_requested.connect(self.import_categories_requested.emit)
+        self.categories_panel.export_requested.connect(self.export_categories_requested.emit)
+        self.categories_panel.template_requested.connect(self.template_categories_requested.emit)
+        tabs.addTab(self.categories_panel, "Catégories")
 
-    # ──────────────────────────────────────────────────────────────────
-    # GROUPE CSV
-    # ──────────────────────────────────────────────────────────────────
+        self.users_panel = _ImportExportPanel(
+            "Utilisateurs", "", "utilisateurs_export.csv", "", export_only=True,
+        )
+        self.users_panel.export_requested.connect(self.export_users_requested.emit)
+        users_note = _info_box("Export en lecture seule. Ne contient jamais les mots de passe (ni hachés).")
+        self.users_panel.layout().insertWidget(0, users_note)
+        tabs.addTab(self.users_panel, "Utilisateurs")
 
-    def _make_csv_group(self) -> QGroupBox:
-        grp = QGroupBox("Import / Export Stock (CSV)")
-        grp.setStyleSheet(_groupbox_style("#3498db"))
+        tabs.addTab(self._make_backup_tab(), "Sauvegarde")
 
-        lay = QVBoxLayout(grp)
-        lay.setSpacing(16)
-        lay.setContentsMargins(20, 24, 20, 20)
+        self.license_panel = _LicensePanel()
+        self.license_panel.activate_requested.connect(self.activate_license_requested.emit)
+        tabs.addTab(self.license_panel, "Licence")
 
-        # ── IMPORT ───────────────────────────────────────────────────
-        imp_lbl = QLabel("Importer depuis un fichier CSV")
-        imp_lbl.setStyleSheet("font-size: 13px; font-weight: 600; color: #3498db;")
-        lay.addWidget(imp_lbl)
+        main.addWidget(tabs, 1)
 
-        file_row = QHBoxLayout()
-        file_row.setSpacing(10)
-        self.import_path_input = QLineEdit()
-        self.import_path_input.setPlaceholderText("Sélectionner un fichier .csv …")
-        self.import_path_input.setReadOnly(True)
-        self.import_path_input.setStyleSheet(_input_style())
-        bi = _browse_btn()
-        bi.clicked.connect(self._browse_import)
-        file_row.addWidget(self.import_path_input, 3)
-        file_row.addWidget(bi, 0)
-        lay.addLayout(file_row)
+    # ──────────────────────────────────────────────────────────────
+    # ONGLET SAUVEGARDE
+    # ──────────────────────────────────────────────────────────────
 
-        imp_btns = QHBoxLayout()
-        imp_btns.setSpacing(10)
-        btn_import = _btn("Importer le stock",     "#3498db", "#2980b9", icon_name="upload")
-        btn_tpl    = _btn("Télécharger modèle",    "#9b59b6", "#8e44ad", icon_name="download")
-        btn_import.clicked.connect(self._do_import)
-        btn_tpl.clicked.connect(self._download_template)
-        imp_btns.addWidget(btn_import)
-        imp_btns.addWidget(btn_tpl)
-        lay.addLayout(imp_btns)
+    def _make_backup_tab(self) -> QWidget:
+        wrap = QWidget()
+        lay = QVBoxLayout(wrap)
+        lay.setContentsMargins(0, 4, 0, 0)
+        lay.setSpacing(14)
 
-        lay.addWidget(_info_box(
-            "Format : Nom ; Description ; Prix ; Quantité ; Catégorie\n"
-            "Séparateur : point-virgule ( ; ) — Encodage : UTF-8",
-            "#e67e22"
-        ))
-
-        # Séparateur moderne
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet("""
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 rgba(52, 152, 219, 0), stop:0.5 rgba(52, 152, 219, 0.3), stop:1 rgba(52, 152, 219, 0));
-        """)
-        sep.setFixedHeight(2)
-        lay.addWidget(sep)
-        lay.addSpacing(4)
-
-        # ── EXPORT ───────────────────────────────────────────────────
-        exp_lbl = QLabel("Exporter le stock vers un CSV")
-        exp_lbl.setStyleSheet("font-size: 13px; font-weight: 600; color: #2ecc71;")
-        lay.addWidget(exp_lbl)
-
-        dest_row = QHBoxLayout()
-        dest_row.setSpacing(10)
-        self.export_path_input = QLineEdit()
-        self.export_path_input.setPlaceholderText("Choisir l'emplacement …")
-        self.export_path_input.setReadOnly(True)
-        self.export_path_input.setStyleSheet(_input_style())
-        be = _browse_btn()
-        be.clicked.connect(self._browse_export)
-        dest_row.addWidget(self.export_path_input, 3)
-        dest_row.addWidget(be, 0)
-        lay.addLayout(dest_row)
-
-        btn_export = _btn("Exporter le stock", "#2ecc71", "#27ae60", icon_name="download")
-        btn_export.clicked.connect(self._do_export)
-        lay.addWidget(btn_export)
-
-        lay.addStretch()
-        return grp
-
-    # ──────────────────────────────────────────────────────────────────
-    # GROUPE SAUVEGARDE
-    # ──────────────────────────────────────────────────────────────────
-
-    def _make_backup_group(self) -> QGroupBox:
-        grp = QGroupBox("Sauvegarde et Restauration")
-        grp.setStyleSheet(_groupbox_style("#e67e22"))
-
-        lay = QVBoxLayout(grp)
-        lay.setSpacing(16)
-        lay.setContentsMargins(20, 24, 20, 20)
-
-        btn_backup = _btn("Créer une sauvegarde maintenant", "#e67e22", "#d35400",
-                          h=46, icon_name="save")
+        btn_backup = _btn("Créer une sauvegarde maintenant", primary=True, h=42, icon_name="save")
         btn_backup.clicked.connect(lambda: self.create_backup_requested.emit())
         lay.addWidget(btn_backup)
-        
-        lay.addSpacing(4)
 
-        # En-tête liste
         hdr = QHBoxLayout()
-        lbl = QLabel("Sauvegardes disponibles :")
-        lbl.setStyleSheet("font-size: 13px; font-weight: 600; color: #e67e22;")
-        ref = QPushButton("Actualiser")
-        ref.setMinimumHeight(32)
-        ref.setMaximumHeight(32)
-        ref.setMinimumWidth(100)
-        ref.setCursor(Qt.PointingHandCursor)
-        ref.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #95a5a6, stop:1 #7f8c8d);
-                color: white;
-                border: none;
-                border-radius: 6px;
-                font-size: 12px;
-                font-weight: 600;
-                padding: 4px 12px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #7f8c8d, stop:1 #95a5a6);
-            }
-            QPushButton:pressed {
-                background: #6c7a7b;
-            }
-        """)
+        lbl = QLabel("Sauvegardes disponibles")
+        lbl.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {MUTED_TEXT};")
+        ref = _btn("Actualiser", primary=False, h=30, w=100)
         ref.clicked.connect(lambda: self.refresh_backups_requested.emit())
         hdr.addWidget(lbl)
         hdr.addStretch()
         hdr.addWidget(ref)
         lay.addLayout(hdr)
 
-        # Tableau avec design moderne
         self.backup_table = QTableWidget()
         self.backup_table.setColumnCount(3)
         self.backup_table.setHorizontalHeaderLabels(["Nom", "Date", "Taille"])
@@ -374,67 +659,14 @@ class FileView(QWidget):
         self.backup_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.backup_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.backup_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.backup_table.setAlternatingRowColors(False)
         self.backup_table.setMinimumHeight(220)
-        self.backup_table.setStyleSheet("""
-            QTableWidget {
-                font-size: 12px;
-                border: 2px solid rgba(230, 126, 34, 0.3);
-                border-radius: 10px;
-                gridline-color: transparent;
-                background: transparent;
-            }
-            QTableWidget::item {
-                padding: 10px 12px;
-                border-bottom: 1px solid rgba(230, 126, 34, 0.15);
-            }
-            QTableWidget::item:selected {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #e67e22, stop:1 #d35400);
-                color: white;
-            }
-            QHeaderView::section {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #e67e22, stop:1 #d35400);
-                color: white;
-                font-weight: 600;
-                font-size: 12px;
-                padding: 10px;
-                border: none;
-                border-right: 1px solid rgba(211, 84, 0, 0.5);
-            }
-            QHeaderView::section:first {
-                border-top-left-radius: 8px;
-            }
-            QHeaderView::section:last {
-                border-top-right-radius: 8px;
-                border-right: none;
-            }
-            QScrollBar:vertical {
-                border: none;
-                background: rgba(230, 126, 34, 0.08);
-                width: 10px;
-                border-radius: 5px;
-                margin: 2px;
-            }
-            QScrollBar::handle:vertical {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #e67e22, stop:1 #d35400);
-                min-height: 25px;
-                border-radius: 5px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #d35400, stop:1 #e67e22);
-            }
-        """)
+        self.backup_table.setStyleSheet(_table_style())
         lay.addWidget(self.backup_table)
 
-        # Boutons actions
         act = QHBoxLayout()
         act.setSpacing(10)
-        btn_restore = _btn("Restaurer la sélection", "#3498db", "#2980b9", icon_name="refresh")
-        btn_delete  = _btn("Supprimer",               "#e74c3c", "#c0392b", w=120)
+        btn_restore = _btn("Restaurer la sélection", primary=True, icon_name="refresh")
+        btn_delete = _btn("Supprimer", danger=True, w=120)
         btn_restore.clicked.connect(self._do_restore)
         btn_delete.clicked.connect(self._do_delete)
         act.addWidget(btn_restore)
@@ -442,90 +674,61 @@ class FileView(QWidget):
         lay.addLayout(act)
 
         lay.addWidget(_info_box(
-            "La restauration remplace la base de données actuelle.\n"
-            "Une sauvegarde automatique est créée avant chaque restauration.",
-            "#e74c3c"
+            "La restauration remplace la base de données actuelle. "
+            "Une sauvegarde automatique est créée avant chaque restauration."
         ))
 
-        lay.addStretch()
-        return grp
+        # ── Mini tableau de bord : nombre, poids total, dernière sauvegarde ──
+        self.backup_stats_card = StatsCard("Sauvegardes en bref")
+        self.backup_stats_card.setMinimumHeight(90)
+        lay.addWidget(self.backup_stats_card, 1)
 
-    # ──────────────────────────────────────────────────────────────────
-    # ACTIONS
-    # ──────────────────────────────────────────────────────────────────
-
-    def _browse_import(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Sélectionner un fichier CSV", "",
-            "CSV (*.csv);;Tous les fichiers (*)")
-        if path:
-            self.import_path_input.setText(path)
-
-    def _browse_export(self):
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Enregistrer le CSV", "stock_export.csv",
-            "CSV (*.csv);;Tous les fichiers (*)")
-        if path:
-            self.export_path_input.setText(path)
-
-    def _do_import(self):
-        path = self.import_path_input.text().strip()
-        if not path:
-            from src.ui.widgets.InfoDialog import InfoDialog
-            InfoDialog.warning(self, "Fichier requis",
-                               "Veuillez sélectionner un fichier CSV à importer.")
-            return
-        self.import_csv_requested.emit(path)
-
-    def _do_export(self):
-        path = self.export_path_input.text().strip()
-        if not path:
-            from src.ui.widgets.InfoDialog import InfoDialog
-            InfoDialog.warning(self, "Destination requise",
-                               "Veuillez choisir un emplacement pour le CSV.")
-            return
-        self.export_csv_requested.emit(path)
-
-    def _download_template(self):
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Sauvegarder le modèle CSV", "modele_stock.csv", "CSV (*.csv)")
-        if path:
-            parent = self.parent()
-            if parent and hasattr(parent, 'modules') and 'file' in parent.modules:
-                parent.modules['file'].generate_csv_template(path)
+        return wrap
 
     def _do_restore(self):
         row = self.backup_table.currentRow()
         if row < 0 or row >= len(self._backup_data):
             from src.ui.widgets.InfoDialog import InfoDialog
-            InfoDialog.warning(self, "Sélection requise",
-                               "Veuillez sélectionner une sauvegarde à restaurer.")
+            InfoDialog.warning(self, "Sélection requise", "Veuillez sélectionner une sauvegarde à restaurer.")
             return
-        self.restore_backup_requested.emit(self._backup_data[row]['path'])
+        self.restore_backup_requested.emit(self._backup_data[row]["path"])
 
     def _do_delete(self):
         row = self.backup_table.currentRow()
         if row < 0 or row >= len(self._backup_data):
             from src.ui.widgets.InfoDialog import InfoDialog
-            InfoDialog.warning(self, "Sélection requise",
-                               "Veuillez sélectionner une sauvegarde à supprimer.")
+            InfoDialog.warning(self, "Sélection requise", "Veuillez sélectionner une sauvegarde à supprimer.")
             return
-        self.delete_backup_requested.emit(self._backup_data[row]['path'])
-
-    # ──────────────────────────────────────────────────────────────────
-    # MÉTHODE PUBLIQUE
-    # ──────────────────────────────────────────────────────────────────
+        self.delete_backup_requested.emit(self._backup_data[row]["path"])
 
     def update_backups_list(self, backups: list):
         self._backup_data = backups
         self.backup_table.setRowCount(len(backups))
         for i, b in enumerate(backups):
-            self.backup_table.setItem(i, 0, QTableWidgetItem(b['name']))
-            self.backup_table.setItem(i, 1, QTableWidgetItem(b['date']))
-            self.backup_table.setItem(i, 2, QTableWidgetItem(b['size']))
+            self.backup_table.setItem(i, 0, QTableWidgetItem(b["name"]))
+            self.backup_table.setItem(i, 1, QTableWidgetItem(b["date"]))
+            self.backup_table.setItem(i, 2, QTableWidgetItem(b["size"]))
         if not backups:
             self.backup_table.setRowCount(1)
             empty = QTableWidgetItem("Aucune sauvegarde disponible")
             empty.setTextAlignment(Qt.AlignCenter)
             self.backup_table.setItem(0, 0, empty)
             self.backup_table.setSpan(0, 0, 1, 3)
+
+        if hasattr(self, "backup_stats_card"):
+            if backups:
+                total_kb = sum(float(b["size"].replace(" KB", "")) for b in backups)
+                total_size = f"{total_kb / 1024:.1f} MB" if total_kb >= 1024 else f"{total_kb:.1f} KB"
+                # backups est trié du plus récent au plus ancien (voir _get_backups_list)
+                last_date = backups[0]["date"].split(" ")[0]
+                self.backup_stats_card.set_stats([
+                    (fmt_int(len(backups)), "Sauvegarde(s)"),
+                    (total_size, "Espace utilisé"),
+                    (last_date, "Dernière sauvegarde"),
+                ])
+            else:
+                self.backup_stats_card.set_stats([
+                    ("0", "Sauvegarde(s)"),
+                    ("—", "Espace utilisé"),
+                    ("—", "Dernière sauvegarde"),
+                ])

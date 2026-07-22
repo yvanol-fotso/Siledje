@@ -5,6 +5,7 @@ Fenêtre principale — VERSION FINALE COMPLÈTE.
 import sys
 import psutil
 from datetime import datetime
+from src.managers.auth.auth_manager import AuthManager
 from src.utils.compat import (
     QMainWindow, QMessageBox, QWidget, QVBoxLayout, QLabel,
     QSystemTrayIcon, QPushButton, QDialog, QHBoxLayout, QSizePolicy,
@@ -38,7 +39,7 @@ from src.ui.widgets.InfoDialog import InfoDialog, DialogType
 
 class MainWindow(QMainWindow):
 
-    def __init__(self, config=None, theme_manager=None, current_user=None):
+    def __init__(self, config=None, theme_manager=None, current_user=None, auth_manager=None):
         super().__init__()
         QCoreApplication.setOrganizationName("Siledje")
         QCoreApplication.setApplicationName("Siledje")
@@ -53,6 +54,7 @@ class MainWindow(QMainWindow):
         self.zoom_manager = ZoomManager(self)
         self.zoom_manager.zoom_changed.connect(self._on_zoom_changed)
         self.theme_manager.theme_changed.connect(self.on_theme_changed)
+        self.auth_manager = auth_manager if auth_manager else AuthManager()
 
         if not self.current_user:
             self.show_login()
@@ -63,7 +65,7 @@ class MainWindow(QMainWindow):
     # ── AUTH ──────────────────────────────────────────────────────────
 
     def show_login(self):
-        login_dialog = LoginDialog(self.config, self.theme_manager, self)
+        login_dialog = LoginDialog(self.config, self.theme_manager, self.auth_manager, self)
         login_dialog.auth_success.connect(self.on_login_success)
         if login_dialog.exec() == QDialog.Accepted:
             self.current_user = login_dialog.get_authenticated_user()
@@ -101,12 +103,12 @@ class MainWindow(QMainWindow):
     def init_modules(self):
         return {
             'accueil':               AccueilManager(self),
-            'stock':                 StockManager(),
-            'sales':                 SalesManager(),
-            'admin':                 AdminManager(self),
+            'stock':                 StockManager(self, self.current_user),
+            'sales':                 SalesManager(self, self.current_user), 
+            'admin':                 AdminManager(self, self.auth_manager, self.current_user),
             'security':              SecurityManager(self),
-            'reports':               ReportManager(),
-            'barcode_test':          BarcodeManager(self),
+            'reports':               ReportManager(self),
+            'barcode_test':          BarcodeManager(self, self.current_user),
             'ai':                    AIManager(self),
             'suppliers':             SupplierManager(self),
             'database_settings':     DatabaseSettingsManager(self),
