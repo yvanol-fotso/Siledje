@@ -2,6 +2,11 @@
 Gestionnaire des opérations sur les fichiers.
 Import/Export CSV alignés sur le schéma réel (CatalogRepository / UserRepository)
 + Sauvegarde/Restauration de la base de données + Activation de licence.
+
+Contrôle d'accès basé sur les permissions réelles du rôle de current_user
+(table roles) — double protection : boutons désactivés côté vue via
+apply_permissions(), et revérification systématique côté manager avant
+chaque action sensible.
 """
 
 import csv
@@ -21,14 +26,12 @@ from src.managers.license.license_manager import LicenseManager
 
 
 def _norm(s: str) -> str:
-    """Normalise un en-tête CSV : minuscule, sans accents, sans espaces superflus."""
     s = s.strip().lower()
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
     return re.sub(r"[^a-z0-9]", "", s)
 
 
 def _fmt_int(n) -> str:
-    """Formate un entier avec espace comme séparateur de milliers (1234 -> '1 234')."""
     try:
         return f"{int(n):,}".replace(",", " ")
     except (TypeError, ValueError):
@@ -36,7 +39,6 @@ def _fmt_int(n) -> str:
 
 
 def _fmt_money(n) -> str:
-    """Formate un montant en FCFA, sans décimales."""
     try:
         return f"{int(round(float(n))):,}".replace(",", " ") + " FCFA"
     except (TypeError, ValueError):
@@ -46,9 +48,8 @@ def _fmt_money(n) -> str:
 class FileManager(QObject):
     """Gère toutes les opérations fichier (import/export/sauvegarde/licence) de l'application."""
 
-    version = "2.1.0"
+    version = "3.0.0"
 
-    # ── Colonnes PRODUITS (schéma réel products) ───────────────────────
     PRODUCT_COLUMNS_FR = [
         "Nom", "Description", "Catégorie", "Fournisseur", "SKU",
         "Prix Achat", "Prix Vente", "Stock", "Seuil Min", "Emplacement",
@@ -72,7 +73,6 @@ class FileManager(QObject):
         "notes": "notes", "remarques": "notes",
     }
 
-    # ── Colonnes FOURNISSEURS ───────────────────────────────────────────
     SUPPLIER_COLUMNS_FR = [
         "Nom", "Contact", "Email", "Téléphone", "Téléphone 2",
         "Adresse", "Ville", "Conditions Paiement", "Notes",
@@ -89,7 +89,6 @@ class FileManager(QObject):
         "notes": "notes",
     }
 
-    # ── Colonnes CATÉGORIES ─────────────────────────────────────────────
     CATEGORY_COLUMNS_FR = ["Nom", "Catégorie Parent", "Description", "Icône", "Couleur", "Ordre"]
     CATEGORY_HEADER_MAP = {
         "nom": "name",
@@ -100,10 +99,11 @@ class FileManager(QObject):
         "ordre": "sort_order",
     }
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, current_user=None):
         super().__init__(parent)
         self.parent_window = parent
         self.view = None
+        self.current_user = current_user
 
         self.catalog_repo = CatalogRepository()
         self.user_repo = UserRepository()
@@ -121,14 +121,47 @@ class FileManager(QObject):
 
         print(f"[FileManager v{self.version}] Initialisé — BDD : {self.db_path}")
 
+    # ────────────────────────────────────────────────────────────────
+    # PERMISSIONS
+    # ────────────────────────────────────────────────────────────────
+
+    def _has_permission(self, permission_name: str) -> bool:
+        """Vérifie une permission réelle du rôle. Aucun utilisateur -> tout refusé."""
+        if not self.current_user:
+            return False
+        return self.current_user.has_permission(permission_name)
+
+    def _require_permission(self, permission_name: str, action_label: str) -> bool:
+        """Revérification côté manager avant une action sensible. Affiche un
+        message et retourne False si refusé — filet de sécurité même si un
+        bouton restait cliquable côté vue."""
+        if self._has_permission(permission_name):
+            return True
+        QMessageBox.warning(
+            self.view, "Permission refusée",
+            f"Vous n'avez pas la permission d'effectuer cette action : {action_label}.\n"
+            "Contactez un administrateur si vous pensez que c'est une erreur."
+        )
+        return False
+
     def get_ui(self):
         if self.view is None:
             from src.ui.views.file_view import FileView
             self.view = FileView(self.parent_window)
             self._connect_signals()
+            self._apply_permissions()
             self._refresh_backups_list()
             self._refresh_all_panels()
         return self.view
+
+    def _apply_permissions(self):
+        if not self.view:
+            return
+        self.view.apply_permissions(
+            can_manage_stock=self._has_permission("can_manage_stock"),
+            can_manage_users=self._has_permission("can_manage_users"),
+            can_configure_system=self._has_permission("can_configure_system"),
+        )
 
     def _connect_signals(self):
         v = self.view
@@ -170,7 +203,6 @@ class FileManager(QObject):
         return backups
 
     def _map_headers(self, fieldnames, header_map):
-        """Associe chaque en-tête normalisé du CSV à sa clé logique."""
         result = {}
         for h in fieldnames:
             key = header_map.get(_norm(h))
@@ -179,7 +211,7 @@ class FileManager(QObject):
         return result
 
     # ────────────────────────────────────────────────────────────────
-    # RÉSUMÉS (comblent l'espace en bas de chaque onglet)
+    # RÉSUMÉS
     # ────────────────────────────────────────────────────────────────
 
     def _refresh_all_panels(self):
@@ -192,7 +224,6 @@ class FileManager(QObject):
             categories = self.catalog_repo.get_all_categories(active_only=False)
             users = self.user_repo.get_all_users()
 
-            # ── Produits : total, stock bas, valeur du stock (prix d'achat) ──
             stock_value = sum(
                 float(p.get("buy_price") or 0) * float(p.get("stock_quantity") or 0)
                 for p in products
@@ -203,7 +234,6 @@ class FileManager(QObject):
                 (_fmt_money(stock_value), "Valeur du stock"),
             ])
 
-            # ── Fournisseurs : total, avec email, avec téléphone ──
             with_email = sum(1 for s in suppliers if s.get("email"))
             with_phone = sum(1 for s in suppliers if s.get("phone"))
             self.view.suppliers_panel.set_stats([
@@ -212,7 +242,6 @@ class FileManager(QObject):
                 (_fmt_int(with_phone), "Avec téléphone"),
             ])
 
-            # ── Catégories : total, principales, sous-catégories ──
             main_cats = sum(1 for c in categories if not c.get("parent_id"))
             sub_cats = len(categories) - main_cats
             self.view.categories_panel.set_stats([
@@ -221,20 +250,20 @@ class FileManager(QObject):
                 (_fmt_int(sub_cats), "Sous-catégories"),
             ])
 
-            # ── Utilisateurs : total, actifs, inactifs ──
-            active_users = sum(1 for u in users if u.get("is_active"))
-            self.view.users_panel.set_stats([
-                (_fmt_int(len(users)), "Utilisateur(s)"),
-                (_fmt_int(active_users), "Actif(s)"),
-                (_fmt_int(len(users) - active_users), "Inactif(s)"),
-            ])
+            if self._has_permission("can_manage_users"):
+                active_users = sum(1 for u in users if u.get("is_active"))
+                self.view.users_panel.set_stats([
+                    (_fmt_int(len(users)), "Utilisateur(s)"),
+                    (_fmt_int(active_users), "Actif(s)"),
+                    (_fmt_int(len(users) - active_users), "Inactif(s)"),
+                ])
         except Exception as e:
             print(f"[FileManager] Erreur rafraîchissement résumés : {e}")
 
         self._refresh_license_panel()
 
     def _refresh_license_panel(self):
-        if not self.view:
+        if not self.view or not self._has_permission("can_configure_system"):
             return
         try:
             status = self.license_manager.check_current_license()
@@ -245,11 +274,14 @@ class FileManager(QObject):
             print(f"[FileManager] Erreur rafraîchissement licence : {e}")
 
     # ────────────────────────────────────────────────────────────────
-    # LICENCE
+    # LICENCE — réservé aux profils can_configure_system
     # ────────────────────────────────────────────────────────────────
 
     @Slot(str)
     def activate_license(self, key_text: str):
+        if not self._require_permission("can_configure_system", "activer une licence"):
+            return
+
         key = (key_text or "").strip()
         if not key:
             QMessageBox.warning(self.view, "Clé requise", "Veuillez saisir ou charger une clé de licence.")
@@ -270,11 +302,13 @@ class FileManager(QObject):
         self._refresh_license_panel()
 
     # ────────────────────────────────────────────────────────────────
-    # PRODUITS
+    # PRODUITS — import réservé à can_manage_stock, export libre
     # ────────────────────────────────────────────────────────────────
 
     @Slot(str)
     def import_products_csv(self, file_path: str):
+        if not self._require_permission("can_manage_stock", "importer des produits"):
+            return
         try:
             path = Path(file_path)
             if not path.exists():
@@ -420,6 +454,8 @@ class FileManager(QObject):
             QMessageBox.critical(self.view, "Erreur d'export", str(e))
 
     def generate_products_template(self, file_path: str):
+        if not self._require_permission("can_manage_stock", "télécharger un modèle d'import"):
+            return
         path = Path(file_path)
         with open(path, "w", encoding="utf-8-sig", newline="") as f:
             writer = csv.writer(f, delimiter=";")
@@ -438,6 +474,8 @@ class FileManager(QObject):
 
     @Slot(str)
     def import_suppliers_csv(self, file_path: str):
+        if not self._require_permission("can_manage_stock", "importer des fournisseurs"):
+            return
         try:
             path = Path(file_path)
             if not path.exists():
@@ -515,6 +553,8 @@ class FileManager(QObject):
             QMessageBox.critical(self.view, "Erreur d'export", str(e))
 
     def generate_suppliers_template(self, file_path: str):
+        if not self._require_permission("can_manage_stock", "télécharger un modèle d'import"):
+            return
         path = Path(file_path)
         with open(path, "w", encoding="utf-8-sig", newline="") as f:
             writer = csv.writer(f, delimiter=";")
@@ -529,6 +569,8 @@ class FileManager(QObject):
 
     @Slot(str)
     def import_categories_csv(self, file_path: str):
+        if not self._require_permission("can_manage_stock", "importer des catégories"):
+            return
         try:
             path = Path(file_path)
             if not path.exists():
@@ -612,6 +654,8 @@ class FileManager(QObject):
             QMessageBox.critical(self.view, "Erreur d'export", str(e))
 
     def generate_categories_template(self, file_path: str):
+        if not self._require_permission("can_manage_stock", "télécharger un modèle d'import"):
+            return
         path = Path(file_path)
         with open(path, "w", encoding="utf-8-sig", newline="") as f:
             writer = csv.writer(f, delimiter=";")
@@ -620,11 +664,13 @@ class FileManager(QObject):
         QMessageBox.information(self.view, "Modèle créé", f"Modèle catégories créé :\n{path.absolute()}")
 
     # ────────────────────────────────────────────────────────────────
-    # UTILISATEURS (export uniquement — jamais le mot de passe/hash)
+    # UTILISATEURS — export réservé à can_manage_users
     # ────────────────────────────────────────────────────────────────
 
     @Slot(str)
     def export_users_csv(self, file_path: str):
+        if not self._require_permission("can_manage_users", "exporter la liste des utilisateurs"):
+            return
         try:
             users = self.user_repo.get_all_users()
             if not users:
@@ -653,7 +699,7 @@ class FileManager(QObject):
             QMessageBox.critical(self.view, "Erreur d'export", str(e))
 
     # ────────────────────────────────────────────────────────────────
-    # SAUVEGARDE / RESTAURATION (base de données complète)
+    # SAUVEGARDE / RESTAURATION — restaurer/supprimer réservé à can_configure_system
     # ────────────────────────────────────────────────────────────────
 
     @Slot()
@@ -676,6 +722,8 @@ class FileManager(QObject):
 
     @Slot(str)
     def restore_backup(self, backup_path: str):
+        if not self._require_permission("can_configure_system", "restaurer une sauvegarde"):
+            return
         try:
             path = Path(backup_path)
             if not path.exists():
@@ -693,6 +741,13 @@ class FileManager(QObject):
             if self.db_path.exists():
                 shutil.copy2(str(self.db_path), str(auto_backup))
             shutil.copy2(str(path), str(self.db_path))
+
+            if self.current_user:
+                self.user_repo.log_audit(
+                    self.current_user.id, "RESTORE_DB", "database", None,
+                    description=f"Restauration depuis {path.name}"
+                )
+
             QMessageBox.information(
                 self.view, "Restauration réussie",
                 f"Base restaurée depuis {path.name}.\nRedémarrez l'application."
@@ -702,6 +757,8 @@ class FileManager(QObject):
 
     @Slot(str)
     def delete_backup(self, backup_path: str):
+        if not self._require_permission("can_configure_system", "supprimer une sauvegarde"):
+            return
         try:
             path = Path(backup_path)
             reply = QMessageBox.question(

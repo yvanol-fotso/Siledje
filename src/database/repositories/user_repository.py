@@ -223,3 +223,63 @@ class UserRepository:
             (1 if is_active else 0, user_id)
         )
         self.db.commit()
+
+
+    def get_role_by_id(self, role_id: int):
+        cursor = self.db.get_cursor()
+        cursor.execute("SELECT * FROM roles WHERE id = ?", (role_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def create_role(self, name: str, description: str = "", **permissions) -> int:
+        cursor = self.db.get_cursor()
+        perm_cols = ["can_manage_stock", "can_manage_users", "can_view_reports",
+                     "can_manage_cameras", "can_process_returns",
+                     "can_manage_suppliers", "can_configure_system"]
+        values = [1 if permissions.get(col, False) else 0 for col in perm_cols]
+        cursor.execute(f"""
+            INSERT INTO roles (name, description, {', '.join(perm_cols)})
+            VALUES (?, ?, {', '.join(['?'] * len(perm_cols))})
+        """, [name, description] + values)
+        self.db.commit()
+        return cursor.lastrowid
+
+    def update_role(self, role_id: int, name: str = None, description: str = None,
+                     **permissions) -> bool:
+        cursor = self.db.get_cursor()
+        updates, values = [], []
+
+        if name is not None:
+            updates.append("name = ?")
+            values.append(name)
+        if description is not None:
+            updates.append("description = ?")
+            values.append(description)
+
+        perm_cols = ["can_manage_stock", "can_manage_users", "can_view_reports",
+                     "can_manage_cameras", "can_process_returns",
+                     "can_manage_suppliers", "can_configure_system"]
+        for col in perm_cols:
+            if col in permissions:
+                updates.append(f"{col} = ?")
+                values.append(1 if permissions[col] else 0)
+
+        if not updates:
+            return False
+        values.append(role_id)
+        cursor.execute(f"UPDATE roles SET {', '.join(updates)} WHERE id = ?", values)
+        self.db.commit()
+        return True
+
+    def role_name_exists(self, name: str, exclude_id: int = None) -> bool:
+        cursor = self.db.get_cursor()
+        if exclude_id:
+            cursor.execute("SELECT id FROM roles WHERE name = ? AND id != ?", (name, exclude_id))
+        else:
+            cursor.execute("SELECT id FROM roles WHERE name = ?", (name,))
+        return cursor.fetchone() is not None
+
+    def count_users_with_role(self, role_id: int) -> int:
+        cursor = self.db.get_cursor()
+        cursor.execute("SELECT COUNT(*) as c FROM users WHERE role_id = ?", (role_id,))
+        return cursor.fetchone()["c"]

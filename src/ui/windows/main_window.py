@@ -106,7 +106,7 @@ class MainWindow(QMainWindow):
             'stock':                 StockManager(self, self.current_user),
             'sales':                 SalesManager(self, self.current_user), 
             'admin':                 AdminManager(self, self.auth_manager, self.current_user),
-            'security':              SecurityManager(self),
+            'security':      SecurityManager(self, self.auth_manager.user_repo),
             'reports':               ReportManager(self),
             'barcode_test':          BarcodeManager(self, self.current_user),
             'ai':                    AIManager(self),
@@ -114,7 +114,7 @@ class MainWindow(QMainWindow):
             'database_settings':     DatabaseSettingsManager(self),
             'notification_settings': NotificationSettingsManager(self),
             'bug_report':            BugReportManager(self),
-            'file':                  FileManager(self),
+            'file':                  FileManager(self, self.current_user),
         }
 
     def setup_main_content(self):

@@ -87,7 +87,6 @@ class StockView(QWidget):
         main_layout.addLayout(self._create_search_section())
         main_layout.addWidget(self._create_filters_section())
 
-        # Tableau — prend tout l'espace restant
         self.table_view = self._create_table()
         main_layout.addWidget(self.table_view, 1)
 
@@ -123,7 +122,6 @@ class StockView(QWidget):
         layout = QHBoxLayout()
         layout.setSpacing(12)
 
-        # Champ de recherche — même style que sales_view
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Rechercher un produit...")
         self.search_input.setMinimumHeight(42)
@@ -139,7 +137,6 @@ class StockView(QWidget):
             }
         """)
 
-        # Bouton Rechercher
         search_btn = QPushButton("Rechercher")
         search_btn.setMinimumHeight(42)
         search_btn.setMinimumWidth(140)
@@ -161,7 +158,6 @@ class StockView(QWidget):
         """)
         search_btn.clicked.connect(self._on_search_clicked)
 
-        # Bouton Ajouter
         add_btn = QPushButton("Ajouter Produit")
         add_btn.setMinimumHeight(42)
         add_btn.setMinimumWidth(160)
@@ -214,10 +210,8 @@ class StockView(QWidget):
         grid.setSpacing(12)
         grid.setContentsMargins(16, 16, 16, 16)
 
-        # Style commun label — même police que sales_view, pas gras
         lbl_style = "font-size: 14px; font-weight: normal;"
 
-        # Style commun ComboBox — pas de background forcé, comme sales_view
         combo_style = """
             QComboBox {
                 font-size: 14px;
@@ -229,7 +223,6 @@ class StockView(QWidget):
             QComboBox::drop-down { border: none; padding-right: 8px; }
         """
 
-        # ── Ligne 0 : Catégorie + Fournisseur ──────────────────────
         lbl_cat = QLabel("Catégorie:")
         lbl_cat.setStyleSheet(lbl_style)
         grid.addWidget(lbl_cat, 0, 0)
@@ -250,16 +243,14 @@ class StockView(QWidget):
         self.supplier_filter_combo.setStyleSheet(combo_style)
         grid.addWidget(self.supplier_filter_combo, 0, 3)
 
-        # ── Ligne 1 : Type d'emballage (radio buttons) ─────────────
         lbl_pack = QLabel("Type d'emballage:")
         lbl_pack.setStyleSheet(lbl_style)
         grid.addWidget(lbl_pack, 1, 0)
 
         pack_layout = QHBoxLayout()
-        pack_layout.setSpacing(20)   # espace entre les radio buttons
+        pack_layout.setSpacing(20)
         self.packaging_group = QButtonGroup(self)
 
-        # Radio buttons : pas de couleur forcée, pas gras, séparés du dropdown
         radio_style = """
             QRadioButton {
                 font-size: 13px;
@@ -278,7 +269,6 @@ class StockView(QWidget):
         pack_layout.addStretch()
         grid.addLayout(pack_layout, 1, 1, 1, 3)
 
-        # ── Ligne 2 : Classe + Dates ────────────────────────────────
         lbl_cls = QLabel("Classe:")
         lbl_cls.setStyleSheet(lbl_style)
         grid.addWidget(lbl_cls, 2, 0)
@@ -334,9 +324,7 @@ class StockView(QWidget):
         return group
 
     # ──────────────────────────────────────────────────────────────────
-    # TABLEAU — copie exacte du style sales_view
-    # Pas de background-color fixe → s'adapte light/dark automatiquement
-    # Texte normal (pas gras), lignes séparées discrètes, scrollbars vertes
+    # TABLEAU
     # ──────────────────────────────────────────────────────────────────
 
     def _create_table(self) -> QTableView:
@@ -377,7 +365,6 @@ class StockView(QWidget):
                 border-right: 1px solid #2980b9;
             }
             QHeaderView::section:last { border-right: none; }
-            /* ── Scrollbar verticale verte ── */
             QScrollBar:vertical {
                 border: none;
                 background: transparent;
@@ -392,7 +379,6 @@ class StockView(QWidget):
             QScrollBar::handle:vertical:hover { background: #2ecc71; }
             QScrollBar::add-line:vertical,
             QScrollBar::sub-line:vertical { height: 0px; }
-            /* ── Scrollbar horizontale verte — toujours visible ── */
             QScrollBar:horizontal {
                 border: none;
                 background: rgba(150, 150, 150, 0.15);
@@ -409,7 +395,6 @@ class StockView(QWidget):
             QScrollBar::add-line:horizontal,
             QScrollBar::sub-line:horizontal { width: 0px; }
         """)
-        # Marge en bas pour que la dernière ligne soit toujours visible
         table.setContentsMargins(0, 0, 0, 12)
 
         return table

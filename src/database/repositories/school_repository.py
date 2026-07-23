@@ -134,6 +134,30 @@ class SchoolRepository:
         """, (level_name, system_name))
         return [dict(row) for row in cursor.fetchall()]
 
+    def get_all_classes(self) -> List[Dict[str, Any]]:
+        """Toutes les classes, toutes langues/niveaux confondus (pour un filtre global)."""
+        cursor = self.db.get_cursor()
+        cursor.execute("""
+            SELECT sc.id, sc.name, sl.name as level_name, ss.name as system_name
+            FROM school_classes sc
+            JOIN school_levels sl ON sc.level_id = sl.id
+            JOIN school_systems ss ON sc.system_id = ss.id
+            ORDER BY sl.sort_order, ss.name, sc.sort_order
+        """)
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_product_ids_for_class(self, class_id: int) -> set:
+        """IDs des produits (manuels) associés à une classe donnée."""
+        cursor = self.db.get_cursor()
+        cursor.execute("SELECT product_id FROM books WHERE school_class_id = ?", (class_id,))
+        return {row["product_id"] for row in cursor.fetchall()}
+
+    def get_class_by_name(self, class_name: str) -> Optional[Dict[str, Any]]:
+        cursor = self.db.get_cursor()
+        cursor.execute("SELECT * FROM school_classes WHERE name = ?", (class_name,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
     # ── BOOKS ────────────────────────────────────────────────────────
 
     def get_books_for_class(self, school_class_id: int) -> List[Dict[str, Any]]:
