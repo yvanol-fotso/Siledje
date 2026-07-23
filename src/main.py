@@ -18,6 +18,8 @@ from src.managers.auth.auth_manager import AuthManager
 
 from src.managers.license.license_manager import LicenseManager, LicenseStatus
 from src.ui.windows.license_window import LicenseDialog
+from src.database.migrations.migration_manager import run_migrations
+run_migrations()
 
 
 def main():

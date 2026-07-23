@@ -2,9 +2,9 @@
 Fenêtre principale — VERSION FINALE COMPLÈTE.
 """
 
+from datetime import datetime
 import sys
 import psutil
-from datetime import datetime
 from src.managers.auth.auth_manager import AuthManager
 from src.utils.compat import (
     QMainWindow, QMessageBox, QWidget, QVBoxLayout, QLabel,
@@ -27,6 +27,7 @@ from src.managers.zoom import ZoomManager
 from src.managers.help import BugReportManager
 from src.managers.file import FileManager
 from src.managers.supplier.supplier_manager import SupplierManager
+from src.managers.sync.sync_manager import SyncManager
 
 from src.database.manager import DatabaseManager
 from src.utils.config import AppConfig
@@ -106,7 +107,7 @@ class MainWindow(QMainWindow):
             'stock':                 StockManager(self, self.current_user),
             'sales':                 SalesManager(self, self.current_user), 
             'admin':                 AdminManager(self, self.auth_manager, self.current_user),
-            'security':      SecurityManager(self, self.auth_manager.user_repo),
+            'security':              SecurityManager(self, self.auth_manager.user_repo),
             'reports':               ReportManager(self),
             'barcode_test':          BarcodeManager(self, self.current_user),
             'ai':                    AIManager(self),
@@ -115,6 +116,7 @@ class MainWindow(QMainWindow):
             'notification_settings': NotificationSettingsManager(self),
             'bug_report':            BugReportManager(self),
             'file':                  FileManager(self, self.current_user),
+            'sync':                  SyncManager(self, self.current_user),
         }
 
     def setup_main_content(self):
@@ -202,6 +204,9 @@ class MainWindow(QMainWindow):
         settings_menu.addSeparator()
         settings_menu.addAction(self.create_action(
             "Gestion des notifications",     "",       self.open_notification_settings))
+        settings_menu.addSeparator()
+        settings_menu.addAction(self.create_action(
+            "Synchronisation Cloud", "Ctrl+Shift+C", self.open_sync_module))
 
         # ── AFFICHAGE ─────────────────────────────────────────────────
         view_menu = menubar.addMenu("&Affichage")
@@ -386,6 +391,10 @@ class MainWindow(QMainWindow):
             self.zoom_label.setText(f"  {level}%  ")
         self._update_zoom_actions()
         self.statusBar().showMessage(f"Zoom: {level}%", 2000)
+
+    @Slot()
+    def open_sync_module(self):
+        self.switch_to_module('sync')
 
     def _update_zoom_actions(self):
         current = self.zoom_manager.current_level
