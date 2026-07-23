@@ -1,6 +1,6 @@
 """
 Vue de gestion des rôles et permissions - Interface utilisateur responsive.
-Style identique à stock_view : titre adaptatif dark/light, tableau propre.
+Style identique aux autres vues : palette unifiée, titre coloré, tableau propre.
 """
 
 from PySide6.QtWidgets import (
@@ -10,6 +10,39 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen, QFont
 from src.utils.helpers import get_asset_path
+
+
+# ──────────────────────────────────────────────────────────────────
+# PALETTE CENTRALISÉE (une seule source de vérité pour les couleurs)
+# ──────────────────────────────────────────────────────────────────
+class Palette:
+    ACCENT          = "#567ba1"   # en-têtes, focus des champs
+    ACCENT_HOVER    = "#46648a"   # survol des en-têtes / boutons liés à l'accent
+    ACCENT_PRESSED  = "#3a5470"
+    SELECTION       = "#7895b4"   # couleur unique de sélection/désélection de ligne
+    ROW_HOVER       = "rgba(86, 123, 161, 0.10)"  # survol léger d'une ligne (dérivé de l'accent)
+    BORDER_GRAY     = "#bdc3c7"
+    SCROLLBAR_BG    = "#d5d8dc"   # Fond de la scrollbar (gris clair)
+    SCROLLBAR_HANDLE = "#aab7b8"  # Poignée de la scrollbar (gris)
+    SCROLLBAR_HOVER = "#95a5a6"   # Poignée survolée (gris plus foncé)
+    BASE_WHITE      = "#ffffff"
+    
+    # Couleurs supplémentaires pour les boutons
+    SUCCESS         = "#2ecc71"   # Vert
+    SUCCESS_HOVER   = "#27ae60"
+    SUCCESS_PRESSED = "#1e8449"
+    INFO            = "#3498db"   # Bleu
+    INFO_HOVER      = "#2980b9"
+    INFO_PRESSED    = "#21618c"
+    WARNING         = "#f39c12"   # Orange
+    WARNING_HOVER   = "#e67e22"
+    WARNING_PRESSED = "#d35400"
+    DANGER          = "#e74c3c"   # Rouge
+    DANGER_HOVER    = "#c0392b"
+    DANGER_PRESSED  = "#a93226"
+    ORANGE          = "#e67e22"   # Orange pour le thème sécurité
+    ORANGE_HOVER    = "#d35400"
+    ORANGE_PRESSED  = "#ba4a00"
 
 
 def load_svg_icon(icon_name: str, size: int = 24) -> QPixmap:
@@ -32,7 +65,7 @@ def _placeholder(size: int, letter: str) -> QPixmap:
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing)
-    painter.setBrush(QBrush(QColor("#e67e22")))
+    painter.setBrush(QBrush(QColor(Palette.ACCENT)))
     painter.setPen(QPen(Qt.NoPen))
     painter.drawRoundedRect(0, 0, size, size, 4, 4)
     painter.setPen(QColor("#ffffff"))
@@ -43,7 +76,7 @@ def _placeholder(size: int, letter: str) -> QPixmap:
 
 
 class SecurityView(QWidget):
-    """Vue de gestion des rôles et permissions. Style identique à stock_view."""
+    """Vue de gestion des rôles et permissions. Style identique aux autres vues."""
 
     search_requested      = Signal(str)
     add_role_requested    = Signal()
@@ -56,6 +89,7 @@ class SecurityView(QWidget):
         self.parent = parent
         self.search_input = None
         self.table_view   = None
+        self._last_selected_row = -1
         self.init_ui()
 
     # ──────────────────────────────────────────────────────────────────
@@ -79,7 +113,7 @@ class SecurityView(QWidget):
         self._connect_signals()
 
     # ──────────────────────────────────────────────────────────────────
-    # EN-TÊTE — pas de couleur fixe → blanc dark / noir light auto
+    # EN-TÊTE — titre coloré avec la palette unifiée
     # ──────────────────────────────────────────────────────────────────
 
     def _create_header(self) -> QHBoxLayout:
@@ -91,7 +125,11 @@ class SecurityView(QWidget):
         icon_label.setPixmap(load_svg_icon("shield", size=40))
 
         title = QLabel("Gestion des Rôles et Permissions")
-        title.setStyleSheet("font-size: 28px; font-weight: bold;")
+        title.setStyleSheet(f"""
+            font-size: 28px; 
+            font-weight: bold;
+            color: {Palette.ACCENT};
+        """)
 
         layout.addWidget(icon_label)
         layout.addWidget(title)
@@ -99,7 +137,7 @@ class SecurityView(QWidget):
         return layout
 
     # ──────────────────────────────────────────────────────────────────
-    # RECHERCHE + BOUTON AJOUTER — identique à stock_view
+    # RECHERCHE + BOUTON AJOUTER
     # ──────────────────────────────────────────────────────────────────
 
     def _create_search_section(self) -> QHBoxLayout:
@@ -109,22 +147,24 @@ class SecurityView(QWidget):
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Rechercher un rôle...")
         self.search_input.setMinimumHeight(42)
-        self.search_input.setStyleSheet("""
-            QLineEdit {
+        self.search_input.setStyleSheet(f"""
+            QLineEdit {{
                 padding: 6px 12px;
-                border: 2px solid #bdc3c7;
+                border: 2px solid {Palette.BORDER_GRAY};
                 border-radius: 8px;
                 font-size: 14px;
-            }
-            QLineEdit:focus { border-color: #e67e22; }
+            }}
+            QLineEdit:focus {{ border-color: {Palette.ACCENT}; }}
         """)
 
         search_btn = self._make_btn(
-            "Rechercher", "search", "#e67e22", "#d35400", "#ba4a00", w=140)
+            "Rechercher", "search", Palette.ACCENT, Palette.ACCENT_HOVER, 
+            Palette.ACCENT_PRESSED, w=140)
         search_btn.clicked.connect(self._on_search_clicked)
 
         add_btn = self._make_btn(
-            "Nouveau Rôle", "shield", "#2ecc71", "#27ae60", "#1e8449", w=160)
+            "Nouveau Rôle", "shield", Palette.SUCCESS, 
+            Palette.SUCCESS_HOVER, Palette.SUCCESS_PRESSED, w=160)
         add_btn.clicked.connect(lambda: self.add_role_requested.emit())
 
         layout.addWidget(self.search_input, 3)
@@ -133,8 +173,7 @@ class SecurityView(QWidget):
         return layout
 
     # ──────────────────────────────────────────────────────────────────
-    # TABLEAU — copie exacte du style stock_view
-    # Pas de background fixe, pas de couleurs alternées, colonnes étirées
+    # TABLEAU — avec palette unifiée
     # ──────────────────────────────────────────────────────────────────
 
     def _create_table(self) -> QTableView:
@@ -145,60 +184,87 @@ class SecurityView(QWidget):
         table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         table.setMinimumHeight(300)
         table.setObjectName("securityTable")
+        table.setEditTriggers(QTableView.NoEditTriggers)
 
-        table.setStyleSheet("""
-            QTableView#securityTable {
+        table.setStyleSheet(f"""
+            QTableView#securityTable {{
                 font-size: 13px;
                 font-weight: normal;
-                border: 2px solid #bdc3c7;
+                border: 2px solid {Palette.BORDER_GRAY};
                 border-radius: 8px;
                 gridline-color: transparent;
-            }
-            QTableView#securityTable::item {
+            }}
+            QTableView#securityTable::item {{
                 padding: 6px 8px;
                 border-bottom: 1px solid rgba(150, 150, 150, 0.18);
-            }
-            QTableView#securityTable::item:selected {
-                background-color: #e67e22;
+            }}
+            QTableView#securityTable::item:selected {{
+                background-color: {Palette.SELECTION};
                 color: white;
-            }
-            QTableView#securityTable::item:hover {
-                background-color: rgba(230, 126, 34, 0.10);
-            }
-            QHeaderView::section {
-                background-color: #e67e22;
+            }}
+            QTableView#securityTable::item:selected:!active {{
+                background-color: {Palette.SELECTION};
+                color: white;
+            }}
+            QTableView#securityTable::item:hover {{
+                background-color: {Palette.ROW_HOVER};
+            }}
+            QHeaderView::section {{
+                background-color: {Palette.ACCENT};
                 color: white;
                 font-weight: bold;
                 font-size: 13px;
                 padding: 8px;
                 border: none;
-                border-right: 1px solid #d35400;
-            }
-            QHeaderView::section:last { border-right: none; }
-            QScrollBar:vertical {
-                border: none; background: transparent;
-                width: 12px; border-radius: 6px;
-            }
-            QScrollBar::handle:vertical {
-                background: #27ae60; min-height: 20px; border-radius: 6px;
-            }
-            QScrollBar::handle:vertical:hover { background: #2ecc71; }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
-            QScrollBar:horizontal {
+                border-right: 1px solid {Palette.ACCENT_HOVER};
+            }}
+            QHeaderView::section:last {{ border-right: none; }}
+            
+            /* ===== SCROLLBARS GRISES ===== */
+            QScrollBar:vertical {{
                 border: none;
-                background: rgba(150, 150, 150, 0.15);
-                height: 10px; border-radius: 5px; margin-bottom: 2px;
-            }
-            QScrollBar::handle:horizontal {
-                background: #27ae60; min-width: 30px; border-radius: 5px;
-            }
-            QScrollBar::handle:horizontal:hover { background: #2ecc71; }
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }
+                background: {Palette.SCROLLBAR_BG};
+                width: 12px;
+                border-radius: 6px;
+                margin: 2px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {Palette.SCROLLBAR_HANDLE};
+                min-height: 20px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {Palette.SCROLLBAR_HOVER};
+            }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            
+            QScrollBar:horizontal {{
+                border: none;
+                background: {Palette.SCROLLBAR_BG};
+                height: 12px;
+                border-radius: 6px;
+                margin: 2px;
+            }}
+            QScrollBar::handle:horizontal {{
+                background: {Palette.SCROLLBAR_HANDLE};
+                min-width: 30px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:horizontal:hover {{
+                background: {Palette.SCROLLBAR_HOVER};
+            }}
+            QScrollBar::add-line:horizontal,
+            QScrollBar::sub-line:horizontal {{
+                width: 0px;
+            }}
         """)
         return table
 
     # ──────────────────────────────────────────────────────────────────
-    # BOUTONS D'ACTION — identique à stock_view
+    # BOUTONS D'ACTION — avec palette unifiée
     # ──────────────────────────────────────────────────────────────────
 
     def _create_action_buttons(self) -> QHBoxLayout:
@@ -206,15 +272,19 @@ class SecurityView(QWidget):
         layout.setSpacing(10)
 
         layout.addWidget(self._make_btn(
-            "Modifier",   "edit",    "#f39c12", "#e67e22", "#d35400", w=130,
-            slot=self._on_edit_clicked))
+            "Modifier", "edit", Palette.WARNING, Palette.WARNING_HOVER, 
+            Palette.WARNING_PRESSED, w=130, slot=self._on_edit_clicked))
+        
         layout.addWidget(self._make_btn(
-            "Supprimer",  "trash",   "#e74c3c", "#c0392b", "#a93226", w=130,
-            slot=self._on_delete_clicked))
+            "Supprimer", "trash", Palette.DANGER, Palette.DANGER_HOVER, 
+            Palette.DANGER_PRESSED, w=130, slot=self._on_delete_clicked))
+        
         layout.addStretch()
+        
         layout.addWidget(self._make_btn(
-            "Actualiser", "refresh", "#95a5a6", "#7f8c8d", "#707b7c", w=130,
-            slot=lambda: self.refresh_requested.emit()))
+            "Actualiser", "refresh", Palette.SCROLLBAR_HANDLE, Palette.SCROLLBAR_HOVER, 
+            "#7f8c8d", w=130, slot=lambda: self.refresh_requested.emit()))
+        
         return layout
 
     # ──────────────────────────────────────────────────────────────────
@@ -243,7 +313,7 @@ class SecurityView(QWidget):
             }}
             QPushButton:hover   {{ background-color: {hover};   }}
             QPushButton:pressed {{ background-color: {pressed}; }}
-            QPushButton:disabled {{ background-color: #95a5a6; }}
+            QPushButton:disabled {{ background-color: {Palette.SCROLLBAR_HANDLE}; }}
         """)
         if slot:
             btn.clicked.connect(slot)
@@ -255,6 +325,26 @@ class SecurityView(QWidget):
 
     def _connect_signals(self):
         self.search_input.returnPressed.connect(self._on_search_clicked)
+        # Sélection/désélection du tableau
+        self.table_view.clicked.connect(self._on_row_clicked)
+
+    def _on_row_clicked(self, index):
+        """
+        Gère le toggle sélection/désélection :
+        - Si la ligne est déjà sélectionnée -> on la désélectionne
+        - Si la ligne n'est pas sélectionnée -> on la sélectionne
+        """
+        row = index.row()
+        selection_model = self.table_view.selectionModel()
+        
+        if selection_model.isRowSelected(row, index.parent()):
+            selection_model.clearSelection()
+            selection_model.clearCurrentIndex()
+            self._last_selected_row = -1
+        else:
+            selection_model.clearSelection()
+            selection_model.select(index, selection_model.Select)
+            self._last_selected_row = row
 
     def _on_search_clicked(self):
         self.search_requested.emit(self.search_input.text())
@@ -270,12 +360,13 @@ class SecurityView(QWidget):
             self.delete_role_requested.emit(idx.row())
 
     # ──────────────────────────────────────────────────────────────────
-    # METHODES PUBLIQUES POUR LE MANAGER
+    # MÉTHODES PUBLIQUES POUR LE MANAGER
     # ──────────────────────────────────────────────────────────────────
 
     def set_table_model(self, model):
         self.table_view.setModel(model)
         self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self._last_selected_row = -1
 
     def get_selected_row(self) -> int:
         idx = self.table_view.currentIndex()

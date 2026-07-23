@@ -1,6 +1,7 @@
 """
 Vue de l'accueil - Interface utilisateur avec graphiques QtCharts (ULTRA RAPIDE).
 Séparation de la logique et de la présentation.
+
 """
 
 from pathlib import Path
@@ -18,6 +19,62 @@ from PySide6.QtCharts import (
 )
 
 from src.utils.helpers import create_circular_avatar_label, get_asset_path
+
+
+# ──────────────────────────────────────────────────────────────────
+# PALETTE CENTRALISÉE (une seule source de vérité pour les couleurs)
+# ──────────────────────────────────────────────────────────────────
+class Palette:
+    ACCENT          = "#567ba1"   # en-têtes, focus des champs
+    ACCENT_HOVER    = "#46648a"   # survol des en-têtes / boutons liés à l'accent
+    ACCENT_PRESSED  = "#3a5470"
+    SELECTION       = "#7895b4"   # couleur unique de sélection/désélection de ligne
+    ROW_HOVER       = "rgba(86, 123, 161, 0.10)"  # survol léger d'une ligne (dérivé de l'accent)
+    BORDER_GRAY     = "#bdc3c7"
+    SCROLLBAR_BG    = "#d5d8dc"   # Fond de la scrollbar (gris clair)
+    SCROLLBAR_HANDLE = "#aab7b8"  # Poignée de la scrollbar (gris)
+    SCROLLBAR_HOVER = "#95a5a6"   # Poignée survolée (gris plus foncé)
+    BASE_WHITE      = "#ffffff"
+    
+    # Couleurs pour les graphiques
+    CHART_BLUE      = "#567ba1"
+    CHART_GREEN     = "#2ecc71"
+    CHART_RED       = "#e74c3c"
+    CHART_PURPLE    = "#9b59b6"
+    CHART_ORANGE    = "#f39c12"
+    CHART_GRAY      = "#95a5a6"
+
+
+def load_svg_icon_accueil(icon_name: str, size: int = 24) -> QPixmap:
+    """Charge une icône SVG ou crée un placeholder."""
+    try:
+        icon_path = get_asset_path("icons", f"{icon_name}.svg")
+        if not icon_path.exists():
+            return _placeholder_accueil(size, icon_name[0].upper())
+        icon = QIcon(str(icon_path))
+        if icon.isNull():
+            return _placeholder_accueil(size, icon_name[0].upper())
+        pixmap = icon.pixmap(size, size)
+        return pixmap if not pixmap.isNull() else _placeholder_accueil(size, icon_name[0].upper())
+    except Exception as e:
+        print(f"Erreur icône {icon_name}: {e}")
+        return _placeholder_accueil(size, icon_name[0].upper())
+
+
+def _placeholder_accueil(size: int, letter: str) -> QPixmap:
+    """Crée un placeholder pour les icônes manquantes."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setBrush(QBrush(QColor(Palette.ACCENT)))
+    painter.setPen(QPen(Qt.NoPen))
+    painter.drawRoundedRect(0, 0, size, size, 4, 4)
+    painter.setPen(QColor("#ffffff"))
+    painter.setFont(QFont("Segoe UI", int(size * 0.5), QFont.Bold))
+    painter.drawText(0, 0, size, size, Qt.AlignCenter, letter)
+    painter.end()
+    return pixmap
 
 
 class AccueilView(QWidget):
@@ -44,14 +101,19 @@ class AccueilView(QWidget):
         self.checkbox_franco  = None
         self.combo_classes    = None
         self.table_widget     = None
+        self._last_selected_row = -1
 
         self.init_ui()
 
     def init_ui(self):
         """Construit l'interface utilisateur."""
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(15, 10, 15, 10)
+        main_layout.setContentsMargins(20, 15, 20, 15)
         main_layout.setSpacing(15)
+
+        # Titre
+        header_layout = self._create_header()
+        main_layout.addLayout(header_layout)
 
         stats_layout = self._create_stats_section_qtcharts()
         main_layout.addLayout(stats_layout)
@@ -60,7 +122,7 @@ class AccueilView(QWidget):
         separator.setFrameShape(QFrame.HLine)
         separator.setFrameShadow(QFrame.Plain)
         separator.setFixedHeight(1)
-        separator.setStyleSheet("background-color: rgba(150, 150, 150, 0.25); border: none;")
+        separator.setStyleSheet(f"background-color: {Palette.BORDER_GRAY}; border: none; opacity: 0.5;")
         main_layout.addWidget(separator)
 
         filter_layout = self._create_filters_section()
@@ -72,7 +134,31 @@ class AccueilView(QWidget):
         self._connect_signals()
 
     # ──────────────────────────────────────────────────────────────────
-    # GRAPHIQUES
+    # EN-TÊTE
+    # ──────────────────────────────────────────────────────────────────
+
+    def _create_header(self) -> QHBoxLayout:
+        layout = QHBoxLayout()
+        layout.setSpacing(12)
+
+        icon_label = QLabel()
+        icon_label.setFixedSize(40, 40)
+        icon_label.setPixmap(load_svg_icon_accueil("home", size=40))
+
+        title = QLabel("Accueil")
+        title.setStyleSheet(f"""
+            font-size: 28px; 
+            font-weight: bold;
+            color: {Palette.ACCENT};
+        """)
+
+        layout.addWidget(icon_label)
+        layout.addWidget(title)
+        layout.addStretch()
+        return layout
+
+    # ──────────────────────────────────────────────────────────────────
+    # GRAPHIQUES AVEC PALETTE UNIFIÉE
     # ──────────────────────────────────────────────────────────────────
 
     def _create_stats_section_qtcharts(self) -> QHBoxLayout:
@@ -82,19 +168,19 @@ class AccueilView(QWidget):
         stats_layout.addWidget(self._create_pie_chart_qt(
             title="Répartition Stock",
             data={"Livres": 450, "Fournitures": 350, "Autres": 200},
-            colors=["#3498db", "#2ecc71", "#e74c3c"]
+            colors=[Palette.CHART_BLUE, Palette.CHART_GREEN, Palette.CHART_RED]
         ))
         stats_layout.addWidget(self._create_bar_chart_qt(
             title="Ventes cette semaine",
             categories=["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"],
             values=[12000, 15000, 13000, 18000, 20000, 25000, 18000],
-            color="#2ecc71"
+            color=Palette.CHART_GREEN
         ))
         stats_layout.addWidget(self._create_donut_chart_qt(
             title="Objectif Mensuel",
             achieved=750000,
             target=1000000,
-            color="#9b59b6"
+            color=Palette.CHART_PURPLE
         ))
         return stats_layout
 
@@ -105,25 +191,31 @@ class AccueilView(QWidget):
             sl = series.append(label, value)
             sl.setLabelVisible(True)
             sl.setLabelPosition(QPieSlice.LabelOutside)
-            sl.setBrush(QColor(colors[i]))
+            sl.setBrush(QColor(colors[i % len(colors)]))
             sl.setPen(QPen(QColor("#ffffff"), 2))
             sl.setLabel(f"{label} {(value/total)*100:.0f}%\n{value} art")
             sl.setLabelFont(QFont("Segoe UI", 8, QFont.Bold))
-            sl.setLabelColor(QColor("#2c3e50"))
+            sl.setLabelColor(QColor(Palette.ACCENT))
 
         chart = QChart()
         chart.addSeries(series)
         chart.setTitle(f"{title}\n{total} articles")
         chart.setTitleFont(QFont("Segoe UI", 10, QFont.Bold))
-        chart.setTitleBrush(QBrush(QColor("#2c3e50")))
+        chart.setTitleBrush(QBrush(QColor(Palette.ACCENT)))
         chart.setAnimationOptions(QChart.SeriesAnimations)
         chart.legend().setVisible(False)
-        chart.setBackgroundBrush(QBrush(QColor("#ffffff")))
+        chart.setBackgroundBrush(QBrush(QColor(Palette.BASE_WHITE)))
         chart.setMargins(QMargins(10, 10, 10, 10))
 
         cv = QChartView(chart)
         cv.setRenderHint(QPainter.Antialiasing)
-        cv.setStyleSheet("QChartView{border:2px solid #ecf0f1;border-radius:12px;background-color:white;}")
+        cv.setStyleSheet(f"""
+            QChartView {{
+                border: 2px solid {Palette.BORDER_GRAY};
+                border-radius: 12px;
+                background-color: {Palette.BASE_WHITE};
+            }}
+        """)
         cv.setFixedSize(280, 240)
         return cv
 
@@ -132,7 +224,7 @@ class AccueilView(QWidget):
         for v in values:
             bar_set.append(v)
         bar_set.setColor(QColor(color))
-        bar_set.setBorderColor(QColor("#2c3e50"))
+        bar_set.setBorderColor(QColor(Palette.ACCENT))
 
         series = QBarSeries()
         series.append(bar_set)
@@ -144,14 +236,14 @@ class AccueilView(QWidget):
         chart.addSeries(series)
         chart.setTitle(f"{title}\n{sum(values)/1000:.0f}k FCFA")
         chart.setTitleFont(QFont("Segoe UI", 10, QFont.Bold))
-        chart.setTitleBrush(QBrush(QColor("#2c3e50")))
+        chart.setTitleBrush(QBrush(QColor(Palette.ACCENT)))
         chart.setAnimationOptions(QChart.SeriesAnimations)
-        chart.setBackgroundBrush(QBrush(QColor("#ffffff")))
+        chart.setBackgroundBrush(QBrush(QColor(Palette.BASE_WHITE)))
 
         ax = QBarCategoryAxis()
         ax.append(categories)
         ax.setLabelsFont(QFont("Segoe UI", 9))
-        ax.setLabelsColor(QColor("#2c3e50"))
+        ax.setLabelsColor(QColor(Palette.ACCENT))
         chart.addAxis(ax, Qt.AlignBottom)
         series.attachAxis(ax)
 
@@ -160,15 +252,22 @@ class AccueilView(QWidget):
         ay.setTitleText("Ventes (FCFA)")
         ay.setTitleFont(QFont("Segoe UI", 10, QFont.Bold))
         ay.setLabelsFont(QFont("Segoe UI", 9))
-        ay.setLabelsColor(QColor("#2c3e50"))
+        ay.setLabelsColor(QColor(Palette.ACCENT))
         ay.setGridLineVisible(True)
+        ay.setGridLineColor(QColor(Palette.BORDER_GRAY))
         chart.addAxis(ay, Qt.AlignLeft)
         series.attachAxis(ay)
         chart.legend().setVisible(False)
 
         cv = QChartView(chart)
         cv.setRenderHint(QPainter.Antialiasing)
-        cv.setStyleSheet("QChartView{border:2px solid #ecf0f1;border-radius:12px;background-color:white;}")
+        cv.setStyleSheet(f"""
+            QChartView {{
+                border: 2px solid {Palette.BORDER_GRAY};
+                border-radius: 12px;
+                background-color: {Palette.BASE_WHITE};
+            }}
+        """)
         cv.setFixedSize(350, 240)
         return cv
 
@@ -181,28 +280,34 @@ class AccueilView(QWidget):
         sl_a.setPen(QPen(QColor("#ffffff"), 3))
         sl_a.setLabelVisible(True)
         sl_a.setLabelFont(QFont("Segoe UI", 9, QFont.Bold))
-        sl_a.setLabelColor(QColor("#2c3e50"))
+        sl_a.setLabelColor(QColor(Palette.ACCENT))
         sl_a.setExploded(True)
         sl_a.setExplodeDistanceFactor(0.05)
         sl_a.setLabel(f"{(achieved/target)*100:.0f}%\n{achieved/1000:.0f}k")
 
         sl_r = series.append("Restant", target - achieved)
-        sl_r.setBrush(QColor("#ecf0f1"))
-        sl_r.setPen(QPen(QColor("#bdc3c7"), 2))
+        sl_r.setBrush(QColor(Palette.SCROLLBAR_BG))
+        sl_r.setPen(QPen(QColor(Palette.BORDER_GRAY), 2))
         sl_r.setLabelVisible(False)
 
         chart = QChart()
         chart.addSeries(series)
         chart.setTitle(f"{title}\n{target/1000:.0f}k FCFA")
         chart.setTitleFont(QFont("Segoe UI", 10, QFont.Bold))
-        chart.setTitleBrush(QBrush(QColor("#2c3e50")))
+        chart.setTitleBrush(QBrush(QColor(Palette.ACCENT)))
         chart.setAnimationOptions(QChart.SeriesAnimations)
         chart.legend().setVisible(False)
-        chart.setBackgroundBrush(QBrush(QColor("#ffffff")))
+        chart.setBackgroundBrush(QBrush(QColor(Palette.BASE_WHITE)))
 
         cv = QChartView(chart)
         cv.setRenderHint(QPainter.Antialiasing)
-        cv.setStyleSheet("QChartView{border:2px solid #ecf0f1;border-radius:12px;background-color:white;}")
+        cv.setStyleSheet(f"""
+            QChartView {{
+                border: 2px solid {Palette.BORDER_GRAY};
+                border-radius: 12px;
+                background-color: {Palette.BASE_WHITE};
+            }}
+        """)
         cv.setFixedSize(280, 240)
         return cv
 
@@ -214,35 +319,73 @@ class AccueilView(QWidget):
         layout = QHBoxLayout()
         layout.setSpacing(20)
 
+        radio_style = f"""
+            QRadioButton {{
+                font-size: 16px; 
+                padding: 5px;
+                color: {Palette.ACCENT};
+            }}
+            QRadioButton::indicator {{
+                width: 18px;
+                height: 18px;
+            }}
+        """
+
+        checkbox_style = f"""
+            QCheckBox {{
+                font-size: 16px; 
+                padding: 5px;
+                color: {Palette.ACCENT};
+            }}
+            QCheckBox::indicator {{
+                width: 18px;
+                height: 18px;
+            }}
+        """
+
+        combo_style = f"""
+            QComboBox {{
+                font-size: 16px; 
+                padding: 8px; 
+                border-radius: 6px;
+                border: 2px solid {Palette.BORDER_GRAY};
+                min-height: 36px;
+            }}
+            QComboBox:hover {{
+                border-color: {Palette.ACCENT};
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                padding-right: 8px;
+            }}
+        """
+
         self.radio_maternelle = QRadioButton("Maternelle")
         self.radio_primaire   = QRadioButton("Primaire")
         self.radio_secondaire = QRadioButton("Secondaire")
 
         for r in [self.radio_maternelle, self.radio_primaire, self.radio_secondaire]:
-            r.setStyleSheet("font-size: 16px; padding: 5px;")
+            r.setStyleSheet(radio_style)
             layout.addWidget(r)
 
         self.checkbox_anglo  = QCheckBox("Anglophone")
         self.checkbox_franco = QCheckBox("Francophone")
 
         for c in [self.checkbox_anglo, self.checkbox_franco]:
-            c.setStyleSheet("font-size: 16px; padding: 5px;")
+            c.setStyleSheet(checkbox_style)
             layout.addWidget(c)
 
         self.combo_classes = QComboBox()
         self.combo_classes.setFixedWidth(300)
-        self.combo_classes.setStyleSheet("font-size: 16px; padding: 8px; border-radius: 5px;")
+        self.combo_classes.setMinimumHeight(36)
+        self.combo_classes.setStyleSheet(combo_style)
         layout.addWidget(self.combo_classes)
 
         layout.addStretch()
         return layout
 
     # ──────────────────────────────────────────────────────────────────
-    # TABLEAU
-    #   → Traits de grille ultra-fins et discrets
-    #   → Coin haut-gauche (QTableCornerButton) coloré comme le header
-    #   → Pas de background-color fixe → thème light/dark automatique
-    #   → Scrollbars vertes
+    # TABLEAU — avec palette unifiée
     # ──────────────────────────────────────────────────────────────────
 
     def _create_table(self) -> QTableWidget:
@@ -254,77 +397,98 @@ class AccueilView(QWidget):
         table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         table.setSelectionBehavior(QTableWidget.SelectRows)
         table.setSelectionMode(QTableWidget.SingleSelection)
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        table.setObjectName("accueilTable")
 
-        table.setStyleSheet("""
-            QTableWidget {
-                font-size: 15px;
-                border: 2px solid #bdc3c7;
+        table.setStyleSheet(f"""
+            QTableWidget#accueilTable {{
+                font-size: 13px;
+                font-weight: normal;
+                border: 2px solid {Palette.BORDER_GRAY};
                 border-radius: 8px;
-                gridline-color: rgba(150, 150, 150, 0.18);
-            }
-            QTableWidget::item {
-                padding: 8px;
+                gridline-color: transparent;
+            }}
+            QTableWidget#accueilTable::item {{
+                padding: 8px 10px;
                 border-bottom: 1px solid rgba(150, 150, 150, 0.15);
-            }
-            QTableWidget::item:selected {
-                background-color: #2ecc71;
-                color: #ffffff;
-            }
-            QHeaderView::section {
-                background-color: #2c3e50;
-                color: #ffffff;
+            }}
+            QTableWidget#accueilTable::item:selected {{
+                background-color: {Palette.SELECTION};
+                color: white;
+            }}
+            QTableWidget#accueilTable::item:selected:!active {{
+                background-color: {Palette.SELECTION};
+                color: white;
+            }}
+            QTableWidget#accueilTable::item:hover {{
+                background-color: {Palette.ROW_HOVER};
+            }}
+            QHeaderView::section {{
+                background-color: {Palette.ACCENT};
+                color: white;
+                font-weight: bold;
+                font-size: 13px;
                 padding: 10px;
                 border: none;
-                border-right: 1px solid #34495e;
-                font-size: 15px;
-                font-weight: bold;
-            }
-            QHeaderView::section:vertical {
-                background-color: #34495e;
-                color: #ffffff;
+                border-right: 1px solid {Palette.ACCENT_HOVER};
+            }}
+            QHeaderView::section:last {{ border-right: none; }}
+            QHeaderView::section:vertical {{
+                background-color: {Palette.ACCENT};
+                color: white;
                 border: none;
-                border-bottom: 1px solid #2c3e50;
+                border-bottom: 1px solid {Palette.ACCENT_HOVER};
                 font-size: 13px;
                 font-weight: bold;
-            }
+            }}
+            
             /* ── Coin haut-gauche : même couleur que le header ── */
             QTableWidget QAbstractScrollArea > QWidget > QAbstractButton,
-            QTableCornerButton::section {
-                background-color: #2c3e50;
+            QTableCornerButton::section {{
+                background-color: {Palette.ACCENT};
                 border: none;
-            }
-            QScrollBar:vertical {
+            }}
+            
+            /* ===== SCROLLBARS GRISES ===== */
+            QScrollBar:vertical {{
                 border: none;
-                background: transparent;
-                width: 14px;
-                border-radius: 7px;
-            }
-            QScrollBar::handle:vertical {
-                background: #27ae60;
-                min-height: 25px;
-                border-radius: 7px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #2ecc71;
-            }
+                background: {Palette.SCROLLBAR_BG};
+                width: 12px;
+                border-radius: 6px;
+                margin: 2px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {Palette.SCROLLBAR_HANDLE};
+                min-height: 20px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {Palette.SCROLLBAR_HOVER};
+            }}
             QScrollBar::add-line:vertical,
-            QScrollBar::sub-line:vertical { height: 0px; }
-            QScrollBar:horizontal {
+            QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            
+            QScrollBar:horizontal {{
                 border: none;
-                background: transparent;
-                height: 14px;
-                border-radius: 7px;
-            }
-            QScrollBar::handle:horizontal {
-                background: #27ae60;
-                min-width: 25px;
-                border-radius: 7px;
-            }
-            QScrollBar::handle:horizontal:hover {
-                background: #2ecc71;
-            }
+                background: {Palette.SCROLLBAR_BG};
+                height: 12px;
+                border-radius: 6px;
+                margin: 2px;
+            }}
+            QScrollBar::handle:horizontal {{
+                background: {Palette.SCROLLBAR_HANDLE};
+                min-width: 30px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:horizontal:hover {{
+                background: {Palette.SCROLLBAR_HOVER};
+            }}
             QScrollBar::add-line:horizontal,
-            QScrollBar::sub-line:horizontal { width: 0px; }
+            QScrollBar::sub-line:horizontal {{
+                width: 0px;
+            }}
         """)
 
         header = table.horizontalHeader()
@@ -361,6 +525,29 @@ class AccueilView(QWidget):
         self.checkbox_franco.toggled.connect(self._on_franco_toggled)
         self.combo_classes.currentTextChanged.connect(self._on_classe_changed)
 
+        # Sélection/désélection du tableau
+        self.table_widget.clicked.connect(self._on_row_clicked)
+
+    def _on_row_clicked(self, index):
+        """
+        Gère le toggle sélection/désélection :
+        - Si la ligne est déjà sélectionnée -> on la désélectionne
+        - Si la ligne n'est pas sélectionnée -> on la sélectionne
+        """
+        row = index.row()
+        
+        # Vérifier si la ligne est déjà sélectionnée
+        if self.table_widget.selectionModel().isRowSelected(row, index.parent()):
+            # Désélectionner la ligne
+            self.table_widget.selectionModel().clearSelection()
+            self.table_widget.selectionModel().clearCurrentIndex()
+            self._last_selected_row = -1
+        else:
+            # Sélectionner la ligne (efface la sélection précédente)
+            self.table_widget.selectionModel().clearSelection()
+            self.table_widget.selectRow(row)
+            self._last_selected_row = row
+
     def _on_anglo_toggled(self, checked: bool):
         if checked:
             self.checkbox_franco.setChecked(False)
@@ -392,7 +579,7 @@ class AccueilView(QWidget):
             self._add_table_row(row, livre)
 
     def _add_table_row(self, row: int, livre: dict):
-        """Ajoute une ligne — PAS de setForeground, comme sales_view."""
+        """Ajoute une ligne avec les données."""
         cols = [("Titre", 0), ("Éditeur", 1), ("Édition", 2), ("Prix", 3), ("Intitulé", 4)]
         for key, col in cols:
             item = QTableWidgetItem(livre.get(key, ""))

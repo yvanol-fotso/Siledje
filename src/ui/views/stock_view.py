@@ -2,6 +2,7 @@
 Vue de la gestion du stock - Interface utilisateur ultra-responsive.
 Séparation complète de la logique métier.
 Support complet mode Dark/Light avec design moderne.
+
 """
 
 from PySide6.QtWidgets import (
@@ -10,9 +11,25 @@ from PySide6.QtWidgets import (
     QDateEdit, QRadioButton, QButtonGroup, QGroupBox,
     QGridLayout, QSizePolicy, QSpacerItem
 )
-from PySide6.QtCore import Qt, Signal, QDate, QSize
+from PySide6.QtCore import Qt, Signal, QDate, QSize, QItemSelectionModel
 from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QColor, QBrush, QPen
 from src.utils.helpers import get_asset_path
+
+
+# ──────────────────────────────────────────────────────────────────
+# PALETTE CENTRALISÉE (une seule source de vérité pour les couleurs)
+# ──────────────────────────────────────────────────────────────────
+class Palette:
+    ACCENT          = "#567ba1"   # en-têtes, focus des champs
+    ACCENT_HOVER    = "#46648a"   # survol des en-têtes / boutons liés à l'accent
+    ACCENT_PRESSED  = "#3a5470"
+    SELECTION       = "#7895b4"   # couleur unique de sélection/désélection de ligne
+    ROW_HOVER       = "rgba(86, 123, 161, 0.10)"  # survol léger d'une ligne (dérivé de l'accent)
+    BORDER_GRAY     = "#bdc3c7"
+    SCROLLBAR_BG    = "#d5d8dc"   # Fond de la scrollbar (gris clair)
+    SCROLLBAR_HANDLE = "#aab7b8"  # Poignée de la scrollbar (gris)
+    SCROLLBAR_HOVER = "#95a5a6"   # Poignée survolée (gris plus foncé)
+    BASE_WHITE      = "#ffffff"
 
 
 def load_svg_icon(icon_name: str, size: int = 24) -> QPixmap:
@@ -37,7 +54,7 @@ def _make_placeholder(size: int, letter: str) -> QPixmap:
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing)
-    painter.setBrush(QBrush(QColor("#3498db")))
+    painter.setBrush(QBrush(QColor(Palette.ACCENT)))
     painter.setPen(QPen(Qt.NoPen))
     painter.drawRoundedRect(0, 0, size, size, 4, 4)
     painter.setPen(QColor("#ffffff"))
@@ -72,6 +89,7 @@ class StockView(QWidget):
         self.start_date_edit       = None
         self.end_date_edit         = None
         self.table_view            = None
+        self._last_selected_row    = -1
         self.init_ui()
 
     # ──────────────────────────────────────────────────────────────────
@@ -107,7 +125,11 @@ class StockView(QWidget):
         icon_label.setPixmap(load_svg_icon("package", size=40))
 
         title = QLabel("Gestion du Stock")
-        title.setStyleSheet("font-size: 28px; font-weight: bold;")
+        title.setStyleSheet(f"""
+            font-size: 28px; 
+            font-weight: bold;
+            color: {Palette.ACCENT};
+        """)
 
         layout.addWidget(icon_label)
         layout.addWidget(title)
@@ -125,16 +147,16 @@ class StockView(QWidget):
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Rechercher un produit...")
         self.search_input.setMinimumHeight(42)
-        self.search_input.setStyleSheet("""
-            QLineEdit {
+        self.search_input.setStyleSheet(f"""
+            QLineEdit {{
                 padding: 6px 12px;
-                border: 2px solid #bdc3c7;
+                border: 2px solid {Palette.BORDER_GRAY};
                 border-radius: 8px;
                 font-size: 14px;
-            }
-            QLineEdit:focus {
-                border-color: #3498db;
-            }
+            }}
+            QLineEdit:focus {{
+                border-color: {Palette.ACCENT};
+            }}
         """)
 
         search_btn = QPushButton("Rechercher")
@@ -143,18 +165,18 @@ class StockView(QWidget):
         search_btn.setCursor(Qt.PointingHandCursor)
         search_btn.setIcon(QIcon(load_svg_icon("search", size=16)))
         search_btn.setIconSize(QSize(16, 16))
-        search_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
+        search_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Palette.ACCENT};
                 color: white;
                 padding: 6px 14px;
                 border: none;
                 border-radius: 8px;
                 font-weight: bold;
                 font-size: 14px;
-            }
-            QPushButton:hover   { background-color: #2980b9; }
-            QPushButton:pressed { background-color: #21618c; }
+            }}
+            QPushButton:hover   {{ background-color: {Palette.ACCENT_HOVER};   }}
+            QPushButton:pressed {{ background-color: {Palette.ACCENT_PRESSED}; }}
         """)
         search_btn.clicked.connect(self._on_search_clicked)
 
@@ -190,20 +212,20 @@ class StockView(QWidget):
 
     def _create_filters_section(self) -> QGroupBox:
         group = QGroupBox("Filtres de Recherche")
-        group.setStyleSheet("""
-            QGroupBox {
+        group.setStyleSheet(f"""
+            QGroupBox {{
                 font-size: 14px;
                 font-weight: bold;
-                border: 2px solid #bdc3c7;
+                border: 2px solid {Palette.BORDER_GRAY};
                 border-radius: 8px;
                 margin-top: 14px;
                 padding-top: 18px;
-            }
-            QGroupBox::title {
+            }}
+            QGroupBox::title {{
                 subcontrol-origin: margin;
                 subcontrol-position: top left;
                 padding: 4px 12px;
-            }
+            }}
         """)
 
         grid = QGridLayout()
@@ -212,15 +234,15 @@ class StockView(QWidget):
 
         lbl_style = "font-size: 14px; font-weight: normal;"
 
-        combo_style = """
-            QComboBox {
+        combo_style = f"""
+            QComboBox {{
                 font-size: 14px;
                 padding: 6px 8px;
-                border: 2px solid #bdc3c7;
+                border: 2px solid {Palette.BORDER_GRAY};
                 border-radius: 6px;
-            }
-            QComboBox:hover   { border-color: #3498db; }
-            QComboBox::drop-down { border: none; padding-right: 8px; }
+            }}
+            QComboBox:hover   {{ border-color: {Palette.ACCENT}; }}
+            QComboBox::drop-down {{ border: none; padding-right: 8px; }}
         """
 
         lbl_cat = QLabel("Catégorie:")
@@ -283,14 +305,14 @@ class StockView(QWidget):
         lbl_date.setStyleSheet(lbl_style)
         grid.addWidget(lbl_date, 2, 2)
 
-        date_style = """
-            QDateEdit {
+        date_style = f"""
+            QDateEdit {{
                 font-size: 14px;
                 padding: 6px 8px;
-                border: 2px solid #bdc3c7;
+                border: 2px solid {Palette.BORDER_GRAY};
                 border-radius: 6px;
-            }
-            QDateEdit:hover { border-color: #3498db; }
+            }}
+            QDateEdit:hover {{ border-color: {Palette.ACCENT}; }}
         """
 
         dates_layout = QHBoxLayout()
@@ -335,65 +357,83 @@ class StockView(QWidget):
         table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         table.setMinimumHeight(300)
         table.setObjectName("stockTable")
+        # Désactiver l'édition
+        table.setEditTriggers(QTableView.NoEditTriggers)
 
-        table.setStyleSheet("""
-            QTableView#stockTable {
+        table.setStyleSheet(f"""
+            QTableView#stockTable {{
                 font-size: 13px;
                 font-weight: normal;
-                border: 2px solid #bdc3c7;
+                border: 2px solid {Palette.BORDER_GRAY};
                 border-radius: 8px;
                 gridline-color: transparent;
-            }
-            QTableView#stockTable::item {
+            }}
+            QTableView#stockTable::item {{
                 padding: 6px 8px;
                 border-bottom: 1px solid rgba(150, 150, 150, 0.18);
-            }
-            QTableView#stockTable::item:selected {
-                background-color: #3498db;
+            }}
+            QTableView#stockTable::item:selected {{
+                background-color: {Palette.SELECTION};
                 color: white;
-            }
-            QTableView#stockTable::item:hover {
-                background-color: rgba(52, 152, 219, 0.10);
-            }
-            QHeaderView::section {
-                background-color: #3498db;
+            }}
+            QTableView#stockTable::item:selected:!active {{
+                background-color: {Palette.SELECTION};
+                color: white;
+            }}
+            QTableView#stockTable::item:hover {{
+                background-color: {Palette.ROW_HOVER};
+            }}
+            QHeaderView::section {{
+                background-color: {Palette.ACCENT};
                 color: white;
                 font-weight: bold;
                 font-size: 13px;
                 padding: 8px;
                 border: none;
-                border-right: 1px solid #2980b9;
-            }
-            QHeaderView::section:last { border-right: none; }
-            QScrollBar:vertical {
+                border-right: 1px solid {Palette.ACCENT_HOVER};
+            }}
+            QHeaderView::section:last {{ border-right: none; }}
+            
+            /* ===== SCROLLBARS GRISES ===== */
+            QScrollBar:vertical {{
                 border: none;
-                background: transparent;
+                background: {Palette.SCROLLBAR_BG};
                 width: 12px;
                 border-radius: 6px;
-            }
-            QScrollBar::handle:vertical {
-                background: #27ae60;
+                margin: 2px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {Palette.SCROLLBAR_HANDLE};
                 min-height: 20px;
                 border-radius: 6px;
-            }
-            QScrollBar::handle:vertical:hover { background: #2ecc71; }
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {Palette.SCROLLBAR_HOVER};
+            }}
             QScrollBar::add-line:vertical,
-            QScrollBar::sub-line:vertical { height: 0px; }
-            QScrollBar:horizontal {
+            QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            
+            QScrollBar:horizontal {{
                 border: none;
-                background: rgba(150, 150, 150, 0.15);
-                height: 10px;
-                border-radius: 5px;
-                margin-bottom: 2px;
-            }
-            QScrollBar::handle:horizontal {
-                background: #27ae60;
+                background: {Palette.SCROLLBAR_BG};
+                height: 12px;
+                border-radius: 6px;
+                margin: 2px;
+            }}
+            QScrollBar::handle:horizontal {{
+                background: {Palette.SCROLLBAR_HANDLE};
                 min-width: 30px;
-                border-radius: 5px;
-            }
-            QScrollBar::handle:horizontal:hover { background: #2ecc71; }
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:horizontal:hover {{
+                background: {Palette.SCROLLBAR_HOVER};
+            }}
             QScrollBar::add-line:horizontal,
-            QScrollBar::sub-line:horizontal { width: 0px; }
+            QScrollBar::sub-line:horizontal {{
+                width: 0px;
+            }}
         """)
         table.setContentsMargins(0, 0, 0, 12)
 
@@ -433,7 +473,7 @@ class StockView(QWidget):
         layout.addWidget(_btn("Modifier",   "edit",    "#f39c12","#e67e22","#d35400", self._on_edit_clicked))
         layout.addWidget(_btn("Supprimer",  "trash",   "#e74c3c","#c0392b","#a93226", self._on_delete_clicked))
         layout.addStretch()
-        layout.addWidget(_btn("Actualiser","refresh",  "#95a5a6","#7f8c8d","#707b7c", lambda: self.refresh_requested.emit()))
+        layout.addWidget(_btn("Actualiser","refresh",  Palette.SCROLLBAR_HANDLE, Palette.SCROLLBAR_HOVER, "#7f8c8d", lambda: self.refresh_requested.emit()))
         return layout
 
     # ──────────────────────────────────────────────────────────────────
@@ -452,6 +492,30 @@ class StockView(QWidget):
             lambda t: self.class_filter_changed.emit(t))
         self.start_date_edit.dateChanged.connect(self._on_date_changed)
         self.end_date_edit.dateChanged.connect(self._on_date_changed)
+
+        # Connexion pour la sélection/désélection
+        self.table_view.clicked.connect(self._on_row_clicked)
+
+    def _on_row_clicked(self, index):
+        """
+        Gère le toggle sélection/désélection :
+        - Si la ligne est déjà sélectionnée -> on la désélectionne
+        - Si la ligne n'est pas sélectionnée -> on la sélectionne
+        """
+        row = index.row()
+        selection_model = self.table_view.selectionModel()
+        
+        # Vérifier si la ligne est déjà sélectionnée
+        if selection_model.isRowSelected(row, index.parent()):
+            # Désélectionner la ligne
+            selection_model.clearSelection()
+            selection_model.clearCurrentIndex()
+            self._last_selected_row = -1
+        else:
+            # Sélectionner la ligne (efface la sélection précédente)
+            selection_model.clearSelection()
+            selection_model.select(index, QItemSelectionModel.Select | QItemSelectionModel.Rows)
+            self._last_selected_row = row
 
     def _on_search_clicked(self):
         self.search_requested.emit(self.search_input.text())
@@ -479,6 +543,7 @@ class StockView(QWidget):
     def set_table_model(self, model):
         self.table_view.setModel(model)
         self.table_view.resizeColumnsToContents()
+        self._last_selected_row = -1
 
     def update_categories(self, categories: list):
         current = self.category_filter_combo.currentText()

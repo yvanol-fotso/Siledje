@@ -32,37 +32,37 @@ def load_svg_icon(icon_name: str, size: int = 24, debug: bool = False) -> QPixma
         icon_path = get_asset_path("icons", f"{icon_name}.svg")
         
         if debug:
-            print(f"🔍 Chargement icône : {icon_name}")
+            print(f"   Chargement icône : {icon_name}")
             print(f"   Chemin : {icon_path}")
             print(f"   Existe : {icon_path.exists()}")
         
         if not icon_path.exists():
             if debug:
-                print(f"❌ Fichier SVG non trouvé : {icon_path}")
+                print(f" Fichier SVG non trouvé : {icon_path}")
             return create_placeholder_pixmap(size, icon_name[0].upper())
         
         icon = QIcon(str(icon_path))
         
         if icon.isNull():
             if debug:
-                print(f"❌ QIcon est null pour {icon_name}")
+                print(f" QIcon est null pour {icon_name}")
             return create_placeholder_pixmap(size, icon_name[0].upper())
         
         pixmap = icon.pixmap(QSize(size, size))
         
         if pixmap.isNull():
             if debug:
-                print(f"❌ Pixmap est null pour {icon_name}")
+                print(f" Pixmap est null pour {icon_name}")
             return create_placeholder_pixmap(size, icon_name[0].upper())
         
         if debug:
-            print(f"✅ Icône chargée : {icon_name} ({pixmap.width()}x{pixmap.height()})")
+            print(f" Icône chargée : {icon_name} ({pixmap.width()}x{pixmap.height()})")
         
         return pixmap
         
     except Exception as e:
         if debug:
-            print(f"❌ Erreur chargement {icon_name} : {e}")
+            print(f" Erreur chargement {icon_name} : {e}")
         return create_placeholder_pixmap(size, icon_name[0].upper())
 
 

@@ -1,6 +1,7 @@
 """
 Vue du point de vente - Interface utilisateur uniquement.
 Séparation complète de la logique métier.
+Support complet mode Dark/Light avec design moderne.
 """
 
 from PySide6.QtWidgets import (
@@ -11,6 +12,34 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QColor, QBrush, QPen
 from src.utils.helpers import get_asset_path
+
+
+# ──────────────────────────────────────────────────────────────────
+# PALETTE CENTRALISÉE (une seule source de vérité pour les couleurs)
+# ──────────────────────────────────────────────────────────────────
+class Palette:
+    ACCENT          = "#567ba1"   # en-têtes, focus des champs
+    ACCENT_HOVER    = "#46648a"   # survol des en-têtes / boutons liés à l'accent
+    ACCENT_PRESSED  = "#3a5470"
+    SELECTION       = "#7895b4"   # couleur unique de sélection/désélection de ligne
+    ROW_HOVER       = "rgba(86, 123, 161, 0.10)"  # survol léger d'une ligne (dérivé de l'accent)
+    BORDER_GRAY     = "#bdc3c7"
+    SCROLLBAR_BG    = "#d5d8dc"   # Fond de la scrollbar (gris clair)
+    SCROLLBAR_HANDLE = "#aab7b8"  # Poignée de la scrollbar (gris)
+    SCROLLBAR_HOVER = "#95a5a6"   # Poignée survolée (gris plus foncé)
+    BASE_WHITE      = "#ffffff"
+    SUCCESS         = "#2ecc71"   # Vert pour le panier
+    SUCCESS_HOVER   = "#27ae60"
+    SUCCESS_PRESSED = "#1e8449"
+    WARNING         = "#f39c12"   # Orange pour modifier
+    WARNING_HOVER   = "#e67e22"
+    WARNING_PRESSED = "#d35400"
+    DANGER          = "#e74c3c"   # Rouge pour supprimer
+    DANGER_HOVER    = "#c0392b"
+    DANGER_PRESSED  = "#a93226"
+    PURPLE          = "#9b59b6"   # Violet pour paiement
+    PURPLE_HOVER    = "#8e44ad"
+    PURPLE_PRESSED  = "#7d3c98"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -39,7 +68,7 @@ def create_placeholder_pixmap(size: int, letter: str) -> QPixmap:
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing)
-    painter.setBrush(QBrush(QColor("#3498db")))
+    painter.setBrush(QBrush(QColor(Palette.ACCENT)))
     painter.setPen(QPen(Qt.NoPen))
     painter.drawRoundedRect(0, 0, size, size, 4, 4)
     painter.setPen(QColor("#ffffff"))
@@ -77,6 +106,7 @@ class SalesView(QWidget):
         self.products_table = None
         self.cart_table = None
         self.total_label = None
+        self._last_selected_row = -1
 
         self.init_ui()
 
@@ -84,8 +114,8 @@ class SalesView(QWidget):
 
     def init_ui(self):
         main_layout = QVBoxLayout()
-        main_layout.setSpacing(10)
-        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(15)
+        main_layout.setContentsMargins(20, 20, 20, 20)
 
         # Titre
         header_layout = QHBoxLayout()
@@ -96,7 +126,11 @@ class SalesView(QWidget):
         icon_label.setPixmap(load_svg_icon("shopping-cart", size=40))
 
         title = QLabel("Point de Vente")
-        title.setStyleSheet("font-size: 28px; font-weight: bold;")
+        title.setStyleSheet(f"""
+            font-size: 28px; 
+            font-weight: bold;
+            color: {Palette.ACCENT};
+        """)
 
         header_layout.addWidget(icon_label)
         header_layout.addWidget(title)
@@ -108,7 +142,7 @@ class SalesView(QWidget):
 
         # Tableau produits
         self.products_table = self._create_products_table()
-        main_layout.addWidget(self.products_table)
+        main_layout.addWidget(self.products_table, 1)
 
         # Panier
         main_layout.addWidget(self._create_cart_group())
@@ -118,58 +152,84 @@ class SalesView(QWidget):
 
     def _create_search_group(self) -> QGroupBox:
         search_group = QGroupBox("Recherche Produit")
-        search_group.setMaximumHeight(100)
+        search_group.setStyleSheet(f"""
+            QGroupBox {{
+                font-size: 14px;
+                font-weight: bold;
+                border: 2px solid {Palette.BORDER_GRAY};
+                border-radius: 8px;
+                margin-top: 14px;
+                padding-top: 18px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 4px 12px;
+            }}
+        """)
+        
         layout = QHBoxLayout()
-        layout.setSpacing(10)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
 
         label_filter = QLabel("Filtrer:")
-        label_filter.setFixedWidth(50)
+        label_filter.setStyleSheet("font-size: 14px; font-weight: normal;")
 
         self.type_filter = QComboBox()
         self.type_filter.addItem("Tous types", None)
         self.type_filter.addItem("Unitaires (UNT)", "unitaire")
         self.type_filter.addItem("Paquets (PQT)", "paquet")
         self.type_filter.addItem("Cartons (CRT)", "carton")
-        self.type_filter.setFixedWidth(180)
         self.type_filter.setMinimumHeight(36)
-        self.type_filter.setStyleSheet("font-size: 16px; padding: 8px; border-radius: 5px;")
+        self.type_filter.setStyleSheet(f"""
+            QComboBox {{
+                font-size: 14px;
+                padding: 6px 12px;
+                border: 2px solid {Palette.BORDER_GRAY};
+                border-radius: 6px;
+            }}
+            QComboBox:hover {{ border-color: {Palette.ACCENT}; }}
+            QComboBox::drop-down {{ border: none; padding-right: 8px; }}
+        """)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Code-barres ou nom produit...")
-        self.search_input.setMinimumWidth(280)
         self.search_input.setMinimumHeight(36)
-        self.search_input.setStyleSheet("""
-            QLineEdit {
+        self.search_input.setStyleSheet(f"""
+            QLineEdit {{
                 padding: 6px 12px;
-                border: 2px solid #bdc3c7;
+                border: 2px solid {Palette.BORDER_GRAY};
                 border-radius: 6px;
                 font-size: 13px;
-            }
-            QLineEdit:focus { border-color: #3498db; }
+            }}
+            QLineEdit:focus {{ border-color: {Palette.ACCENT}; }}
         """)
 
         search_btn = QPushButton("Rechercher")
         search_btn.setMinimumHeight(36)
-        search_btn.setFixedWidth(110)
         search_btn.setCursor(Qt.PointingHandCursor)
         search_icon = load_svg_icon("search", size=16)
         search_btn.setIcon(QIcon(search_icon))
         search_btn.setIconSize(search_icon.size())
-        search_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db; color: white;
-                padding: 6px 14px; border: none;
-                border-radius: 6px; font-weight: bold; font-size: 13px;
-            }
-            QPushButton:hover { background-color: #2980b9; }
-            QPushButton:pressed { background-color: #21618c; }
+        search_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Palette.ACCENT};
+                color: white;
+                padding: 6px 14px;
+                border: none;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 13px;
+            }}
+            QPushButton:hover {{ background-color: {Palette.ACCENT_HOVER}; }}
+            QPushButton:pressed {{ background-color: {Palette.ACCENT_PRESSED}; }}
         """)
         search_btn.clicked.connect(lambda: self.search_requested.emit())
 
         layout.addWidget(label_filter)
         layout.addWidget(self.type_filter)
         layout.addSpacerItem(QSpacerItem(15, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
-        layout.addWidget(self.search_input)
+        layout.addWidget(self.search_input, 2)
         layout.addWidget(search_btn)
 
         search_group.setLayout(layout)
@@ -180,25 +240,114 @@ class SalesView(QWidget):
         table.setColumnCount(6)
         table.setHorizontalHeaderLabels(["ID", "Code-barres", "Nom", "Type", "Prix", "Stock"])
         table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        table.verticalHeader().setDefaultSectionSize(30)
+        table.verticalHeader().setDefaultSectionSize(35)
         table.setSelectionBehavior(QTableWidget.SelectRows)
         table.setSelectionMode(QTableWidget.SingleSelection)
-        table.setStyleSheet("""
-            QTableWidget {
-                font-size: 12px;
-                border: 2px solid #bdc3c7;
+        table.setAlternatingRowColors(False)
+        table.setObjectName("productsTable")
+        # Désactiver l'édition
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+
+        table.setStyleSheet(f"""
+            QTableWidget#productsTable {{
+                font-size: 13px;
+                font-weight: normal;
+                border: 2px solid {Palette.BORDER_GRAY};
                 border-radius: 8px;
-            }
-            QHeaderView::section {
-                background-color: #3498db; color: white;
-                font-weight: bold; padding: 6px;
-            }
+                gridline-color: transparent;
+            }}
+            QTableWidget#productsTable::item {{
+                padding: 6px 8px;
+                border-bottom: 1px solid rgba(150, 150, 150, 0.18);
+            }}
+            QTableWidget#productsTable::item:selected {{
+                background-color: {Palette.SELECTION};
+                color: white;
+            }}
+            QTableWidget#productsTable::item:selected:!active {{
+                background-color: {Palette.SELECTION};
+                color: white;
+            }}
+            QTableWidget#productsTable::item:hover {{
+                background-color: {Palette.ROW_HOVER};
+            }}
+            QHeaderView::section {{
+                background-color: {Palette.ACCENT};
+                color: white;
+                font-weight: bold;
+                font-size: 13px;
+                padding: 8px;
+                border: none;
+                border-right: 1px solid {Palette.ACCENT_HOVER};
+            }}
+            QHeaderView::section:last {{ border-right: none; }}
+            
+            /* ===== SCROLLBARS GRISES ===== */
+            QScrollBar:vertical {{
+                border: none;
+                background: {Palette.SCROLLBAR_BG};
+                width: 12px;
+                border-radius: 6px;
+                margin: 2px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {Palette.SCROLLBAR_HANDLE};
+                min-height: 20px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {Palette.SCROLLBAR_HOVER};
+            }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            
+            QScrollBar:horizontal {{
+                border: none;
+                background: {Palette.SCROLLBAR_BG};
+                height: 12px;
+                border-radius: 6px;
+                margin: 2px;
+            }}
+            QScrollBar::handle:horizontal {{
+                background: {Palette.SCROLLBAR_HANDLE};
+                min-width: 30px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:horizontal:hover {{
+                background: {Palette.SCROLLBAR_HOVER};
+            }}
+            QScrollBar::add-line:horizontal,
+            QScrollBar::sub-line:horizontal {{
+                width: 0px;
+            }}
         """)
+        
         return table
 
     def _create_cart_group(self) -> QGroupBox:
         cart_group = QGroupBox("Panier Courant")
+        cart_group.setStyleSheet(f"""
+            QGroupBox {{
+                font-size: 14px;
+                font-weight: bold;
+                border: 2px solid {Palette.SUCCESS};
+                border-radius: 8px;
+                margin-top: 14px;
+                padding-top: 18px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 4px 12px;
+                color: {Palette.SUCCESS};
+            }}
+        """)
+        
         cart_layout = QVBoxLayout()
+        cart_layout.setSpacing(12)
+        cart_layout.setContentsMargins(16, 16, 16, 16)
 
         # Table panier
         self.cart_table = QTableWidget()
@@ -207,17 +356,87 @@ class SalesView(QWidget):
             ["ID", "Code", "Nom", "Type", "Qté", "Sous-total"]
         )
         self.cart_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.cart_table.verticalHeader().setDefaultSectionSize(30)
-        self.cart_table.setStyleSheet("""
-            QTableWidget {
-                font-size: 12px;
-                border: 2px solid #2ecc71;
+        self.cart_table.verticalHeader().setDefaultSectionSize(35)
+        self.cart_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.cart_table.setSelectionMode(QTableWidget.SingleSelection)
+        self.cart_table.setObjectName("cartTable")
+        # Désactiver l'édition
+        self.cart_table.setEditTriggers(QTableWidget.NoEditTriggers)
+
+        self.cart_table.setStyleSheet(f"""
+            QTableWidget#cartTable {{
+                font-size: 13px;
+                font-weight: normal;
+                border: 2px solid {Palette.SUCCESS};
                 border-radius: 8px;
-            }
-            QHeaderView::section {
-                background-color: #2ecc71; color: white;
-                font-weight: bold; padding: 6px;
-            }
+                gridline-color: transparent;
+            }}
+            QTableWidget#cartTable::item {{
+                padding: 6px 8px;
+                border-bottom: 1px solid rgba(150, 150, 150, 0.18);
+            }}
+            QTableWidget#cartTable::item:selected {{
+                background-color: {Palette.SELECTION};
+                color: white;
+            }}
+            QTableWidget#cartTable::item:selected:!active {{
+                background-color: {Palette.SELECTION};
+                color: white;
+            }}
+            QTableWidget#cartTable::item:hover {{
+                background-color: {Palette.ROW_HOVER};
+            }}
+            QHeaderView::section {{
+                background-color: {Palette.SUCCESS};
+                color: white;
+                font-weight: bold;
+                font-size: 13px;
+                padding: 8px;
+                border: none;
+                border-right: 1px solid {Palette.SUCCESS_HOVER};
+            }}
+            QHeaderView::section:last {{ border-right: none; }}
+            
+            /* ===== SCROLLBARS GRISES ===== */
+            QScrollBar:vertical {{
+                border: none;
+                background: {Palette.SCROLLBAR_BG};
+                width: 12px;
+                border-radius: 6px;
+                margin: 2px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {Palette.SCROLLBAR_HANDLE};
+                min-height: 20px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {Palette.SCROLLBAR_HOVER};
+            }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            
+            QScrollBar:horizontal {{
+                border: none;
+                background: {Palette.SCROLLBAR_BG};
+                height: 12px;
+                border-radius: 6px;
+                margin: 2px;
+            }}
+            QScrollBar::handle:horizontal {{
+                background: {Palette.SCROLLBAR_HANDLE};
+                min-width: 30px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:horizontal:hover {{
+                background: {Palette.SCROLLBAR_HOVER};
+            }}
+            QScrollBar::add-line:horizontal,
+            QScrollBar::sub-line:horizontal {{
+                width: 0px;
+            }}
         """)
 
         # Total
@@ -225,22 +444,34 @@ class SalesView(QWidget):
         self.total_label.setObjectName("totalLabel")
         self.total_label.setFont(QFont("Arial", 16, QFont.Bold))
         self.total_label.setAlignment(Qt.AlignRight)
-        self.total_label.setStyleSheet("QLabel#totalLabel { padding: 10px; }")
+        self.total_label.setStyleSheet(f"""
+            QLabel#totalLabel {{ 
+                padding: 10px;
+                color: {Palette.ACCENT};
+                background-color: {Palette.ROW_HOVER};
+                border-radius: 6px;
+            }}
+        """)
 
         # Boutons d'action
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(10)
 
         self.add_btn = self._make_btn(
-            "Ajouter (F1)", "#2ecc71", "#27ae60", "#1e8449", "plus"
+            "Ajouter (F1)", Palette.SUCCESS, Palette.SUCCESS_HOVER, 
+            Palette.SUCCESS_PRESSED, "plus"
         )
         self.remove_btn = self._make_btn(
-            "Retirer (F2)", "#e67e22", "#d35400", "#ba4a00", "minus"
+            "Retirer (F2)", Palette.WARNING, Palette.WARNING_HOVER, 
+            Palette.WARNING_PRESSED, "minus"
         )
         self.clear_btn = self._make_btn(
-            "Vider (F3)", "#95a5a6", "#7f8c8d", "#707b7c", "trash"
+            "Vider (F3)", Palette.SCROLLBAR_HANDLE, Palette.SCROLLBAR_HOVER, 
+            "#7f8c8d", "trash"
         )
         self.checkout_btn = self._make_btn(
-            "Paiement (F4)", "#9b59b6", "#8e44ad", "#7d3c98", "credit-card",
+            "Paiement (F4)", Palette.PURPLE, Palette.PURPLE_HOVER, 
+            Palette.PURPLE_PRESSED, "credit-card",
             font_size=14,
         )
 
@@ -266,16 +497,20 @@ class SalesView(QWidget):
         font_size: int = 13,
     ) -> QPushButton:
         btn = QPushButton(label)
-        btn.setMinimumHeight(44)
+        btn.setMinimumHeight(42)
         btn.setCursor(Qt.PointingHandCursor)
         ico = load_svg_icon(icon_name, size=18)
         btn.setIcon(QIcon(ico))
         btn.setIconSize(ico.size())
         btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {color}; color: white;
-                padding: 10px 20px; border: none;
-                border-radius: 6px; font-weight: bold; font-size: {font_size}px;
+                background-color: {color};
+                color: white;
+                padding: 8px 18px;
+                border: none;
+                border-radius: 8px;
+                font-weight: bold;
+                font-size: {font_size}px;
             }}
             QPushButton:hover {{ background-color: {hover}; }}
             QPushButton:pressed {{ background-color: {pressed}; }}
@@ -293,6 +528,29 @@ class SalesView(QWidget):
         self.remove_btn.clicked.connect(self._on_remove_clicked)
         self.clear_btn.clicked.connect(lambda: self.clear_cart_requested.emit())
         self.checkout_btn.clicked.connect(lambda: self.checkout_requested.emit())
+
+        # Connexion pour la sélection/désélection du tableau produits
+        self.products_table.clicked.connect(self._on_product_row_clicked)
+
+    def _on_product_row_clicked(self, index):
+        """
+        Gère le toggle sélection/désélection pour le tableau des produits :
+        - Si la ligne est déjà sélectionnée -> on la désélectionne
+        - Si la ligne n'est pas sélectionnée -> on la sélectionne
+        """
+        row = index.row()
+        
+        # Vérifier si la ligne est déjà sélectionnée
+        if self.products_table.selectionModel().isRowSelected(row, index.parent()):
+            # Désélectionner la ligne
+            self.products_table.selectionModel().clearSelection()
+            self.products_table.selectionModel().clearCurrentIndex()
+            self._last_selected_row = -1
+        else:
+            # Sélectionner la ligne (efface la sélection précédente)
+            self.products_table.selectionModel().clearSelection()
+            self.products_table.selectRow(row)
+            self._last_selected_row = row
 
     def _on_add_clicked(self):
         row = self.products_table.currentRow()

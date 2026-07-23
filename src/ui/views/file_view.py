@@ -2,7 +2,7 @@
 Vue du module Fichier.
 Import/Export CSV (Produits, Fournisseurs, Catégories), Export Utilisateurs,
 Sauvegarde/Restauration, Activation de licence.
-Design sobre : une seule teinte d'accent, pas de dégradés multicolores.
+Design sobre : palette unifiée avec toutes les autres vues.
 Actions sensibles adaptées au rôle de l'utilisateur connecté via apply_permissions().
 """
 
@@ -14,14 +14,26 @@ from PySide6.QtWidgets import (
     QTabWidget, QSizePolicy
 )
 from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtGui import QIcon, QPixmap, QFont
 
-ACCENT       = "#5B7A9D"
-ACCENT_DARK  = "#4A6480"
-BORDER       = "rgba(120, 130, 140, 0.35)"
-MUTED_TEXT   = "#8A9199"
-DANGER       = "#8A5555"
-DANGER_DARK  = "#734646"
+
+# ──────────────────────────────────────────────────────────────────
+# PALETTE CENTRALISÉE (une seule source de vérité pour les couleurs)
+# ──────────────────────────────────────────────────────────────────
+class Palette:
+    ACCENT          = "#567ba1"   # en-têtes, focus des champs
+    ACCENT_HOVER    = "#46648a"   # survol des en-têtes / boutons liés à l'accent
+    ACCENT_PRESSED  = "#3a5470"
+    SELECTION       = "#7895b4"   # couleur unique de sélection/désélection de ligne
+    ROW_HOVER       = "rgba(86, 123, 161, 0.10)"  # survol léger d'une ligne (dérivé de l'accent)
+    BORDER_GRAY     = "#bdc3c7"
+    SCROLLBAR_BG    = "#d5d8dc"   # Fond de la scrollbar (gris clair)
+    SCROLLBAR_HANDLE = "#aab7b8"  # Poignée de la scrollbar (gris)
+    SCROLLBAR_HOVER = "#95a5a6"   # Poignée survolée (gris plus foncé)
+    BASE_WHITE      = "#ffffff"
+    MUTED_TEXT      = "#8a9199"
+    DANGER          = "#c0392b"
+    DANGER_HOVER    = "#e74c3c"
 
 
 def load_svg_icon(icon_name: str, size: int = 24) -> QPixmap:
@@ -39,12 +51,12 @@ def load_svg_icon(icon_name: str, size: int = 24) -> QPixmap:
 def _groupbox_style() -> str:
     return f"""
         QGroupBox {{
-            font-size: 14px; font-weight: 600; border: 1px solid {BORDER};
-            border-radius: 10px; margin-top: 20px; padding-top: 16px; background: transparent;
+            font-size: 14px; font-weight: 600; border: 2px solid {Palette.BORDER_GRAY};
+            border-radius: 8px; margin-top: 20px; padding-top: 16px; background: transparent;
         }}
         QGroupBox::title {{
             subcontrol-origin: margin; subcontrol-position: top left;
-            padding: 4px 14px; left: 8px; top: -2px; color: {ACCENT};
+            padding: 4px 14px; left: 8px; top: -2px; color: {Palette.ACCENT};
             font-weight: 600; background: transparent;
         }}
     """
@@ -53,10 +65,10 @@ def _groupbox_style() -> str:
 def _input_style() -> str:
     return f"""
         QLineEdit {{
-            font-size: 13px; padding: 8px 12px; border: 1px solid {BORDER};
-            border-radius: 6px; min-height: 22px; background: rgba(255,255,255,0.03);
+            font-size: 13px; padding: 8px 12px; border: 2px solid {Palette.BORDER_GRAY};
+            border-radius: 6px; min-height: 22px; background: transparent;
         }}
-        QLineEdit:focus {{ border: 1px solid {ACCENT}; }}
+        QLineEdit:focus {{ border: 2px solid {Palette.ACCENT}; }}
     """
 
 
@@ -75,22 +87,22 @@ def _btn(label: str, primary: bool = True, danger: bool = False,
             btn.setIconSize(QSize(16, 16))
 
     if danger:
-        bg, hv, fg = "transparent", "rgba(138,85,85,0.12)", DANGER
-        border = f"1px solid {DANGER}"
+        bg, hv, fg = "transparent", Palette.DANGER_HOVER, Palette.DANGER
+        border = f"2px solid {Palette.DANGER}"
     elif primary:
-        bg, hv, fg = ACCENT, ACCENT_DARK, "white"
+        bg, hv, fg = Palette.ACCENT, Palette.ACCENT_HOVER, "white"
         border = "none"
     else:
-        bg, hv, fg = "transparent", "rgba(91,122,157,0.10)", ACCENT
-        border = f"1px solid {ACCENT}"
+        bg, hv, fg = "transparent", Palette.ROW_HOVER, Palette.ACCENT
+        border = f"2px solid {Palette.ACCENT}"
 
     btn.setStyleSheet(f"""
         QPushButton {{
             background: {bg}; color: {fg}; border: {border};
-            border-radius: 7px; font-weight: 600; font-size: 13px; padding: 6px 18px;
+            border-radius: 6px; font-weight: bold; font-size: 13px; padding: 6px 18px;
         }}
         QPushButton:hover {{ background: {hv}; }}
-        QPushButton:disabled {{ opacity: 0.5; color: {MUTED_TEXT}; border-color: {BORDER}; }}
+        QPushButton:disabled {{ opacity: 0.5; color: {Palette.MUTED_TEXT}; border-color: {Palette.BORDER_GRAY}; }}
         QPushButton:pressed {{ padding-top: 7px; padding-bottom: 5px; }}
     """)
     return btn
@@ -105,8 +117,8 @@ def _info_box(text: str) -> QLabel:
     lbl.setWordWrap(True)
     lbl.setStyleSheet(f"""
         font-size: 12px; padding: 10px 14px; border-radius: 8px;
-        border-left: 3px solid {ACCENT}; background: rgba(91, 122, 157, 0.06);
-        color: {MUTED_TEXT};
+        border-left: 3px solid {Palette.ACCENT}; background: {Palette.ROW_HOVER};
+        color: {Palette.MUTED_TEXT};
     """)
     return lbl
 
@@ -117,8 +129,8 @@ def _permission_box(text: str) -> QLabel:
     lbl.setWordWrap(True)
     lbl.setStyleSheet(f"""
         font-size: 12px; padding: 10px 14px; border-radius: 8px;
-        border-left: 3px solid {DANGER}; background: rgba(138, 85, 85, 0.06);
-        color: {DANGER};
+        border-left: 3px solid {Palette.DANGER}; background: rgba(192, 57, 43, 0.06);
+        color: {Palette.DANGER};
     """)
     return lbl
 
@@ -126,15 +138,50 @@ def _permission_box(text: str) -> QLabel:
 def _table_style() -> str:
     return f"""
         QTableWidget {{
-            font-size: 12px; border: 1px solid {BORDER}; border-radius: 8px;
+            font-size: 13px; border: 2px solid {Palette.BORDER_GRAY}; border-radius: 8px;
             gridline-color: transparent; background: transparent;
         }}
-        QTableWidget::item {{ padding: 9px 10px; border-bottom: 1px solid {BORDER}; }}
-        QTableWidget::item:selected {{ background: {ACCENT}; color: white; }}
+        QTableWidget::item {{ padding: 9px 10px; border-bottom: 1px solid {Palette.BORDER_GRAY}; }}
+        QTableWidget::item:selected {{ background: {Palette.SELECTION}; color: white; }}
+        QTableWidget::item:selected:!active {{ background: {Palette.SELECTION}; color: white; }}
+        QTableWidget::item:hover {{ background: {Palette.ROW_HOVER}; }}
         QHeaderView::section {{
-            background: transparent; color: {MUTED_TEXT}; font-weight: 600;
-            font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
-            padding: 10px; border: none; border-bottom: 1px solid {BORDER};
+            background: {Palette.ACCENT}; color: white; font-weight: bold;
+            font-size: 13px; padding: 10px; border: none; border-right: 1px solid {Palette.ACCENT_HOVER};
+        }}
+        QHeaderView::section:last {{ border-right: none; }}
+        
+        /* ===== SCROLLBARS GRISES ===== */
+        QScrollBar:vertical {{
+            border: none; background: {Palette.SCROLLBAR_BG};
+            width: 12px; border-radius: 6px; margin: 2px;
+        }}
+        QScrollBar::handle:vertical {{
+            background: {Palette.SCROLLBAR_HANDLE};
+            min-height: 20px; border-radius: 6px;
+        }}
+        QScrollBar::handle:vertical:hover {{
+            background: {Palette.SCROLLBAR_HOVER};
+        }}
+        QScrollBar::add-line:vertical,
+        QScrollBar::sub-line:vertical {{
+            height: 0px;
+        }}
+        
+        QScrollBar:horizontal {{
+            border: none; background: {Palette.SCROLLBAR_BG};
+            height: 12px; border-radius: 6px; margin: 2px;
+        }}
+        QScrollBar::handle:horizontal {{
+            background: {Palette.SCROLLBAR_HANDLE};
+            min-width: 30px; border-radius: 6px;
+        }}
+        QScrollBar::handle:horizontal:hover {{
+            background: {Palette.SCROLLBAR_HOVER};
+        }}
+        QScrollBar::add-line:horizontal,
+        QScrollBar::sub-line:horizontal {{
+            width: 0px;
         }}
     """
 
@@ -146,13 +193,6 @@ def fmt_int(n) -> str:
         return str(n)
 
 
-def fmt_money(n) -> str:
-    try:
-        return f"{int(round(float(n))):,}".replace(",", " ") + " FCFA"
-    except (TypeError, ValueError):
-        return str(n)
-
-
 class StatsCard(QFrame):
 
     def __init__(self, title: str = "Aperçu", parent=None):
@@ -160,8 +200,8 @@ class StatsCard(QFrame):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMinimumHeight(120)
         self.setStyleSheet(f"""
-            QFrame {{ border: 1px solid {BORDER}; border-radius: 12px;
-                      background: rgba(91, 122, 157, 0.035); }}
+            QFrame {{ border: 2px solid {Palette.BORDER_GRAY}; border-radius: 8px;
+                      background: {Palette.ROW_HOVER}; }}
         """)
 
         outer = QVBoxLayout(self)
@@ -169,7 +209,7 @@ class StatsCard(QFrame):
         outer.setSpacing(10)
 
         header = QLabel(title)
-        header.setStyleSheet(f"font-size: 11px; font-weight: 700; letter-spacing: 0.6px; color: {MUTED_TEXT};")
+        header.setStyleSheet(f"font-size: 11px; font-weight: 700; letter-spacing: 0.6px; color: {Palette.MUTED_TEXT};")
         outer.addWidget(header)
 
         self._row = QHBoxLayout()
@@ -187,7 +227,7 @@ class StatsCard(QFrame):
             if i > 0:
                 sep = QFrame()
                 sep.setFixedWidth(1)
-                sep.setStyleSheet(f"background: {BORDER};")
+                sep.setStyleSheet(f"background: {Palette.BORDER_GRAY};")
                 self._row.addWidget(sep)
                 self._tile_widgets.append(sep)
 
@@ -199,13 +239,13 @@ class StatsCard(QFrame):
 
             val_lbl = QLabel(str(value))
             val_lbl.setAlignment(Qt.AlignCenter)
-            val_lbl.setStyleSheet(f"font-size: 23px; font-weight: 700; color: {ACCENT};")
+            val_lbl.setStyleSheet(f"font-size: 23px; font-weight: 700; color: {Palette.ACCENT};")
             tile_lay.addWidget(val_lbl)
 
             cap_lbl = QLabel(caption)
             cap_lbl.setAlignment(Qt.AlignCenter)
             cap_lbl.setWordWrap(True)
-            cap_lbl.setStyleSheet(f"font-size: 11px; color: {MUTED_TEXT}; font-weight: 600;")
+            cap_lbl.setStyleSheet(f"font-size: 11px; color: {Palette.MUTED_TEXT}; font-weight: 600;")
             tile_lay.addWidget(cap_lbl)
 
             tile_lay.addStretch(1)
@@ -214,8 +254,7 @@ class StatsCard(QFrame):
 
 
 class _ImportExportPanel(QWidget):
-    """Bloc réutilisable : Import CSV + Export CSV + modèle, pour une entité donnée.
-    Expose btn_import/btn_template pour un contrôle de permission externe."""
+    """Bloc réutilisable : Import CSV + Export CSV + modèle, pour une entité donnée."""
 
     import_requested = Signal(str)
     export_requested = Signal(str)
@@ -354,7 +393,7 @@ class _LicensePanel(QWidget):
 
     activate_requested = Signal(str)
 
-    _STATUS_COLORS = {"valid": ACCENT, "expired": DANGER, "invalid": DANGER, "missing": MUTED_TEXT}
+    _STATUS_COLORS = {"valid": Palette.ACCENT, "expired": Palette.DANGER, "invalid": Palette.DANGER, "missing": Palette.MUTED_TEXT}
     _STATUS_LABELS = {"valid": "ACTIVE", "expired": "EXPIRÉE", "invalid": "INVALIDE", "missing": "AUCUNE"}
 
     def __init__(self, parent=None):
@@ -402,8 +441,8 @@ class _LicensePanel(QWidget):
 
         self.status_card = QFrame()
         self.status_card.setStyleSheet(f"""
-            QFrame {{ border: 1px solid {BORDER}; border-radius: 10px;
-                      background: rgba(91, 122, 157, 0.05); }}
+            QFrame {{ border: 2px solid {Palette.BORDER_GRAY}; border-radius: 8px;
+                      background: {Palette.ROW_HOVER}; }}
         """)
         card_lay = QVBoxLayout(self.status_card)
         card_lay.setContentsMargins(20, 18, 20, 18)
@@ -412,9 +451,9 @@ class _LicensePanel(QWidget):
         top_row = QHBoxLayout()
         top_row.setSpacing(10)
         self.badge = QLabel("—")
-        self.badge.setStyleSheet(self._badge_style(MUTED_TEXT))
+        self.badge.setStyleSheet(self._badge_style(Palette.MUTED_TEXT))
         self.plan_label = QLabel("Aucune licence active")
-        self.plan_label.setStyleSheet("font-size: 15px; font-weight: 700;")
+        self.plan_label.setStyleSheet(f"font-size: 15px; font-weight: 700; color: {Palette.ACCENT};")
         top_row.addWidget(self.badge, 0, Qt.AlignVCenter)
         top_row.addWidget(self.plan_label, 0, Qt.AlignVCenter)
         top_row.addStretch()
@@ -422,7 +461,7 @@ class _LicensePanel(QWidget):
 
         self.detail_label = QLabel("Veuillez saisir une clé de licence pour activer l'application.")
         self.detail_label.setWordWrap(True)
-        self.detail_label.setStyleSheet(f"font-size: 12px; color: {MUTED_TEXT};")
+        self.detail_label.setStyleSheet(f"font-size: 12px; color: {Palette.MUTED_TEXT};")
         card_lay.addWidget(self.detail_label)
         card_lay.addStretch(1)
 
@@ -464,7 +503,7 @@ class _LicensePanel(QWidget):
         self.activate_requested.emit(key)
 
     def set_status(self, status: str, info: dict, days):
-        color = self._STATUS_COLORS.get(status, MUTED_TEXT)
+        color = self._STATUS_COLORS.get(status, Palette.MUTED_TEXT)
         self.badge.setStyleSheet(self._badge_style(color))
         self.badge.setText(self._STATUS_LABELS.get(status, str(status).upper()))
 
@@ -491,7 +530,7 @@ class _LicensePanel(QWidget):
 
 
 class FileView(QWidget):
-    """Vue principale du module Fichier — design sobre, un seul accent.
+    """Vue principale du module Fichier — design sobre, palette unifiée.
     apply_permissions() adapte l'interface au rôle de l'utilisateur connecté."""
 
     version = "3.0.0"
@@ -524,31 +563,48 @@ class FileView(QWidget):
         self.btn_create_backup = None
         self.btn_restore_backup = None
         self.btn_delete_backup = None
+        self._last_selected_row = -1
         self.init_ui()
 
     def init_ui(self):
         main = QVBoxLayout(self)
-        main.setContentsMargins(28, 24, 28, 20)
+        main.setContentsMargins(20, 20, 20, 20)
         main.setSpacing(16)
 
+        # Titre
+        header = QHBoxLayout()
+        header.setSpacing(12)
+
+        icon_label = QLabel()
+        icon_label.setFixedSize(40, 40)
+        icon_label.setPixmap(load_svg_icon("folder", size=40))
+
         title = QLabel("Gestion des Fichiers")
-        title.setStyleSheet("font-size: 24px; font-weight: 700;")
+        title.setStyleSheet(f"""
+            font-size: 28px; 
+            font-weight: bold;
+            color: {Palette.ACCENT};
+        """)
+
+        header.addWidget(icon_label)
+        header.addWidget(title)
+        header.addStretch()
+        main.addLayout(header)
+
         subtitle = QLabel("Import / Export CSV  ·  Sauvegarde et restauration de la base de données  ·  Licence")
-        subtitle.setStyleSheet(f"font-size: 13px; color: {MUTED_TEXT}; margin-top: 2px;")
-        main.addWidget(title)
+        subtitle.setStyleSheet(f"font-size: 13px; color: {Palette.MUTED_TEXT}; margin-top: 2px; margin-bottom: 8px;")
         main.addWidget(subtitle)
-        main.addSpacing(6)
 
         self.tabs = QTabWidget()
         self.tabs.setStyleSheet(f"""
             QTabWidget::pane {{ border: none; }}
             QTabBar::tab {{
-                background: transparent; color: {MUTED_TEXT}; padding: 9px 18px;
-                margin-right: 4px; border-bottom: 2px solid transparent;
+                background: transparent; color: {Palette.MUTED_TEXT}; padding: 10px 20px;
+                margin-right: 4px; border-bottom: 3px solid transparent;
                 font-weight: 600; font-size: 13px;
             }}
-            QTabBar::tab:selected {{ color: {ACCENT}; border-bottom: 2px solid {ACCENT}; }}
-            QTabBar::tab:hover {{ color: {ACCENT}; }}
+            QTabBar::tab:selected {{ color: {Palette.ACCENT}; border-bottom: 3px solid {Palette.ACCENT}; }}
+            QTabBar::tab:hover {{ color: {Palette.ACCENT_HOVER}; }}
         """)
 
         self.products_panel = _ImportExportPanel(
@@ -612,7 +668,7 @@ class FileView(QWidget):
 
         hdr = QHBoxLayout()
         lbl = QLabel("Sauvegardes disponibles")
-        lbl.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {MUTED_TEXT};")
+        lbl.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {Palette.ACCENT};")
         ref = _btn("Actualiser", primary=False, h=30, w=100)
         ref.clicked.connect(lambda: self.refresh_backups_requested.emit())
         hdr.addWidget(lbl)
@@ -630,6 +686,7 @@ class FileView(QWidget):
         self.backup_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.backup_table.setMinimumHeight(220)
         self.backup_table.setStyleSheet(_table_style())
+        self.backup_table.setObjectName("backupTable")
         lay.addWidget(self.backup_table)
 
         act = QHBoxLayout()
@@ -657,7 +714,23 @@ class FileView(QWidget):
         self.backup_stats_card.setMinimumHeight(90)
         lay.addWidget(self.backup_stats_card, 1)
 
+        # Connexion pour la sélection/désélection
+        self.backup_table.clicked.connect(self._on_row_clicked)
+
         return wrap
+
+    def _on_row_clicked(self, index):
+        """Gère le toggle sélection/désélection pour le tableau des sauvegardes."""
+        row = index.row()
+        
+        if self.backup_table.selectionModel().isRowSelected(row, index.parent()):
+            self.backup_table.selectionModel().clearSelection()
+            self.backup_table.selectionModel().clearCurrentIndex()
+            self._last_selected_row = -1
+        else:
+            self.backup_table.selectionModel().clearSelection()
+            self.backup_table.selectRow(row)
+            self._last_selected_row = row
 
     # ────────────────────────────────────────────────────────────────
     # PERMISSIONS — appelé par FileManager juste après get_ui()
@@ -687,8 +760,6 @@ class FileView(QWidget):
         self.btn_restore_backup.setEnabled(can_configure_system)
         self.btn_delete_backup.setEnabled(can_configure_system)
         self._backup_permission_lbl.setVisible(not can_configure_system)
-        # Créer une sauvegarde reste possible pour tout profil ayant accès au module
-        # (opération non destructrice), seule la restauration/suppression est verrouillée.
 
     def _do_restore(self):
         row = self.backup_table.currentRow()
