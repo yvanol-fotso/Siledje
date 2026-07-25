@@ -358,14 +358,28 @@ class DatabaseSettingsView(QWidget):
         return info_box
 
     # ──────────────────────────────────────────────────────────────────
-    # MÉTHODES PUBLIQUES
+    # MÉTHODES PUBLIQUES — VERSION CORRIGÉE AVEC GESTION DES ERREURS
     # ──────────────────────────────────────────────────────────────────
 
     def update_stats_display(self, stats):
-        self.cards['file_size'].set_value(f"{stats['file_size']:.2f} MB")
-        self.cards['products'].set_value(str(stats['total_products']))
-        self.cards['barcodes'].set_value(str(stats['total_barcodes']))
-        self.cards['sales'].set_value(str(stats['total_sales']))
-        self.cards['users'].set_value(str(stats['total_users']))
-        self.cards['pages'].set_value(str(stats['page_count']))
+        """
+        Met à jour l'affichage des cartes de statistiques.
+        Utilise .get() pour éviter les KeyError si une clé est manquante.
+        """
+        # Utilisation de .get() avec des valeurs par défaut pour éviter les KeyError
+        self.cards['file_size'].set_value(f"{stats.get('file_size', 0):.2f} MB")
+        self.cards['products'].set_value(str(stats.get('total_products', 0)))
+        self.cards['barcodes'].set_value(str(stats.get('total_barcodes', 0)))
+        self.cards['sales'].set_value(str(stats.get('total_sales', 0)))
+        self.cards['users'].set_value(str(stats.get('total_users', 0)))
+        
+        # Gestion spéciale pour page_count - si absent, afficher "N/A" ou 0
+        page_count = stats.get('page_count')
+        if page_count is not None:
+            self.cards['pages'].set_value(str(page_count))
+        else:
+            # Si la clé n'existe pas, on affiche "0" ou "N/A"
+            self.cards['pages'].set_value("0")
+            print("[DatabaseSettingsView] ⚠️ 'page_count' non trouvé dans les stats, valeur par défaut: 0")
+        
         print("[DatabaseSettingsView] Statistiques mises à jour")
