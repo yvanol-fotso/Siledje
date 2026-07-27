@@ -8,6 +8,7 @@ restent la responsabilité de CatalogRepository / UserRepository — ce
 repository ne fait que "brancher" la couche sync par-dessus.
 """
 
+import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from src.database.connection import get_db_connection
@@ -72,6 +73,25 @@ class CloudSyncRepository:
         else:
             cursor.execute(f"SELECT * FROM {table} ORDER BY created_at ASC")
         return [dict(row) for row in cursor.fetchall()]
+
+    # ── Comblement des sync_uuid manquants ─────────────────────────
+
+    def backfill_missing_uuids(self, table: str) -> int:
+        """Génère un sync_uuid pour toute ligne qui n'en a pas encore
+        (typiquement une ligne créée après la migration initiale, via
+        un create_* qui ne connaît pas la notion de synchro cloud).
+        Retourne le nombre de lignes complétées."""
+        cursor = self.db.get_cursor()
+        cursor.execute(f"SELECT id FROM {table} WHERE sync_uuid IS NULL")
+        rows = cursor.fetchall()
+        for row in rows:
+            cursor.execute(
+                f"UPDATE {table} SET sync_uuid = ? WHERE id = ?",
+                (str(uuid.uuid4()), row["id"])
+            )
+        if rows:
+            self.db.commit()
+        return len(rows)
 
     # ── Résolution d'identifiants (local <-> sync_uuid) ────────────
 

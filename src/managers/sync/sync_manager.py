@@ -1,24 +1,12 @@
 """
 Gestionnaire de synchronisation cloud — logique pure, aucune UI ici.
 
-Principe :
-  1. Toutes les X minutes (configurable), le manager vérifie s'il y a une
-     connexion internet.
-  2. Si oui : il rejoue d'abord TOUTES les tentatives en attente (échecs
-     précédents faute de connexion ou d'erreur serveur), puis crée et
-     envoie une nouvelle sauvegarde.
-  3. Si non (ou en cas d'erreur d'envoi) : l'opération reste "pending" en
-     base (SyncRepository) et sera retentée automatiquement au prochain
-     cycle — rien n'est perdu.
-  4. Après MAX_ATTEMPTS échecs consécutifs sur une même opération, elle
-     passe en statut "failed" (arrêt des tentatives automatiques, visible
-     dans l'historique) pour éviter de s'acharner indéfiniment sur un
-     fichier corrompu par exemple.
-
-Le transport cloud (CloudSyncClient) est volontairement isolé et
-interchangeable : implémente aujourd'hui un envoi HTTP générique (PUT) vers
-une URL de stockage configurée en .env, à adapter selon le prestataire
-cloud choisi (S3 presigned URL, Backblaze, serveur privé, etc.).
+Composé de deux volets, exposés dans la même vue (SyncView) :
+  1. Sauvegarde complète (fichier .db entier) — planifiée, avec file d'attente
+     et nouvelles tentatives automatiques en cas d'échec.
+  2. Synchronisation des données (délégué à CloudDataSyncManager) —
+     bidirectionnelle, catégories/fournisseurs/produits/stock, pensée pour
+     la cohabitation avec le futur mobile.
 """
 
 import os
@@ -34,37 +22,17 @@ from dotenv import load_dotenv
 
 from src.database.repositories.sync_repository import SyncRepository
 from src.database.connection import get_db_connection
+from src.managers.sync.network_utils import has_internet_connection
+from src.managers.sync.cloud_data_sync_manager import CloudDataSyncManager
 
 load_dotenv()
 
 MAX_ATTEMPTS = 5
-CONNECTIVITY_CHECK_HOST = ("8.8.8.8", 53)
-CONNECTIVITY_TIMEOUT_SEC = 2.5
-TIMER_TICK_MS = 60_000  # vérifie chaque minute s'il est temps de synchroniser
-
-
-def has_internet_connection() -> bool:
-    """Test de connectivité léger, sans dépendance supplémentaire."""
-    try:
-        socket.setdefaulttimeout(CONNECTIVITY_TIMEOUT_SEC)
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect(CONNECTIVITY_CHECK_HOST)
-        s.close()
-        return True
-    except OSError:
-        return False
+TIMER_TICK_MS = 60_000
 
 
 class CloudSyncClient:
-    """
-    Transport cloud générique (HTTP PUT). Remplace/étends cette classe selon
-    le prestataire choisi (ex: boto3 pour S3, ftplib, API propriétaire...).
-
-    Configuration attendue dans .env :
-      SILEDJE_CLOUD_SYNC_URL   = URL de dépôt (peut être une URL pré-signée,
-                                  ou une URL de base + nom de fichier ajouté)
-      SILEDJE_CLOUD_SYNC_TOKEN = jeton d'autorisation (optionnel)
-    """
+    """Transport HTTP générique pour la sauvegarde complète (fichier .db)."""
 
     def __init__(self):
         self.base_url = os.getenv("SILEDJE_CLOUD_SYNC_URL")
@@ -74,37 +42,46 @@ class CloudSyncClient:
         return bool(self.base_url)
 
     def upload(self, file_path: str) -> None:
-        """Lève une exception en cas d'échec — le manager se charge de la capturer."""
         if not self.is_configured():
             raise RuntimeError(
                 "SILEDJE_CLOUD_SYNC_URL manquant dans .env. "
                 "Configure l'URL de destination avant d'activer la synchronisation."
             )
-
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"Fichier introuvable : {file_path}")
 
         url = self.base_url.rstrip("/") + "/" + path.name
         data = path.read_bytes()
-
-        req = urllib.request.Request(url, data=data, method="PUT")
+        # POST pour créer un nouvel objet (ex: Supabase Storage). Si le
+        # stockage choisi utilise une URL pré-signée de type S3 (qui exige
+        # PUT), bascule cette méthode sur "PUT" à la place.
+        req = urllib.request.Request(url, data=data, method="POST")
         req.add_header("Content-Type", "application/octet-stream")
         if self.token:
+            # Supabase (Storage comme REST) exige les DEUX en-têtes : apikey
+            # pour identifier le projet, Authorization pour l'autorisation.
+            # N'envoyer que l'un des deux produit "Invalid Compact JWS".
+            req.add_header("apikey", self.token)
             req.add_header("Authorization", f"Bearer {self.token}")
 
-        with urllib.request.urlopen(req, timeout=30) as response:
-            if response.status >= 300:
-                raise RuntimeError(f"Réponse serveur inattendue : {response.status}")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                if response.status >= 300:
+                    raise RuntimeError(f"Réponse serveur inattendue : {response.status}")
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode(errors="ignore")
+            raise RuntimeError(f"Échec de l'envoi ({e.code}) : {detail}") from e
 
 
 class SyncManager(QObject):
-    """Orchestre la synchronisation cloud : planification, file d'attente, envoi."""
+    """Orchestre la sauvegarde cloud complète ET porte le manager de
+    synchronisation de données (délégation, pas de logique dupliquée)."""
 
-    version = "1.0.0"
+    version = "2.0.0"
 
-    status_changed = Signal()   # connexion / dernière synchro / compteur en attente
-    history_changed = Signal()  # historique des opérations mis à jour
+    status_changed = Signal()
+    history_changed = Signal()
 
     def __init__(self, parent=None, current_user=None):
         super().__init__(parent)
@@ -116,6 +93,9 @@ class SyncManager(QObject):
         self.cloud_client = CloudSyncClient()
         self.settings = QSettings("Siledje", "Siledje")
 
+        # Synchronisation des données (délégué complet — voir cloud_data_sync_manager.py)
+        self.data_sync_manager = CloudDataSyncManager(parent, current_user)
+
         conn = get_db_connection()
         self.db_path = Path(
             getattr(conn, "db_path", None)
@@ -126,10 +106,14 @@ class SyncManager(QObject):
         self.backup_dir.mkdir(parents=True, exist_ok=True)
 
         self._is_syncing = False
+        self._is_online_cached = True  # optimiste ; corrigé au premier tick du timer
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._on_timer_tick)
         self.timer.start(TIMER_TICK_MS)
+        # Premier vrai test de connectivité un instant après le démarrage,
+        # hors du chemin d'ouverture de la vue (évite de geler l'UI à l'ouverture).
+        QTimer.singleShot(500, self._refresh_connectivity_cache)
 
         print(f"[SyncManager v{self.version}] Initialisé — "
               f"auto-sync={'ON' if self.auto_sync_enabled else 'OFF'}, "
@@ -155,6 +139,10 @@ class SyncManager(QObject):
         v.interval_changed.connect(self.set_interval_minutes)
         v.refresh_requested.connect(self.refresh_view)
 
+        v.sync_data_requested.connect(self._sync_data_now)
+        self.data_sync_manager.sync_started.connect(lambda: self.view.set_data_syncing(True))
+        self.data_sync_manager.sync_finished.connect(self._on_data_sync_finished)
+
     def _apply_permission(self) -> bool:
         if not self.current_user:
             return False
@@ -168,7 +156,7 @@ class SyncManager(QObject):
         if not self.view:
             return
         self.view.set_status(
-            online=has_internet_connection(),
+            online=self._is_online_cached,
             pending_count=self.repo.get_pending_count(),
             last_success=self.repo.get_last_success(),
             auto_sync_enabled=self.auto_sync_enabled,
@@ -176,6 +164,21 @@ class SyncManager(QObject):
             is_syncing=self._is_syncing,
         )
         self.view.set_history(self.repo.get_recent(30))
+        self.view.set_data_sync_status(self.data_sync_manager.get_status_summary())
+
+    # ────────────────────────────────────────────────────────────────
+    # SYNCHRONISATION DES DONNÉES (délégation à CloudDataSyncManager)
+    # ────────────────────────────────────────────────────────────────
+
+    @Slot()
+    def _sync_data_now(self):
+        self.data_sync_manager.sync_now()
+
+    @Slot(bool, str)
+    def _on_data_sync_finished(self, success: bool, message: str):
+        if self.view:
+            self.view.set_data_syncing(False)
+            self.view.set_data_sync_result(success, message)
 
     # ────────────────────────────────────────────────────────────────
     # PARAMÈTRES (persistés via QSettings)
@@ -224,18 +227,27 @@ class SyncManager(QObject):
         self.settings.sync()
 
     # ────────────────────────────────────────────────────────────────
-    # PLANIFICATION AUTOMATIQUE
+    # PLANIFICATION AUTOMATIQUE (sauvegarde complète uniquement)
     # ────────────────────────────────────────────────────────────────
 
     def _on_timer_tick(self):
+        self._refresh_connectivity_cache()
         if not self.auto_sync_enabled or self._is_syncing:
             return
         due_since = self._last_attempt_at() + timedelta(minutes=self.interval_minutes)
         if datetime.now() >= due_since:
             self._run_sync(manual=False)
 
+    def _refresh_connectivity_cache(self):
+        """Seul endroit où le vrai test réseau (bloquant, jusqu'à ~2.5s) est
+        exécuté — jamais sur le chemin d'ouverture de la vue, pour ne pas
+        geler l'interface. La vue affiche toujours la dernière valeur connue."""
+        self._is_online_cached = has_internet_connection()
+        if self.view:
+            self.refresh_view()
+
     # ────────────────────────────────────────────────────────────────
-    # SYNCHRONISATION MANUELLE
+    # SYNCHRONISATION MANUELLE (sauvegarde complète)
     # ────────────────────────────────────────────────────────────────
 
     @Slot()
@@ -255,7 +267,7 @@ class SyncManager(QObject):
         )
 
     # ────────────────────────────────────────────────────────────────
-    # CŒUR DE LA SYNCHRONISATION
+    # CŒUR DE LA SAUVEGARDE COMPLÈTE
     # ────────────────────────────────────────────────────────────────
 
     def _run_sync(self, manual: bool):
@@ -269,18 +281,13 @@ class SyncManager(QObject):
         try:
             online = has_internet_connection()
             if not online:
-                # Pas de connexion : on ne fait qu'enfiler une nouvelle sauvegarde
-                # en attente si aucune n'est déjà en file, rien d'autre à tenter.
                 if not self.repo.get_pending():
                     self._create_and_enqueue_backup()
                 self.history_changed.emit()
                 self.status_changed.emit()
                 return
 
-            # 1. Rejoue d'abord tout ce qui est resté en attente (échecs précédents)
             self._flush_pending_queue()
-
-            # 2. Crée et envoie une nouvelle sauvegarde
             op_id, file_path = self._create_and_enqueue_backup()
             self._attempt_upload(op_id, file_path)
 

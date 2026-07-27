@@ -1,26 +1,35 @@
 """
 Vue du module Synchronisation Cloud.
-Affichage uniquement : statut de connexion, file d'attente, historique,
-paramètres d'automatisation. Toute la logique vit dans SyncManager.
-Design cohérent avec le module Fichier (même palette sobre, un seul accent).
+Deux blocs distincts, dans une vue défilante :
+  - Sauvegarde complète (fichier .db entier, pour la reprise après sinistre)
+  - Synchronisation des données (catégories/fournisseurs/produits/stock,
+    bidirectionnelle, pour la cohabitation avec le futur mobile)
+Toute la logique vit dans SyncManager / CloudDataSyncManager — cette vue
+n'affiche que ce qu'on lui donne et émet des signaux.
 """
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QCheckBox, QComboBox, QTableWidget, QTableWidgetItem,
-    QHeaderView, QAbstractItemView, QFrame, QSizePolicy
+    QHeaderView, QAbstractItemView, QFrame, QScrollArea
 )
 from PySide6.QtCore import Qt, Signal
 
-ACCENT     = "#5B7A9D"
+ACCENT      = "#5B7A9D"
 ACCENT_DARK = "#4A6480"
-BORDER     = "rgba(120, 130, 140, 0.35)"
-MUTED_TEXT = "#8A9199"
-DANGER     = "#8A5555"
-SUCCESS    = "#5B8A6B"   # vert désaturé, cohérent avec la palette sobre
+BORDER      = "rgba(120, 130, 140, 0.35)"
+MUTED_TEXT  = "#8A9199"
+DANGER      = "#8A5555"
+SUCCESS     = "#5B8A6B"
+
+STATUS_LABELS_FR = {"pending": "En attente", "success": "Réussie", "failed": "Échec définitif"}
+INTERVAL_OPTIONS = [
+    ("15 minutes", 15), ("30 minutes", 30), ("1 heure", 60),
+    ("3 heures", 180), ("6 heures", 360), ("24 heures", 1440),
+]
 
 
-def _groupbox_style() -> str:
+def _section_style() -> str:
     return f"""
         QGroupBox {{
             font-size: 14px; font-weight: 600; border: 1px solid {BORDER};
@@ -34,7 +43,7 @@ def _groupbox_style() -> str:
     """
 
 
-def _btn(label: str, primary: bool = True, h: int = 36, w: int = None) -> QPushButton:
+def _btn(label: str, primary: bool = True, h: int = 38, w: int = None) -> QPushButton:
     btn = QPushButton(label)
     btn.setMinimumHeight(h)
     btn.setMaximumHeight(h)
@@ -57,25 +66,18 @@ def _btn(label: str, primary: bool = True, h: int = 36, w: int = None) -> QPushB
     return btn
 
 
-def _info_box(text: str) -> QLabel:
+def _hint(text: str) -> QLabel:
+    """Texte d'aide simple, sans cadre — pas une boîte dans une boîte."""
     lbl = QLabel(text)
     lbl.setWordWrap(True)
-    lbl.setStyleSheet(f"""
-        font-size: 12px; padding: 10px 14px; border-radius: 8px;
-        border-left: 3px solid {ACCENT}; background: rgba(91, 122, 157, 0.06);
-        color: {MUTED_TEXT};
-    """)
+    lbl.setStyleSheet(f"font-size: 12px; color: {MUTED_TEXT}; padding: 2px 2px;")
     return lbl
 
 
-def _permission_box(text: str) -> QLabel:
+def _permission_hint(text: str) -> QLabel:
     lbl = QLabel(text)
     lbl.setWordWrap(True)
-    lbl.setStyleSheet(f"""
-        font-size: 12px; padding: 10px 14px; border-radius: 8px;
-        border-left: 3px solid {DANGER}; background: rgba(138, 85, 85, 0.06);
-        color: {DANGER};
-    """)
+    lbl.setStyleSheet(f"font-size: 12px; color: {DANGER}; font-weight: 600; padding: 2px 2px;")
     return lbl
 
 
@@ -95,24 +97,58 @@ def _table_style() -> str:
     """
 
 
-INTERVAL_OPTIONS = [
-    ("15 minutes", 15), ("30 minutes", 30), ("1 heure", 60),
-    ("3 heures", 180), ("6 heures", 360), ("24 heures", 1440),
-]
+def _badge_style(color: str) -> str:
+    return f"""
+        font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+        padding: 4px 12px; border-radius: 10px; background: {color}; color: white;
+    """
 
-STATUS_LABELS_FR = {"pending": "En attente", "success": "Réussie", "failed": "Échec définitif"}
-STATUS_COLORS_FR = {"pending": MUTED_TEXT, "success": SUCCESS, "failed": DANGER}
+
+class _StatusLine(QWidget):
+    """Une ligne compacte : badge + statut texte + valeur clé, sans cadre imbriqué."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(14)
+
+        self.badge = QLabel("—")
+        self.badge.setStyleSheet(_badge_style(MUTED_TEXT))
+        self.state_label = QLabel("Statut inconnu")
+        self.state_label.setStyleSheet("font-size: 14px; font-weight: 700;")
+        self.detail_label = QLabel("")
+        self.detail_label.setStyleSheet(f"font-size: 12px; color: {MUTED_TEXT};")
+
+        lay.addWidget(self.badge, 0, Qt.AlignVCenter)
+        lay.addWidget(self.state_label, 0, Qt.AlignVCenter)
+        lay.addStretch()
+        lay.addWidget(self.detail_label, 0, Qt.AlignVCenter)
+
+    def set_badge(self, text: str, color: str):
+        self.badge.setText(text)
+        self.badge.setStyleSheet(_badge_style(color))
+
+    def set_state(self, text: str):
+        self.state_label.setText(text)
+
+    def set_detail(self, text: str):
+        self.detail_label.setText(text)
 
 
 class SyncView(QWidget):
     """Vue principale du module Synchronisation Cloud."""
 
-    version = "1.0.0"
+    version = "2.0.0"
 
+    # Sauvegarde complète (fichier .db)
     sync_now_requested   = Signal()
     auto_sync_toggled    = Signal(bool)
-    interval_changed      = Signal(int)
-    refresh_requested     = Signal()
+    interval_changed     = Signal(int)
+    refresh_requested    = Signal()
+
+    # Synchronisation des données (bidirectionnelle)
+    sync_data_requested  = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -120,106 +156,150 @@ class SyncView(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        main = QVBoxLayout(self)
-        main.setContentsMargins(28, 24, 28, 20)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setStyleSheet(f"""
+            QScrollArea {{ background: transparent; border: none; }}
+            QScrollArea > QWidget > QWidget {{ background: transparent; }}
+            QScrollBar:vertical {{
+                border: none; background: rgba(91, 122, 157, 0.08);
+                width: 12px; border-radius: 6px; margin: 2px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {ACCENT}; min-height: 24px; border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical:hover {{ background: {ACCENT_DARK}; }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0px; }}
+        """)
+        scroll.viewport().setAutoFillBackground(False)
+
+        content = QWidget()
+        content.setAutoFillBackground(False)
+        main = QVBoxLayout(content)
+        main.setContentsMargins(28, 24, 28, 24)
         main.setSpacing(16)
 
         title = QLabel("Synchronisation Cloud")
         title.setStyleSheet("font-size: 24px; font-weight: 700;")
-        subtitle = QLabel("Sauvegarde automatique de la base de données vers le cloud")
+        subtitle = QLabel("Sauvegarde complète et synchronisation des données avec le cloud")
         subtitle.setStyleSheet(f"font-size: 13px; color: {MUTED_TEXT}; margin-top: 2px;")
         main.addWidget(title)
         main.addWidget(subtitle)
-        main.addSpacing(6)
+        main.addSpacing(4)
 
-        # ── Carte de statut ──────────────────────────────────────────
-        self.status_card = QFrame()
-        self.status_card.setStyleSheet(f"""
-            QFrame {{ border: 1px solid {BORDER}; border-radius: 12px;
-                      background: rgba(91, 122, 157, 0.035); }}
-        """)
-        card_lay = QVBoxLayout(self.status_card)
-        card_lay.setContentsMargins(24, 18, 24, 20)
-        card_lay.setSpacing(10)
+        main.addWidget(self._build_data_sync_section())
+        main.addWidget(self._build_backup_section())
+        main.addWidget(self._build_history_section(), 1)
 
-        top_row = QHBoxLayout()
-        self.connection_badge = QLabel("—")
-        self.connection_badge.setStyleSheet(self._badge_style(MUTED_TEXT))
-        self.sync_state_label = QLabel("Statut inconnu")
-        self.sync_state_label.setStyleSheet("font-size: 15px; font-weight: 700;")
-        top_row.addWidget(self.connection_badge, 0, Qt.AlignVCenter)
-        top_row.addWidget(self.sync_state_label, 0, Qt.AlignVCenter)
-        top_row.addStretch()
-        card_lay.addLayout(top_row)
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
 
-        stats_row = QHBoxLayout()
-        stats_row.setSpacing(0)
-        self.pending_value = self._stat_tile(stats_row, "0", "En attente")
-        self._sep(stats_row)
-        self.last_sync_value = self._stat_tile(stats_row, "—", "Dernière synchro réussie")
-        card_lay.addLayout(stats_row)
+    # ──────────────────────────────────────────────────────────────
+    # SECTION 1 — Synchronisation des données (bidirectionnelle)
+    # ──────────────────────────────────────────────────────────────
 
-        main.addWidget(self.status_card)
+    def _build_data_sync_section(self) -> QGroupBox:
+        grp = QGroupBox("Synchronisation des données (catégories, fournisseurs, produits, stock)")
+        grp.setStyleSheet(_section_style())
+        lay = QVBoxLayout(grp)
+        lay.setSpacing(12)
+        lay.setContentsMargins(18, 22, 18, 18)
 
-        # ── Bouton principal ────────────────────────────────────────
-        self.btn_sync_now = _btn("Synchroniser maintenant", primary=True, h=42)
+        self.data_status_line = _StatusLine()
+        lay.addWidget(self.data_status_line)
+
+        self.btn_sync_data = _btn("Synchroniser les données", primary=True, h=40)
+        self.btn_sync_data.clicked.connect(lambda: self.sync_data_requested.emit())
+        lay.addWidget(self.btn_sync_data)
+
+        self._data_permission_hint = _permission_hint(
+            "Seul un administrateur peut lancer la synchronisation des données."
+        )
+        self._data_permission_hint.setVisible(False)
+        lay.addWidget(self._data_permission_hint)
+
+        lay.addWidget(_hint(
+            "Envoie et récupère les modifications depuis la dernière synchro, dans les deux "
+            "sens. Le stock n'est jamais écrasé : il est recalculé à partir des mouvements."
+        ))
+        return grp
+
+    # ──────────────────────────────────────────────────────────────
+    # SECTION 2 — Sauvegarde complète
+    # ──────────────────────────────────────────────────────────────
+
+    def _build_backup_section(self) -> QGroupBox:
+        grp = QGroupBox("Sauvegarde complète (fichier de base de données)")
+        grp.setStyleSheet(_section_style())
+        lay = QVBoxLayout(grp)
+        lay.setSpacing(12)
+        lay.setContentsMargins(18, 22, 18, 18)
+
+        self.backup_status_line = _StatusLine()
+        lay.addWidget(self.backup_status_line)
+
+        self.btn_sync_now = _btn("Synchroniser maintenant", primary=True, h=40)
         self.btn_sync_now.clicked.connect(lambda: self.sync_now_requested.emit())
-        main.addWidget(self.btn_sync_now)
+        lay.addWidget(self.btn_sync_now)
 
-        # ── Paramètres ───────────────────────────────────────────────
-        settings_grp = QGroupBox("Synchronisation automatique")
-        settings_grp.setStyleSheet(_groupbox_style())
-        s_lay = QVBoxLayout(settings_grp)
-        s_lay.setSpacing(12)
-        s_lay.setContentsMargins(18, 22, 18, 18)
-
-        self.auto_checkbox = QCheckBox("Activer la synchronisation automatique")
+        auto_row = QHBoxLayout()
+        auto_row.setSpacing(14)
+        self.auto_checkbox = QCheckBox("Automatique")
         self.auto_checkbox.setStyleSheet("font-size: 13px; font-weight: 600;")
         self.auto_checkbox.toggled.connect(self.auto_sync_toggled.emit)
-        s_lay.addWidget(self.auto_checkbox)
+        auto_row.addWidget(self.auto_checkbox)
 
-        interval_row = QHBoxLayout()
-        interval_row.setSpacing(10)
-        interval_lbl = QLabel("Fréquence :")
+        interval_lbl = QLabel("toutes les :")
         interval_lbl.setStyleSheet(f"font-size: 13px; color: {MUTED_TEXT};")
         self.interval_combo = QComboBox()
         self.interval_combo.addItems([label for label, _ in INTERVAL_OPTIONS])
         self.interval_combo.setStyleSheet(f"""
-            QComboBox {{ font-size: 13px; padding: 6px 10px; border: 1px solid {BORDER};
-                         border-radius: 6px; min-height: 22px; }}
+            QComboBox {{ font-size: 13px; padding: 5px 10px; border: 1px solid {BORDER};
+                         border-radius: 6px; min-height: 20px; }}
         """)
         self.interval_combo.currentIndexChanged.connect(
             lambda i: self.interval_changed.emit(self._interval_values[i])
         )
-        interval_row.addWidget(interval_lbl)
-        interval_row.addWidget(self.interval_combo, 1)
-        s_lay.addLayout(interval_row)
+        auto_row.addWidget(interval_lbl)
+        auto_row.addWidget(self.interval_combo)
+        auto_row.addStretch()
+        lay.addLayout(auto_row)
 
-        self._permission_lbl = _permission_box(
-            "Seul un administrateur peut configurer la synchronisation cloud."
+        self._backup_permission_hint = _permission_hint(
+            "Seul un administrateur peut configurer la sauvegarde automatique."
         )
-        self._permission_lbl.setVisible(False)
-        s_lay.addWidget(self._permission_lbl)
+        self._backup_permission_hint.setVisible(False)
+        lay.addWidget(self._backup_permission_hint)
 
-        s_lay.addWidget(_info_box(
+        lay.addWidget(_hint(
             "En cas d'échec (pas de connexion, erreur serveur), la tentative reste "
             "en attente et sera automatiquement rejouée au prochain cycle."
         ))
-        main.addWidget(settings_grp)
+        return grp
 
-        # ── Historique ───────────────────────────────────────────────
-        hist_grp = QGroupBox("Historique des synchronisations")
-        hist_grp.setStyleSheet(_groupbox_style())
-        h_lay = QVBoxLayout(hist_grp)
-        h_lay.setSpacing(10)
-        h_lay.setContentsMargins(18, 22, 18, 18)
+    # ──────────────────────────────────────────────────────────────
+    # SECTION 3 — Historique (sauvegarde)
+    # ──────────────────────────────────────────────────────────────
+
+    def _build_history_section(self) -> QGroupBox:
+        grp = QGroupBox("Historique des sauvegardes")
+        grp.setStyleSheet(_section_style())
+        lay = QVBoxLayout(grp)
+        lay.setSpacing(10)
+        lay.setContentsMargins(18, 22, 18, 18)
 
         hdr = QHBoxLayout()
         hdr.addStretch()
-        ref = _btn("Actualiser", primary=False, h=30, w=100)
+        ref = _btn("Actualiser", primary=False, h=28, w=100)
         ref.clicked.connect(lambda: self.refresh_requested.emit())
         hdr.addWidget(ref)
-        h_lay.addLayout(hdr)
+        lay.addLayout(hdr)
 
         self.history_table = QTableWidget()
         self.history_table.setColumnCount(4)
@@ -230,53 +310,28 @@ class SyncView(QWidget):
         self.history_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
         self.history_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.history_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.history_table.setMinimumHeight(220)
+        self.history_table.setMinimumHeight(260)
         self.history_table.setStyleSheet(_table_style())
-        h_lay.addWidget(self.history_table)
+        # La table gère son propre scroll interne ; pas de hauteur fixe qui la coupe.
+        self.history_table.verticalHeader().setVisible(False)
+        lay.addWidget(self.history_table)
 
-        main.addWidget(hist_grp, 1)
-
-    # ──────────────────────────────────────────────────────────────
-    # Helpers de construction
-    # ──────────────────────────────────────────────────────────────
-
-    def _stat_tile(self, row_layout: QHBoxLayout, value: str, caption: str) -> QLabel:
-        tile = QWidget()
-        lay = QVBoxLayout(tile)
-        lay.setContentsMargins(14, 0, 14, 0)
-        lay.setSpacing(3)
-        val_lbl = QLabel(value)
-        val_lbl.setStyleSheet(f"font-size: 21px; font-weight: 700; color: {ACCENT};")
-        cap_lbl = QLabel(caption)
-        cap_lbl.setWordWrap(True)
-        cap_lbl.setStyleSheet(f"font-size: 11px; color: {MUTED_TEXT}; font-weight: 600;")
-        lay.addWidget(val_lbl)
-        lay.addWidget(cap_lbl)
-        row_layout.addWidget(tile, 1)
-        return val_lbl
-
-    def _sep(self, row_layout: QHBoxLayout):
-        sep = QFrame()
-        sep.setFixedWidth(1)
-        sep.setStyleSheet(f"background: {BORDER};")
-        row_layout.addWidget(sep)
-
-    @staticmethod
-    def _badge_style(color: str) -> str:
-        return f"""
-            font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
-            padding: 4px 12px; border-radius: 10px; background: {color}; color: white;
-        """
+        return grp
 
     # ──────────────────────────────────────────────────────────────
-    # API publique — appelée par SyncManager
+    # API publique — appelée par les managers
     # ──────────────────────────────────────────────────────────────
 
     def apply_permissions(self, *, can_configure_system: bool):
         self.btn_sync_now.setEnabled(can_configure_system)
         self.auto_checkbox.setEnabled(can_configure_system)
         self.interval_combo.setEnabled(can_configure_system)
-        self._permission_lbl.setVisible(not can_configure_system)
+        self._backup_permission_hint.setVisible(not can_configure_system)
+
+        self.btn_sync_data.setEnabled(can_configure_system)
+        self._data_permission_hint.setVisible(not can_configure_system)
+
+    # ── Sauvegarde complète ──────────────────────────────────────
 
     def set_syncing(self, syncing: bool):
         self.btn_sync_now.setEnabled(not syncing and self.btn_sync_now.isEnabled())
@@ -284,23 +339,21 @@ class SyncView(QWidget):
 
     def set_status(self, *, online: bool, pending_count: int, last_success,
                    auto_sync_enabled: bool, interval_minutes: int, is_syncing: bool):
-        self.connection_badge.setText("EN LIGNE" if online else "HORS LIGNE")
-        self.connection_badge.setStyleSheet(self._badge_style(SUCCESS if online else DANGER))
+        self.backup_status_line.set_badge("EN LIGNE" if online else "HORS LIGNE",
+                                           SUCCESS if online else DANGER)
 
         if is_syncing:
-            self.sync_state_label.setText("Synchronisation en cours…")
+            self.backup_status_line.set_state("Synchronisation en cours…")
         elif pending_count > 0:
-            self.sync_state_label.setText(f"{pending_count} opération(s) en attente")
+            self.backup_status_line.set_state(f"{pending_count} en attente")
         else:
-            self.sync_state_label.setText("Tout est synchronisé")
-
-        self.pending_value.setText(str(pending_count))
+            self.backup_status_line.set_state("À jour")
 
         if last_success and last_success.get("completed_at"):
             date_str = str(last_success["completed_at"]).split(".")[0].replace("T", " ")
-            self.last_sync_value.setText(date_str)
+            self.backup_status_line.set_detail(f"Dernière réussie : {date_str}")
         else:
-            self.last_sync_value.setText("Jamais")
+            self.backup_status_line.set_detail("Jamais synchronisé")
 
         self.auto_checkbox.blockSignals(True)
         self.auto_checkbox.setChecked(auto_sync_enabled)
@@ -317,11 +370,7 @@ class SyncView(QWidget):
         for i, op in enumerate(operations):
             date_str = str(op.get("created_at", "")).split(".")[0].replace("T", " ")
             self.history_table.setItem(i, 0, QTableWidgetItem(date_str))
-
-            status_item = QTableWidgetItem(STATUS_LABELS_FR.get(op["status"], op["status"]))
-            status_item.setForeground(Qt.GlobalColor.white)
-            self.history_table.setItem(i, 1, status_item)
-
+            self.history_table.setItem(i, 1, QTableWidgetItem(STATUS_LABELS_FR.get(op["status"], op["status"])))
             self.history_table.setItem(i, 2, QTableWidgetItem(str(op.get("attempts", 0))))
             self.history_table.setItem(i, 3, QTableWidgetItem(op.get("last_error") or "—"))
 
@@ -331,3 +380,32 @@ class SyncView(QWidget):
             empty.setTextAlignment(Qt.AlignCenter)
             self.history_table.setItem(0, 0, empty)
             self.history_table.setSpan(0, 0, 1, 4)
+
+    # ── Synchronisation des données ──────────────────────────────
+
+    def set_data_syncing(self, syncing: bool):
+        self.btn_sync_data.setEnabled(not syncing and self.btn_sync_data.isEnabled())
+        self.btn_sync_data.setText("Synchronisation en cours…" if syncing else "Synchroniser les données")
+
+    def set_data_sync_result(self, success: bool, message: str):
+        self.data_status_line.set_badge("OK" if success else "ERREUR", SUCCESS if success else DANGER)
+        self.data_status_line.set_state("Données à jour" if success else "Échec de la synchronisation")
+        self.data_status_line.set_detail(message if not success else "")
+
+    def set_data_sync_status(self, summary: dict):
+        """Affiche l'état réel dès l'ouverture de la page, sans attendre un clic."""
+        if not summary.get("configured"):
+            self.data_status_line.set_badge("NON CONFIGURÉ", MUTED_TEXT)
+            self.data_status_line.set_state("Supabase non configuré")
+            self.data_status_line.set_detail("SUPABASE_URL / SUPABASE_API_KEY manquants dans .env")
+            return
+
+        last_sync = summary.get("last_sync")
+        self.data_status_line.set_badge("PRÊT", SUCCESS)
+        if last_sync:
+            date_str = str(last_sync).split(".")[0].replace("T", " ").replace("+00:00", "")
+            self.data_status_line.set_state("Prêt à synchroniser")
+            self.data_status_line.set_detail(f"Dernière synchro : {date_str}")
+        else:
+            self.data_status_line.set_state("Jamais synchronisé")
+            self.data_status_line.set_detail("")

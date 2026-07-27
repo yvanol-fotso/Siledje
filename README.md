@@ -8,15 +8,17 @@ Un système de gestion intuitif et complet pour les librairies et papeteries, co
 
 * **Authentification sécurisée :** Comptes utilisateurs avec mots de passe hachés (bcrypt), rôles et permissions (admin / gérant / employé), verrouillage après tentatives échouées, journal d'audit complet.
 * **Gestion des Utilisateurs :** Création, modification, désactivation de comptes et réinitialisation de mot de passe par un administrateur, depuis l'interface.
-* **Système de Licence :** Activation hors-ligne par clé signée cryptographiquement (HMAC-SHA256), gestion des plans (Starter / Pro / Premium) et de leur date d'expiration.
+* **Système de Licence :** Activation hors-ligne par clé signée cryptographiquement (HMAC-SHA256), gestion des plans (Starter / Pro / Premium) et de leur date d'expiration. Activation directement depuis l'interface (module Fichier → onglet Licence).
 * **Gestion des Stocks :** Ajout, modification, désactivation et recherche de produits (papeterie, fournitures, manuels scolaires). Catégories et fournisseurs réels, suivi des quantités, prix d'achat/vente distincts, seuils d'alerte de stock bas, emplacements physiques.
-* **Codes-barres :** Génération et association de codes-barres internes ou externes (EAN, QR, ISBN) à un produit, avec relation many-to-one réelle (un produit peut avoir plusieurs codes-barres).
+* **Codes-barres :** Génération et association de codes-barres internes ou externes (EAN, QR, ISBN) à un produit, relation many-to-one réelle (un produit peut avoir plusieurs codes-barres).
 * **Transactions de Vente :** Panier, checkout réel avec numéro de facture auto-généré, paiements par méthode configurable, déduction de stock tracée dans l'historique des mouvements, génération et impression de facture.
 * **Gestion des Clients :** Création automatique à la vente (par téléphone), suivi des dépenses cumulées.
 * **Gestion des Fournisseurs :** Enregistrement des coordonnées complètes, activation/désactivation.
+* **Import / Export CSV :** Produits, fournisseurs et catégories importables/exportables en masse (avec modèles CSV téléchargeables), export utilisateurs en lecture seule (jamais de mot de passe), le tout selon les permissions du rôle connecté.
+* **Sauvegarde cloud complète :** Envoi périodique et automatique d'une sauvegarde intégrale de la base vers un espace de stockage cloud (compatible Supabase Storage), avec file d'attente locale — toute tentative échouée (pas de connexion, erreur serveur) est rejouée automatiquement au cycle suivant, sans perte.
+* **Synchronisation de données (multi-appareils) :** Synchronisation bidirectionnelle de catégories/fournisseurs/produits et des mouvements de stock avec Supabase, pensée pour une future application mobile compagnon. Le stock n'est jamais écrasé par une simple valeur "la plus récente" : il est reconstruit par fusion additive des mouvements.
 * **Rapports et Statistiques :** Filtrage par période (jour/semaine/mois/année/personnalisé), export CSV, impression, calcul du produit le plus vendu.
-* **Synchronisation Cloud (Supabase) :** Synchronisation des données locales SQLite vers Supabase via son API REST, avec journalisation des synchronisations (`sync_logs`), suivi de l'état (succès/échec) et vue dédiée dans l'interface pour déclencher et superviser la synchronisation.
-* **Interface Utilisateur Graphique (GUI) :** Basée sur **PySide6**, thèmes clair/sombre, zoom ajustable.
+* **Interface Utilisateur Graphique (GUI) :** Basée sur **PySide6**, thèmes clair/sombre, zoom ajustable, design sobre à teinte d'accent unique.
 
 ---
 
@@ -25,12 +27,13 @@ Un système de gestion intuitif et complet pour les librairies et papeteries, co
 * **Python 3.12**
 * **PySide6** (interface graphique)
 * **SQLite** (base de données locale)
-* **Supabase** (synchronisation et sauvegarde cloud via API REST)
-* **requests** (client HTTP pour l'API REST Supabase)
+* **Supabase** (synchronisation de données + stockage des sauvegardes, via API REST)
 * **bcrypt** (hachage des mots de passe)
 * **python-dotenv** (gestion des secrets via `.env`)
 * **psutil** (statistiques système en barre de statut)
 * **python-barcode** + **Pillow** (génération des codes-barres)
+* **python-dateutil** (comparaison fiable des horodatages entre appareils lors de la synchro)
+* **urllib** / **socket** (bibliothèque standard — aucune dépendance HTTP supplémentaire pour la synchronisation cloud)
 
 ---
 
@@ -44,14 +47,27 @@ Le schéma complet (31 tables) est documenté dans `docs/docs_pdf/Siledje_bd_sch
 | Licences | `licenses` | `license_repository.py` |
 | Produits et stock | `categories`, `suppliers`, `products`, `barcodes`, `product_components`, `stock_movements` | `catalog_repository.py` |
 | Ventes et caisse | `clients`, `payment_methods`, `sales`, `sale_items`, `sale_payments`, `returns`, `return_items` | `sales_repository.py` |
-| Fournisseurs | `supplier_orders`, `supplier_order_items` | `supplier_order_repository.py` |
+| Fournisseurs (commandes) | `supplier_orders`, `supplier_order_items` | `supplier_order_repository.py` |
 | Vidéosurveillance/IA | `cameras`, `camera_events`, `alerts` | `surveillance_repository.py` |
 | Manuels scolaires | `school_levels`, `school_systems`, `school_classes`, `books` | `school_repository.py` |
-| Système / Synchronisation | `sync_logs`, `settings` | `system_repository.py`, `sync_repository.py`, `cloud_sync_repository.py` |
+| Sauvegarde cloud (file d'attente) | `sync_operations` | `sync_repository.py` |
+| Synchronisation de données | `sync_state` + colonnes `sync_uuid`/`updated_at` sur les tables catalogue | `cloud_sync_repository.py` |
+| Système | `sync_logs`, `settings` | `system_repository.py` |
 
 `src/database/connection.py` gère uniquement la connexion physique (singleton, clés étrangères, ouverture/fermeture) — il ne définit aucune table métier. Ajouter un nouveau domaine ne nécessite jamais de modifier ce fichier.
 
-La table `sync_logs` trace chaque opération de synchronisation (horodatage, statut, domaine concerné), et la migration dédiée (`src/database/migrations/cloud_sync_migration.py`) prépare le schéma local nécessaire à la synchronisation cloud.
+### Migrations de schéma
+
+`src/database/migrations/migration_manager.py` détecte automatiquement tout fichier `.py` du dossier exposant `upgrade(conn)` (et optionnellement `downgrade(conn)`), l'applique une seule fois, et trace son exécution dans la table `migrations` :
+
+```python
+from src.database.migrations.migration_manager import run_migrations
+run_migrations()
+```
+
+| Fichier | Rôle |
+|---|---|
+| `cloud_sync_migration.py` | Ajoute `sync_uuid` + `updated_at` aux tables catalogue, crée `sync_state` — prérequis à la synchronisation de données multi-appareils |
 
 ---
 
@@ -61,14 +77,14 @@ La table `sync_logs` trace chaque opération de synchronisation (horodatage, sta
 SILEDJE/
 ├── config.json                  # Configuration centralisée
 ├── requirements.txt             # Dépendances Python
-├── .env                         # Secrets locaux (NON versionné, voir Sécurité)
+├── .env                         # Secrets locaux (NON versionné — voir Sécurité)
 ├── .env.example                 # Modèle de .env (versionné, sans vraies valeurs)
 ├── librairie.db                 # Base de données SQLite (générée au 1er lancement)
 ├── README.md
 │
 ├── scripts/                     # Outils réservés au vendeur/support (jamais livrés au client)
-│   ├── generate_license_cli.py  # Génération de clés de licence
-│   └── reset_password_cli.py    # Réinitialisation de mot de passe en urgence
+│   ├── generate_license_cli.py
+│   └── reset_password_cli.py
 │
 ├── assets/
 │   ├── icons/
@@ -81,17 +97,18 @@ SILEDJE/
 │   ├── __init__.py
 │   ├── main.py                       # Point d'entrée réel (python -m src.main)
 │   │
-│   ├── Beans/                        # Objets métier (entités applicatives)
-│   │   ├── User.py                   # Utilisateur authentifié
-│   │   └── Role.py                   # Rôle et permissions
+│   ├── Beans/
+│   │   ├── User.py
+│   │   └── Role.py
 │   │
 │   ├── database/
 │   │   ├── __init__.py
 │   │   ├── connection.py             # Connexion SQLite (singleton, aucun schéma métier)
 │   │   ├── manager.py
 │   │   ├── migrations/
-│   │   │   └── cloud_sync_migration.py   # Migration du schéma local pour la sync cloud
-│   │   └── repositories/             # Accès aux données, un fichier par domaine métier
+│   │   │   ├── migration_manager.py
+│   │   │   └── cloud_sync_migration.py
+│   │   └── repositories/
 │   │       ├── user_repository.py
 │   │       ├── license_repository.py
 │   │       ├── catalog_repository.py
@@ -99,35 +116,38 @@ SILEDJE/
 │   │       ├── supplier_order_repository.py
 │   │       ├── surveillance_repository.py
 │   │       ├── school_repository.py
-│   │       ├── system_repository.py
-│   │       ├── sync_repository.py        # Accès aux logs et à l'état de synchronisation
-│   │       └── cloud_sync_repository.py  # Accès aux données destinées au push/pull cloud
+│   │       ├── sync_repository.py          # File d'attente de sauvegarde cloud
+│   │       ├── cloud_sync_repository.py    # Curseurs de synchro de données
+│   │       └── system_repository.py
 │   │
-│   ├── managers/                     # Logique métier (Contrôleur)
+│   ├── managers/
 │   │   ├── accueil_manage.py
-│   │   ├── auth/auth_manager.py      # Authentification, hachage, verrouillage
+│   │   ├── auth/auth_manager.py
 │   │   ├── license/license_manager.py
-│   │   ├── admin/admin_manager.py    # Gestion des utilisateurs
-│   │   ├── stock/stock_manager.py    # Connecté à catalog_repository
-│   │   ├── sales/sales_manager.py    # Connecté à sales_repository + catalog_repository
-│   │   ├── report/report_manager.py  # Connecté à sales_repository
-│   │   ├── barcode/barcode_manager.py# Connecté à catalog_repository
-│   │   ├── supplier/supplier_manager.py # Connecté à catalog_repository
-│   │   ├── sync/                     # Synchronisation cloud (Supabase)
+│   │   ├── admin/admin_manager.py
+│   │   ├── stock/stock_manager.py
+│   │   ├── sales/sales_manager.py
+│   │   ├── report/report_manager.py
+│   │   ├── barcode/barcode_manager.py
+│   │   ├── supplier/supplier_manager.py
+│   │   ├── file/file_manager.py            # Import/Export CSV, Sauvegarde, Licence
+│   │   ├── sync/
 │   │   │   ├── __init__.py
-│   │   │   ├── sync_manager.py             # Orchestration de la synchronisation
-│   │   │   ├── cloud_data_sync_manager.py  # Logique de push/pull par domaine métier
-│   │   │   └── supabase_rest_client.py     # Client HTTP pour l'API REST Supabase
+│   │   │   ├── network_utils.py            # Test de connectivité partagé (évite les imports circulaires)
+│   │   │   ├── sync_manager.py             # Sauvegarde cloud complète (fichier .db entier)
+│   │   │   ├── cloud_data_sync_manager.py  # Synchro bidirectionnelle de données (Supabase)
+│   │   │   └── supabase_rest_client.py     # Client REST générique (PostgREST)
 │   │   ├── security/
 │   │   └── ai/
 │   │
 │   ├── ui/
 │   │   ├── windows/
-│   │   │   ├── main_window.py        # Intègre désormais l'accès à la vue de synchronisation
+│   │   │   ├── main_window.py
 │   │   │   ├── login_window.py
 │   │   │   └── license_window.py
 │   │   ├── views/
-│   │   │   └── sync_view.py          # Vue de supervision/déclenchement de la sync cloud
+│   │   │   ├── file_view.py                # Onglets Produits/Fournisseurs/Catégories/Utilisateurs/Sauvegarde/Licence
+│   │   │   └── sync_view.py                # Statut, historique, paramètres d'automatisation
 │   │   └── widgets/
 │   │       └── ModalView.py
 │   │
@@ -135,7 +155,7 @@ SILEDJE/
 │       ├── config.py
 │       ├── notifications.py
 │       ├── theme_manager.py
-│       ├── license_crypto.py         # Signature/vérification HMAC des clés de licence
+│       ├── license_crypto.py
 │       └── helpers.py
 │
 ├── data/
@@ -145,67 +165,70 @@ SILEDJE/
 │
 └── docs/
     ├── docs_pdf/
-    │   └── Siledje_bd_schema_source.pdf   # Schéma complet des 31 tables
+    │   └── Siledje_bd_schema_source.pdf
     ├── architecture.md
     ├── user_manual.md
     └── dev_manual.md
 ```
 
-> **Note sur le dummy data** : `StockManager`, `SalesManager` et `ReportManager` sont désormais connectés aux vraies tables SQLite — plus aucune donnée factice n'est utilisée pour ces modules. `AccueilManager` (module Manuels Scolaires côté accueil) utilise encore `data/dummy_data/data_home.py` ; sa migration vers `school_repository.py` (déjà créé) est prévue mais pas encore branchée.
-
-> **Note sur la synchronisation cloud** : le module `src/managers/cloud/cloud_manager.py` a été retiré et remplacé par le module `src/managers/sync/` (plus complet : `sync_manager.py`, `cloud_data_sync_manager.py`, `supabase_rest_client.py`), qui s'appuie sur les nouveaux repositories `sync_repository.py` et `cloud_sync_repository.py`.
+> **Note sur le dummy data** : `StockManager`, `SalesManager` et `ReportManager` sont connectés aux vraies tables SQLite. `AccueilManager` (module Manuels Scolaires côté accueil) utilise encore `data/dummy_data/data_home.py` ; sa migration vers `school_repository.py` (déjà créé) est en cours d'investigation (voir Chantiers en cours).
 
 ---
 
 ## Sécurité et Configuration requise
 
-### Fichier `.env` (obligatoire)
+### Fichier `.env` (obligatoire, jamais commité)
 
-Le système de licence a besoin d'une clé secrète locale, **jamais committée sur Git**.
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+```
+SILEDJE_LICENSE_SECRET=votre_cle_generee_ici
+```
 
-1. Copiez `.env.example` vers `.env`
-2. Générez une clé secrète unique :
-   ```bash
-   python -c "import secrets; print(secrets.token_hex(32))"
-   ```
-3. Renseignez-la dans `.env` :
-   ```
-   SILEDJE_LICENSE_SECRET=votre_cle_generee_ici
-   ```
+⚠️ **`.env` ne doit jamais être suivi par Git.** Vérifie que `.gitignore` contient bien une ligne `.env`. S'il a déjà été commité par erreur, retire-le du suivi (`git rm --cached .env`) et régénère toutes les clés qu'il contenait — une clé qui a transité par un commit, même supprimé ensuite, doit être considérée comme potentiellement exposée.
 
-⚠️ Sans ce fichier, l'application refuse de démarrer.
-
-### Synchronisation Cloud (Supabase)
-
-La synchronisation cloud s'appuie sur l'API REST de Supabase. Ajoutez également ces variables dans votre `.env` :
+### Variables optionnelles — synchronisation cloud
 
 ```
+# Sauvegarde cloud complète (fichier .db entier)
+SILEDJE_CLOUD_SYNC_URL=https://votre-projet.supabase.co/storage/v1/object/backups
+SILEDJE_CLOUD_SYNC_TOKEN=votre_cle_secrete_supabase
+
+# Synchronisation de données multi-appareils (Supabase REST)
 SUPABASE_URL=https://votre-projet.supabase.co
-SUPABASE_KEY=votre_cle_api_supabase
+SUPABASE_API_KEY=votre_cle_secrete_supabase
 ```
 
-⚠️ Ces valeurs sont propres à votre projet Supabase et ne doivent jamais être committées. Sans elles, les fonctionnalités de synchronisation cloud restent désactivées, mais l'application fonctionne normalement en local.
+⚠️ Utilisez la clé **secrète** (`service_role` / `sb_secret_...`), jamais la clé publique (`anon` / `sb_publishable_...`) — cette dernière est réservée à un futur client mobile authentifié, une fois le RLS configuré côté Supabase.
 
 ### Compte administrateur par défaut
-
-Au tout premier lancement, si aucun utilisateur n'existe en base :
 
 ```
 Nom d'utilisateur : admin
 Mot de passe       : admin123
 ```
-
-⚠️ **À changer immédiatement** après la première connexion (Administration → Gestion des Utilisateurs).
+⚠️ À changer immédiatement après la première connexion.
 
 ### Réinitialisation d'urgence
-
-Si le compte admin est bloqué (mot de passe perdu ou verrouillage après 5 tentatives) :
 
 ```bash
 python scripts/reset_password_cli.py <username> <nouveau_mot_de_passe>
 ```
 
-Réservé au support technique — ne jamais distribuer ce script au client final.
+---
+
+## Permissions et rôles
+
+| Action | Permission requise |
+|---|---|
+| Importer produits / fournisseurs / catégories | `can_manage_stock` |
+| Exporter les utilisateurs | `can_manage_users` |
+| Activer une licence | `can_configure_system` |
+| Restaurer / supprimer une sauvegarde | `can_configure_system` |
+| Configurer ou lancer une synchronisation (sauvegarde ou données) | `can_configure_system` |
+
+Chaque action sensible est revérifiée côté manager, jamais seulement côté bouton désactivé à l'écran.
 
 ---
 
@@ -213,54 +236,18 @@ Réservé au support technique — ne jamais distribuer ce script au client fina
 
 **ATTENTION : Ce projet ne fonctionne qu'avec Python 3.12.**
 
-### 1. Installation de Python 3.12
-
-1. Téléchargez et installez Python 3.12 depuis le site officiel.
-2. Cochez **"Add python.exe to PATH"** lors de l'installation.
-3. Vérifiez :
-   ```bash
-   py -0
-   ```
-
-### 2. Configuration du Projet
-
-```bash
-git clone https://github.com/yvanol-fotso/librairie_papeterie.git
-cd librairie_papeterie
-```
-
-### 3. Créer et Activer l'Environnement Virtuel
-
 ```bash
 py -3.12 -m venv venv
 .\venv\Scripts\activate
-```
-
-### 4. Installer les dépendances
-
-```bash
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 5. Configurer le fichier `.env`
-
-Voir la section **Sécurité et Configuration requise** ci-dessus (clé de licence + identifiants Supabase).
-
----
-
-## Lancement de l'Application
-
-Depuis la racine du projet, environnement virtuel activé :
+Configurez `.env` (voir ci-dessus), puis :
 
 ```bash
 python -m src.main
 ```
-
-**Ordre d'affichage au démarrage :**
-1. Écran d'**activation de licence** (si aucune licence valide n'est enregistrée)
-2. Écran de **connexion** (authentification)
-3. Fenêtre principale de l'application
 
 **Ne faites PAS** : `python src/main.py` (problèmes d'imports internes)
 
@@ -272,27 +259,32 @@ python -m src.main
 python scripts/generate_license_cli.py "Nom du Client" pro 3 365
 ```
 
-Paramètres : nom du client, plan (`starter` / `pro` / `premium`), nombre max d'utilisateurs, durée de validité en jours (ou `--illimitee`).
+---
 
-⚠️ Ce script ne doit **jamais** être distribué avec l'application livrée au client.
+## Import / Export et Sauvegarde (module Fichier)
+
+* **Produits / Fournisseurs / Catégories** : import/export CSV (`;`, UTF-8), modèle téléchargeable. Catégories et fournisseurs référencés par nom sont créés automatiquement.
+* **Utilisateurs** : export lecture seule, jamais de mot de passe.
+* **Sauvegarde** : création manuelle, historique local, restauration avec sauvegarde de sécurité automatique.
+* **Licence** : statut de la licence active, activation par collage ou fichier `.txt`/`.lic`.
+
+## Synchronisation cloud
+
+Deux mécanismes distincts, complémentaires, tous deux pilotables depuis la même vue **Synchronisation Cloud** :
+
+* **Sauvegarde complète** (`SyncManager`) : envoie périodiquement le fichier `.db` entier vers un espace de stockage. File d'attente locale, reprise automatique en cas d'échec.
+* **Synchronisation de données** (`CloudDataSyncManager`) : catégories/fournisseurs/produits en "dernière écriture gagne" (`updated_at`) ; mouvements de stock fusionnés de façon additive — jamais écrasés, pour ne jamais perdre une vente enregistrée simultanément sur deux appareils hors-ligne.
 
 ---
 
-## Workflow recommandé pour un nouveau produit
+## Chantiers en cours
 
-1. **Gestion de Stock** → créer le produit (nom, catégorie, fournisseur, prix, stock initial, code-barres optionnel)
-2. **Gestion Barcode** → si le code-barres n'a pas été saisi à la création, y générer un code interne ou associer un code externe scanné
-3. **Point de Vente** → le produit apparaît automatiquement dans la recherche dès qu'il est actif et en stock
-
----
-
-## Synchronisation Cloud
-
-Le module de synchronisation (`src/managers/sync/`) permet d'envoyer et récupérer les données entre la base SQLite locale et un projet Supabase distant, via `supabase_rest_client.py`.
-
-1. Configurez `SUPABASE_URL` et `SUPABASE_KEY` dans `.env` (voir section **Sécurité et Configuration requise**)
-2. Ouvrez la vue **Synchronisation** dans l'application (`sync_view.py`, accessible depuis la fenêtre principale)
-3. Déclenchez la synchronisation manuellement ; chaque exécution est journalisée dans `sync_logs` (statut, horodatage) et consultable depuis cette même vue
+* Numérotation/affichage des ID produits (revue à prévoir avec `catalog_repository.py`)
+* Formulaire de création produit : ordre des champs (catégorie / cases à cocher) à revoir dans `StockManager`/vue associée
+* Tableau des manuels scolaires vide côté Accueil : `AccueilManager`/`AccueilView` à examiner avec `SchoolRepository.get_books_for_class()`
+* Extension des adaptateurs de synchronisation de données à `barcodes` et `product_components` (même patron que `ProductAdapter`)
+* Activation du RLS + policies Supabase avant tout branchement d'une application mobile
+* Bouton de purge de l'historique de synchronisation
 
 ---
 
@@ -306,8 +298,6 @@ python -m tests.test_database
 
 ## Documentation et ressources
 
-### Documentation PDF
-
 - [Schéma complet de la base de données (PDF)](docs/docs_pdf/Siledje_bd_schema_source.pdf)
 - [Documentation version 1 (PDF)](docs/docs_pdf/Librairie_Papetierie-V1.pdf)
 
@@ -316,14 +306,8 @@ python -m tests.test_database
 ## Comment Contribuer
 
 1. Forkez ce dépôt.
-2. Créez une branche :
-   ```bash
-   git checkout -b feature/nom-de-votre-fonctionnalite
-   ```
-3. Commitez :
-   ```bash
-   git commit -m 'feat: Ajout de la fonctionnalité X'
-   ```
+2. `git checkout -b feature/nom-de-votre-fonctionnalite`
+3. `git commit -m 'feat: Ajout de la fonctionnalité X'`
 4. Poussez et ouvrez une Pull Request.
 
 ---

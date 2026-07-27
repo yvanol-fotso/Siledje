@@ -17,4 +17,10 @@ dist/
 *.sqlite
 *.db
 *.log
-barcodes/
+barcodes/.env
+
+
+# Variables d'environnement
+.env
+.env.*
+!.env.example
