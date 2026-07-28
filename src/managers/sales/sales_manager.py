@@ -1,7 +1,11 @@
-"""
-Manager des ventes — connecté à SalesRepository + CatalogRepository.
+""" Manager des ventes — connecté à SalesRepository + CatalogRepository.
 Panier en mémoire, checkout réel avec sale_items/sale_payments et
 déduction de stock tracée dans stock_movements.
+
+L'ID technique du produit (products.id) n'est plus affiché à l'écran —
+c'est le SKU (généré automatiquement, voir CatalogRepository.generate_sku)
+qui sert d'identifiant présentable au caissier. L'ID reste utilisé en
+interne (retrouvé produit <-> panier), simplement invisible.
 """
 
 from PySide6.QtCore import QObject, Slot, Qt
@@ -21,7 +25,7 @@ from src.database.repositories.sales_repository import SalesRepository
 class SalesManager(QObject):
     """Manager des ventes — vrai schéma, plus de dummy data."""
 
-    version = "2.0"
+    version = "2.1"
 
     def __init__(self, parent=None, current_user=None):
         super().__init__(parent)
@@ -67,7 +71,9 @@ class SalesManager(QObject):
         else:
             products = self.catalog.get_all_products()
 
-        # Adapter au format attendu par SalesView (id, name, price, stock, type, barcode_test)
+        # Adapter au format attendu par SalesView. 'sku' remplace l'ID
+        # technique à l'affichage — 'id' reste transporté pour usage
+        # interne (ajout/retrait panier), mais n'est jamais montré.
         adapted = []
         for p in products:
             barcodes = self.catalog.get_barcodes_for_product(p["id"])
@@ -75,6 +81,7 @@ class SalesManager(QObject):
                            barcodes[0]["barcode_text"] if barcodes else "")
             adapted.append({
                 "id": p["id"],
+                "sku": p.get("sku") or f"—#{p['id']}",
                 "name": p["name"],
                 "price": p["sell_price"],
                 "stock": p["stock_quantity"],

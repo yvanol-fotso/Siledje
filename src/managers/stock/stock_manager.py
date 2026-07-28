@@ -1,6 +1,19 @@
 """
 Manager de la gestion du stock — connecté au vrai schéma products/categories/suppliers.
-Inclut la création de manuels scolaires et le filtrage par classe scolaire.
+
+Deux parcours de création distincts, pas une case à cocher qui fait
+apparaître/disparaître un bloc dans un même formulaire :
+  - add_product() : produit "normal" (papeterie, fournitures...)
+  - add_book()    : manuel scolaire — un produit + ses métadonnées scolaires
+                    (books.subject/publisher/isbn/school_class_id)
+
+Le "Nom" du produit EST le titre du manuel — il n'y a plus de champ "Titre"
+séparé qui redoublait cette information et pouvait diverger du nom réel.
+
+Le type d'un produit (normal vs manuel) est fixé à la création. Modifier un
+manuel réédite le formulaire manuel ; modifier un produit normal réédite le
+formulaire produit — mais on ne bascule pas l'un vers l'autre après coup,
+pour éviter des états incohérents (un manuel sans ligne dans `books`, etc.).
 """
 
 from PySide6.QtCore import QObject, Slot, QAbstractTableModel, Qt, QModelIndex
@@ -63,7 +76,7 @@ class ProductTableModel(QAbstractTableModel):
 class StockManager(QObject):
     """Manager de gestion du stock — vrai schéma, plus de dummy data."""
 
-    version = "6.1"
+    version = "7.0"
 
     def __init__(self, parent=None, current_user=None):
         super().__init__(parent)
@@ -93,13 +106,10 @@ class StockManager(QObject):
 
     def _initialize_view(self):
         self.view.set_table_model(self.model)
-
         categories = [c["name"] for c in self.catalog.get_all_categories()]
         self.view.update_categories(["Toutes"] + categories)
-
         suppliers = [s["name"] for s in self.catalog.get_all_suppliers()]
         self.view.update_suppliers(["Tous"] + suppliers)
-
         classes = self.school_repo.get_all_classes()
         class_names = sorted({c["name"] for c in classes})
         self.view.update_classes(class_names)
@@ -109,6 +119,7 @@ class StockManager(QObject):
         self.view.category_filter_changed.connect(self.on_category_changed)
         self.view.class_filter_changed.connect(self.on_class_changed)
         self.view.add_product_requested.connect(self.add_product)
+        self.view.add_book_requested.connect(self.add_book)
         self.view.edit_product_requested.connect(self.edit_product)
         self.view.delete_product_requested.connect(self.delete_product)
         self.view.refresh_requested.connect(self.refresh)
@@ -131,10 +142,6 @@ class StockManager(QObject):
 
     @Slot(str)
     def on_class_changed(self, class_name: str):
-        """
-        Filtre les produits pour n'afficher que les manuels scolaires
-        associés à la classe sélectionnée (table books.school_class_id).
-        """
         if class_name in ("Toutes", "Sélectionnez une langue", ""):
             self.current_class_id = None
         else:
@@ -160,15 +167,24 @@ class StockManager(QObject):
         self.model.set_products(self.rows)
         print(f"[StockManager] {len(self.rows)} produits affichés")
 
-    # ========== FORMULAIRE PRODUIT ==========
+    # ========== FORMULAIRE PRODUIT / MANUEL ==========
 
-    def _create_product_form(self, product=None):
+    def _create_product_form(self, product=None, book_mode: bool = False):
+        """
+        Construit le formulaire. book_mode détermine si les champs manuel
+        scolaire sont présents — c'est un paramètre fixé par l'appelant
+        (add_product / add_book / edit_product selon le type réel), jamais
+        une case à cocher qu'on bascule dans le formulaire lui-même.
+        """
         from src.ui.widgets.ModalView import ModalView
 
         is_edit = product is not None
+        title = ("Modifier le Manuel Scolaire" if book_mode else "Modifier le Produit") if is_edit \
+            else ("Ajouter un Manuel Scolaire" if book_mode else "Ajouter un Produit")
+
         modal = ModalView(
-            title="Modifier le Produit" if is_edit else "Ajouter un Produit",
-            parent=self.view, width=750, height=900,
+            title=title, parent=self.view,
+            width=750, height=780 if book_mode else 620,
             ok_text="Enregistrer", cancel_text="Annuler"
         )
 
@@ -188,8 +204,12 @@ class StockManager(QObject):
             l.setStyleSheet(label_style)
             return l
 
+        # ── Champs produit (communs aux deux parcours) ──────────────
         name_input = QLineEdit(product["name"] if is_edit else "")
         name_input.setStyleSheet(input_style)
+        name_input.setPlaceholderText(
+            "Titre complet du manuel" if book_mode else "Nom du produit"
+        )
 
         description_input = QTextEdit(product.get("description", "") if is_edit else "")
         description_input.setStyleSheet(input_style)
@@ -267,107 +287,10 @@ class StockManager(QObject):
                            barcodes[0]["barcode_text"] if barcodes else "")
             barcode_input.setText(primary)
 
-        is_book_chk = QCheckBox("Ceci est un manuel scolaire")
-        is_book_chk.setChecked(bool(product.get("is_book")) if is_edit else False)
-
         active_chk = QCheckBox("Produit actif")
         active_chk.setChecked(bool(product.get("is_active", 1)) if is_edit else True)
 
-        book_group = QGroupBox("Informations du manuel scolaire")
-        book_group.setStyleSheet("""
-            QGroupBox { font-size: 14px; font-weight: bold; border: 2px solid #bdc3c7;
-                border-radius: 8px; margin-top: 10px; padding-top: 16px; }
-            QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left;
-                padding: 4px 10px; }
-        """)
-        book_layout = QFormLayout()
-        book_layout.setSpacing(12)
-
-        book_title_input = QLineEdit()
-        book_title_input.setStyleSheet(input_style)
-        book_title_input.setPlaceholderText("Titre complet du manuel")
-
-        book_subject_input = QLineEdit()
-        book_subject_input.setStyleSheet(input_style)
-        book_subject_input.setPlaceholderText("Ex: Mathématiques, Français...")
-
-        book_publisher_input = QLineEdit()
-        book_publisher_input.setStyleSheet(input_style)
-        book_publisher_input.setPlaceholderText("Éditeur (optionnel)")
-
-        book_isbn_input = QLineEdit()
-        book_isbn_input.setStyleSheet(input_style)
-        book_isbn_input.setPlaceholderText("ISBN (optionnel)")
-
-        level_combo = QComboBox()
-        level_combo.setStyleSheet(input_style)
-        levels = self.school_repo.get_levels()
-        for lvl in levels:
-            level_combo.addItem(lvl["name"], lvl["id"])
-
-        system_combo = QComboBox()
-        system_combo.setStyleSheet(input_style)
-        systems = self.school_repo.get_systems()
-        for sys_ in systems:
-            system_combo.addItem(sys_["name"], sys_["id"])
-
-        class_combo = QComboBox()
-        class_combo.setStyleSheet(input_style)
-
-        def refresh_book_classes():
-            class_combo.clear()
-            level_name = level_combo.currentText()
-            system_name = system_combo.currentText()
-            if not level_name or not system_name:
-                return
-            classes = self.school_repo.get_classes(level_name, system_name)
-            for c in classes:
-                class_combo.addItem(c["name"], c["id"])
-
-        level_combo.currentTextChanged.connect(refresh_book_classes)
-        system_combo.currentTextChanged.connect(refresh_book_classes)
-        refresh_book_classes()
-
-        book_layout.addRow(lbl("Titre *:"), book_title_input)
-        book_layout.addRow(lbl("Matière *:"), book_subject_input)
-        book_layout.addRow(lbl("Éditeur:"), book_publisher_input)
-        book_layout.addRow(lbl("ISBN:"), book_isbn_input)
-        book_layout.addRow(lbl("Niveau *:"), level_combo)
-        book_layout.addRow(lbl("Système *:"), system_combo)
-        book_layout.addRow(lbl("Classe *:"), class_combo)
-
-        book_group.setLayout(book_layout)
-        book_group.setVisible(is_book_chk.isChecked())
-        is_book_chk.toggled.connect(book_group.setVisible)
-
-        if is_edit and product.get("is_book"):
-            cursor = self.catalog.db.get_cursor()
-            cursor.execute("""
-                SELECT b.*, sc.name as class_name, sl.name as level_name, ss.name as system_name
-                FROM books b
-                JOIN school_classes sc ON b.school_class_id = sc.id
-                JOIN school_levels sl ON sc.level_id = sl.id
-                JOIN school_systems ss ON sc.system_id = ss.id
-                WHERE b.product_id = ?
-            """, (product["id"],))
-            existing_book = cursor.fetchone()
-            if existing_book:
-                book_title_input.setText(existing_book["title"])
-                book_subject_input.setText(existing_book["subject"])
-                book_publisher_input.setText(existing_book["publisher"] or "")
-                book_isbn_input.setText(existing_book["isbn"] or "")
-                idx = level_combo.findText(existing_book["level_name"])
-                if idx >= 0:
-                    level_combo.setCurrentIndex(idx)
-                idx = system_combo.findText(existing_book["system_name"])
-                if idx >= 0:
-                    system_combo.setCurrentIndex(idx)
-                refresh_book_classes()
-                idx = class_combo.findText(existing_book["class_name"])
-                if idx >= 0:
-                    class_combo.setCurrentIndex(idx)
-
-        form_layout.addRow(lbl("Nom *:"), name_input)
+        form_layout.addRow(lbl("Titre du manuel *:" if book_mode else "Nom *:"), name_input)
         form_layout.addRow(lbl("Description:"), description_input)
         form_layout.addRow(lbl("Catégorie:"), category_combo)
         form_layout.addRow(lbl("Fournisseur:"), supplier_combo)
@@ -379,12 +302,6 @@ class StockManager(QObject):
         form_layout.addRow(lbl("SKU:"), sku_input)
         form_layout.addRow(lbl("Code-barres:"), barcode_input)
         form_layout.addRow(lbl("Emplacement:"), location_input)
-        form_layout.addRow(QLabel(""), is_book_chk)
-        form_layout.addRow(book_group)
-        form_layout.addRow(QLabel(""), active_chk)
-
-        form_widget.setLayout(form_layout)
-        modal.set_content(form_widget)
 
         modal.name_input = name_input
         modal.description_input = description_input
@@ -398,103 +315,259 @@ class StockManager(QObject):
         modal.sku_input = sku_input
         modal.location_input = location_input
         modal.barcode_input = barcode_input
-        modal.is_book_chk = is_book_chk
-        modal.active_chk = active_chk
-        modal.book_title_input = book_title_input
-        modal.book_subject_input = book_subject_input
-        modal.book_publisher_input = book_publisher_input
-        modal.book_isbn_input = book_isbn_input
-        modal.book_level_combo = level_combo
-        modal.book_system_combo = system_combo
-        modal.book_class_combo = class_combo
 
+        # ── Champs spécifiques au manuel scolaire — toujours visibles
+        # ici, jamais masqués/révélés par une case à cocher : la présence
+        # de ce bloc EST déterminée par book_mode, décidé en amont.
+        if book_mode:
+            book_group = QGroupBox("Informations scolaires")
+            book_group.setStyleSheet("""
+                QGroupBox { font-size: 14px; font-weight: bold; border: 2px solid #bdc3c7;
+                    border-radius: 8px; margin-top: 10px; padding-top: 16px; }
+                QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left;
+                    padding: 4px 10px; }
+            """)
+            book_layout = QFormLayout()
+            book_layout.setSpacing(12)
+
+            book_subject_input = QLineEdit()
+            book_subject_input.setStyleSheet(input_style)
+            book_subject_input.setPlaceholderText("Ex: Mathématiques, Français...")
+
+            book_publisher_input = QLineEdit()
+            book_publisher_input.setStyleSheet(input_style)
+            book_publisher_input.setPlaceholderText("Éditeur (optionnel)")
+
+            book_isbn_input = QLineEdit()
+            book_isbn_input.setStyleSheet(input_style)
+            book_isbn_input.setPlaceholderText("ISBN (optionnel)")
+
+            level_combo = QComboBox()
+            level_combo.setStyleSheet(input_style)
+            for lvl in self.school_repo.get_levels():
+                level_combo.addItem(lvl["name"], lvl["id"])
+
+            system_combo = QComboBox()
+            system_combo.setStyleSheet(input_style)
+            for sys_ in self.school_repo.get_systems():
+                system_combo.addItem(sys_["name"], sys_["id"])
+
+            class_combo = QComboBox()
+            class_combo.setStyleSheet(input_style)
+
+            def refresh_book_classes():
+                class_combo.clear()
+                level_name = level_combo.currentText()
+                system_name = system_combo.currentText()
+                if not level_name or not system_name:
+                    return
+                for c in self.school_repo.get_classes(level_name, system_name):
+                    class_combo.addItem(c["name"], c["id"])
+
+            level_combo.currentTextChanged.connect(refresh_book_classes)
+            system_combo.currentTextChanged.connect(refresh_book_classes)
+            refresh_book_classes()
+
+            book_layout.addRow(lbl("Matière *:"), book_subject_input)
+            book_layout.addRow(lbl("Éditeur:"), book_publisher_input)
+            book_layout.addRow(lbl("ISBN:"), book_isbn_input)
+            book_layout.addRow(lbl("Niveau *:"), level_combo)
+            book_layout.addRow(lbl("Système *:"), system_combo)
+            book_layout.addRow(lbl("Classe *:"), class_combo)
+            book_group.setLayout(book_layout)
+
+            if is_edit and product.get("is_book"):
+                cursor = self.catalog.db.get_cursor()
+                cursor.execute("""
+                    SELECT b.*, sc.name as class_name, sl.name as level_name, ss.name as system_name
+                    FROM books b
+                    JOIN school_classes sc ON b.school_class_id = sc.id
+                    JOIN school_levels sl ON sc.level_id = sl.id
+                    JOIN school_systems ss ON sc.system_id = ss.id
+                    WHERE b.product_id = ?
+                """, (product["id"],))
+                existing_book = cursor.fetchone()
+                if existing_book:
+                    book_subject_input.setText(existing_book["subject"])
+                    book_publisher_input.setText(existing_book["publisher"] or "")
+                    book_isbn_input.setText(existing_book["isbn"] or "")
+                    idx = level_combo.findText(existing_book["level_name"])
+                    if idx >= 0:
+                        level_combo.setCurrentIndex(idx)
+                    idx = system_combo.findText(existing_book["system_name"])
+                    if idx >= 0:
+                        system_combo.setCurrentIndex(idx)
+                    refresh_book_classes()
+                    idx = class_combo.findText(existing_book["class_name"])
+                    if idx >= 0:
+                        class_combo.setCurrentIndex(idx)
+
+            form_layout.addRow(book_group)
+
+            modal.book_subject_input = book_subject_input
+            modal.book_publisher_input = book_publisher_input
+            modal.book_isbn_input = book_isbn_input
+            modal.book_level_combo = level_combo
+            modal.book_system_combo = system_combo
+            modal.book_class_combo = class_combo
+
+        form_layout.addRow(QLabel(""), active_chk)
+        modal.active_chk = active_chk
+
+        form_widget.setLayout(form_layout)
+        modal.set_content(form_widget)
         return modal
 
-    # ========== SLOTS ==========
+    def _validate_book_fields(self, modal) -> bool:
+        if not modal.name_input.text().strip():
+            QMessageBox.warning(self.view, "Validation", "Le titre du manuel est obligatoire.")
+            return False
+        if not modal.book_subject_input.text().strip():
+            QMessageBox.warning(self.view, "Validation", "La matière du manuel est obligatoire.")
+            return False
+        if modal.book_class_combo.currentData() is None:
+            QMessageBox.warning(self.view, "Validation", "Sélectionnez une classe valide pour ce manuel.")
+            return False
+        return True
+
+    def _save_barcode_if_new(self, product_id: int, modal):
+        barcode_val = modal.barcode_input.text().strip()
+        if not barcode_val:
+            return
+        existing = self.catalog.get_barcodes_for_product(product_id)
+        if not any(b["barcode_text"] == barcode_val for b in existing):
+            self.catalog.add_barcode(barcode_val, product_id, "internal", is_primary=True)
+
+    def _finalize_identifiers(self, product_id: int, modal, category_name: str = None):
+        """
+        Après la création d'un produit : si le SKU ou le code-barres ont été
+        laissés vides par l'utilisateur, on les génère automatiquement,
+        de façon déterministe et unique (voir CatalogRepository.generate_sku
+        / generate_internal_barcode). Un produit ne reste jamais sans
+        identifiant présentable — plus besoin de retomber sur l'ID brut
+        à l'affichage (Point de Vente, etc.).
+        """
+        if not modal.sku_input.text().strip():
+            sku = self.catalog.generate_sku(product_id, category_name)
+            self.catalog.update_product(product_id, sku=sku)
+            print(f"[StockManager] SKU auto-généré pour #{product_id} : {sku}")
+
+        if not modal.barcode_input.text().strip():
+            barcode_val = self.catalog.generate_internal_barcode(product_id)
+            self.catalog.add_barcode(barcode_val, product_id, "internal", is_primary=True)
+            print(f"[StockManager] Code-barres auto-généré pour #{product_id} : {barcode_val}")
+
+    # ========== AJOUT — PRODUIT NORMAL ==========
 
     @Slot()
     def add_product(self):
         try:
-            modal = self._create_product_form()
+            modal = self._create_product_form(book_mode=False)
 
             def on_save():
                 name = modal.name_input.text().strip()
                 if not name:
                     QMessageBox.warning(self.view, "Validation", "Le nom est obligatoire.")
                     return
-
                 sku = modal.sku_input.text().strip() or None
                 if sku and self.catalog.sku_exists(sku):
                     QMessageBox.warning(self.view, "Validation", f"Le SKU '{sku}' existe déjà.")
                     return
 
-                is_book = modal.is_book_chk.isChecked()
-                if is_book:
-                    if not modal.book_title_input.text().strip():
-                        QMessageBox.warning(self.view, "Validation",
-                                            "Le titre du manuel est obligatoire.")
-                        return
-                    if not modal.book_subject_input.text().strip():
-                        QMessageBox.warning(self.view, "Validation",
-                                            "La matière du manuel est obligatoire.")
-                        return
-                    if modal.book_class_combo.currentData() is None:
-                        QMessageBox.warning(self.view, "Validation",
-                                            "Sélectionnez une classe valide pour ce manuel.")
-                        return
-
                 new_id = self.catalog.create_product(
-                    name=name,
-                    description=modal.description_input.toPlainText().strip() or None,
+                    name=name, description=modal.description_input.toPlainText().strip() or None,
                     category_id=modal.category_combo.currentData(),
                     supplier_id=modal.supplier_combo.currentData(),
-                    buy_price=modal.buy_price_input.value(),
-                    sell_price=modal.sell_price_input.value(),
-                    stock_quantity=0,
-                    min_stock_threshold=modal.threshold_input.value(),
+                    buy_price=modal.buy_price_input.value(), sell_price=modal.sell_price_input.value(),
+                    stock_quantity=0, min_stock_threshold=modal.threshold_input.value(),
                     packaging_type=modal.packaging_combo.currentText(),
                     location=modal.location_input.text().strip() or None,
-                    sku=sku,
-                    is_book=is_book,
+                    sku=sku, is_book=False,
                 )
-
-                barcode_val = modal.barcode_input.text().strip()
-                if barcode_val and not self.catalog.barcode_exists(barcode_val):
-                    self.catalog.add_barcode(barcode_val, new_id, "internal", is_primary=True)
+                self._save_barcode_if_new(new_id, modal)
+                category_name = modal.category_combo.currentText()
+                if modal.category_combo.currentData() is None:
+                    category_name = None
+                self._finalize_identifiers(new_id, modal, category_name)
 
                 initial_stock = modal.stock_input.value()
                 if initial_stock > 0:
                     user_id = self.current_user.id if self.current_user else None
-                    self.catalog.adjust_stock(
-                        new_id, initial_stock, "entry", user_id=user_id,
-                        reason="Stock initial à la création"
-                    )
-
+                    self.catalog.adjust_stock(new_id, initial_stock, "entry", user_id=user_id,
+                                               reason="Stock initial à la création")
                 if not modal.active_chk.isChecked():
                     self.catalog.set_product_active(new_id, False)
-
-                if is_book:
-                    self.school_repo.create_book(
-                        product_id=new_id,
-                        school_class_id=modal.book_class_combo.currentData(),
-                        title=modal.book_title_input.text().strip(),
-                        subject=modal.book_subject_input.text().strip(),
-                        publisher=modal.book_publisher_input.text().strip() or None,
-                        isbn=modal.book_isbn_input.text().strip() or None,
-                    )
 
                 self.refresh()
                 modal.accept()
                 QMessageBox.information(self.view, "Succès", f"Produit '{name}' ajouté.")
-                print(f"[StockManager] Produit créé: ID {new_id}"
-                      + (" (manuel scolaire)" if is_book else ""))
+                print(f"[StockManager] Produit créé: ID {new_id}")
 
             modal.ok_clicked.connect(on_save)
             modal.exec()
-
         except Exception as e:
             QMessageBox.critical(self.view, "Erreur", f"Erreur lors de l'ajout:\n{e}")
             print(f"[StockManager] ERREUR ajout: {e}")
+
+    # ========== AJOUT — MANUEL SCOLAIRE ==========
+
+    @Slot()
+    def add_book(self):
+        try:
+            modal = self._create_product_form(book_mode=True)
+
+            def on_save():
+                if not self._validate_book_fields(modal):
+                    return
+                name = modal.name_input.text().strip()
+                sku = modal.sku_input.text().strip() or None
+                if sku and self.catalog.sku_exists(sku):
+                    QMessageBox.warning(self.view, "Validation", f"Le SKU '{sku}' existe déjà.")
+                    return
+
+                new_id = self.catalog.create_product(
+                    name=name, description=modal.description_input.toPlainText().strip() or None,
+                    category_id=modal.category_combo.currentData(),
+                    supplier_id=modal.supplier_combo.currentData(),
+                    buy_price=modal.buy_price_input.value(), sell_price=modal.sell_price_input.value(),
+                    stock_quantity=0, min_stock_threshold=modal.threshold_input.value(),
+                    packaging_type=modal.packaging_combo.currentText(),
+                    location=modal.location_input.text().strip() or None,
+                    sku=sku, is_book=True,
+                )
+                self._save_barcode_if_new(new_id, modal)
+                self._finalize_identifiers(new_id, modal, "Manuels Scolaires")
+
+                initial_stock = modal.stock_input.value()
+                if initial_stock > 0:
+                    user_id = self.current_user.id if self.current_user else None
+                    self.catalog.adjust_stock(new_id, initial_stock, "entry", user_id=user_id,
+                                               reason="Stock initial à la création")
+                if not modal.active_chk.isChecked():
+                    self.catalog.set_product_active(new_id, False)
+
+                # Le "Nom" du produit sert de titre du manuel — pas de champ dupliqué.
+                self.school_repo.create_book(
+                    product_id=new_id,
+                    school_class_id=modal.book_class_combo.currentData(),
+                    title=name,
+                    subject=modal.book_subject_input.text().strip(),
+                    publisher=modal.book_publisher_input.text().strip() or None,
+                    isbn=modal.book_isbn_input.text().strip() or None,
+                )
+
+                self.refresh()
+                modal.accept()
+                QMessageBox.information(self.view, "Succès", f"Manuel '{name}' ajouté.")
+                print(f"[StockManager] Manuel scolaire créé: ID {new_id}")
+
+            modal.ok_clicked.connect(on_save)
+            modal.exec()
+        except Exception as e:
+            QMessageBox.critical(self.view, "Erreur", f"Erreur lors de l'ajout:\n{e}")
+            print(f"[StockManager] ERREUR ajout manuel: {e}")
+
+    # ========== MODIFICATION ==========
 
     @Slot(int)
     def edit_product(self, row: int):
@@ -503,13 +576,17 @@ class StockManager(QObject):
             QMessageBox.warning(self.view, "Sélection requise", "Sélectionnez un produit.")
             return
 
+        is_book = bool(product.get("is_book"))
+
         try:
-            modal = self._create_product_form(product)
+            modal = self._create_product_form(product, book_mode=is_book)
 
             def on_save():
                 name = modal.name_input.text().strip()
                 if not name:
                     QMessageBox.warning(self.view, "Validation", "Le nom est obligatoire.")
+                    return
+                if is_book and not self._validate_book_fields(modal):
                     return
 
                 sku = modal.sku_input.text().strip() or None
@@ -517,80 +594,52 @@ class StockManager(QObject):
                     QMessageBox.warning(self.view, "Validation", f"Le SKU '{sku}' existe déjà.")
                     return
 
-                is_book = modal.is_book_chk.isChecked()
-                if is_book:
-                    if not modal.book_title_input.text().strip():
-                        QMessageBox.warning(self.view, "Validation",
-                                            "Le titre du manuel est obligatoire.")
-                        return
-                    if not modal.book_subject_input.text().strip():
-                        QMessageBox.warning(self.view, "Validation",
-                                            "La matière du manuel est obligatoire.")
-                        return
-                    if modal.book_class_combo.currentData() is None:
-                        QMessageBox.warning(self.view, "Validation",
-                                            "Sélectionnez une classe valide pour ce manuel.")
-                        return
-
                 self.catalog.update_product(
-                    product["id"],
-                    name=name,
+                    product["id"], name=name,
                     description=modal.description_input.toPlainText().strip() or None,
                     category_id=modal.category_combo.currentData(),
                     supplier_id=modal.supplier_combo.currentData(),
-                    buy_price=modal.buy_price_input.value(),
-                    sell_price=modal.sell_price_input.value(),
+                    buy_price=modal.buy_price_input.value(), sell_price=modal.sell_price_input.value(),
                     min_stock_threshold=modal.threshold_input.value(),
                     packaging_type=modal.packaging_combo.currentText(),
                     location=modal.location_input.text().strip() or None,
-                    sku=sku,
-                    is_book=is_book,
+                    sku=sku, is_book=is_book,
                     is_active=1 if modal.active_chk.isChecked() else 0,
                 )
-
-                barcode_val = modal.barcode_input.text().strip()
-                if barcode_val:
-                    existing_barcodes = self.catalog.get_barcodes_for_product(product["id"])
-                    if not any(b["barcode_text"] == barcode_val for b in existing_barcodes):
-                        self.catalog.add_barcode(barcode_val, product["id"], "internal", is_primary=True)
+                self._save_barcode_if_new(product["id"], modal)
 
                 if is_book:
                     cursor = self.catalog.db.get_cursor()
                     cursor.execute("SELECT id FROM books WHERE product_id = ?", (product["id"],))
                     existing_book_row = cursor.fetchone()
-
                     if existing_book_row:
                         cursor.execute("""
                             UPDATE books SET title = ?, subject = ?, publisher = ?, isbn = ?,
                                               school_class_id = ?
                             WHERE product_id = ?
                         """, (
-                            modal.book_title_input.text().strip(),
-                            modal.book_subject_input.text().strip(),
+                            name, modal.book_subject_input.text().strip(),
                             modal.book_publisher_input.text().strip() or None,
                             modal.book_isbn_input.text().strip() or None,
-                            modal.book_class_combo.currentData(),
-                            product["id"],
+                            modal.book_class_combo.currentData(), product["id"],
                         ))
                         self.catalog.db.commit()
                     else:
                         self.school_repo.create_book(
                             product_id=product["id"],
                             school_class_id=modal.book_class_combo.currentData(),
-                            title=modal.book_title_input.text().strip(),
-                            subject=modal.book_subject_input.text().strip(),
+                            title=name, subject=modal.book_subject_input.text().strip(),
                             publisher=modal.book_publisher_input.text().strip() or None,
                             isbn=modal.book_isbn_input.text().strip() or None,
                         )
 
                 self.refresh()
                 modal.accept()
-                QMessageBox.information(self.view, "Succès", f"Produit '{name}' modifié.")
+                QMessageBox.information(self.view, "Succès", f"'{name}' modifié.")
                 print(f"[StockManager] Produit modifié: ID {product['id']}")
 
             modal.ok_clicked.connect(on_save)
             modal.exec()
-
         except Exception as e:
             QMessageBox.critical(self.view, "Erreur", f"Erreur lors de la modification:\n{e}")
 

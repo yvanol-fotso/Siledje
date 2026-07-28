@@ -98,6 +98,17 @@ class SyncRepository:
             """, (now, error, op_id))
         self.db.commit()
 
+    def clear_history(self) -> int:
+        """Supprime tout l'historique de synchronisation. Irréversible —
+        n'affecte pas les fichiers de sauvegarde déjà présents sur disque,
+        seulement leur trace dans cette table."""
+        cursor = self.db.get_cursor()
+        cursor.execute("SELECT COUNT(*) as c FROM sync_operations")
+        count = cursor.fetchone()["c"]
+        cursor.execute("DELETE FROM sync_operations")
+        self.db.commit()
+        return count
+
     def mark_failed_permanently(self, op_id: int, error: str):
         """Après un nombre d'essais trop élevé, on arrête de retenter automatiquement."""
         cursor = self.db.get_cursor()

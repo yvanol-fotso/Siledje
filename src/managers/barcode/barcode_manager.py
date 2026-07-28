@@ -1,8 +1,12 @@
 """
 Manager des codes-barres — connecté à CatalogRepository (products + barcodes).
+
+La génération du code interne réutilise CatalogRepository.generate_internal_barcode()
+— même générateur que StockManager, déterministe (basé sur l'id du produit,
+déjà unique), plus de boucle "tant que le code existe déjà, retire un autre
+nombre aléatoire".
 """
 
-import random
 from PySide6.QtCore import QObject, Slot
 from PySide6.QtWidgets import QMessageBox
 
@@ -15,7 +19,7 @@ from src.utils.config import get_config
 
 class BarcodeManager(QObject):
 
-    version = "3.0"
+    version = "4.0"
 
     def __init__(self, parent=None, current_user=None):
         super().__init__(parent)
@@ -79,6 +83,9 @@ class BarcodeManager(QObject):
 
     @Slot()
     def on_scan_barcode(self):
+        # Simulation d'un scan matériel (aucun lecteur connecté ici) — un
+        # vrai lecteur enverrait directement le texte scanné à on_search_barcode.
+        import random
         simulated = f"{random.randint(1000000000000, 9999999999999)}"
         self.on_search_barcode(simulated)
 
@@ -120,6 +127,12 @@ class BarcodeManager(QObject):
                                           reason="Stock initial")
             if not self.catalog.barcode_exists(barcode_val):
                 self.catalog.add_barcode(barcode_val, new_id, "internal", is_primary=True)
+
+            # SKU auto-généré (même règle que StockManager) — pas de produit
+            # sans identifiant présentable, même créé depuis cet écran.
+            sku = self.catalog.generate_sku(new_id, category_name)
+            self.catalog.update_product(new_id, sku=sku)
+
             QMessageBox.information(self.view, "Succès", f"Produit '{name}' ajouté.")
 
         self.view.clear_product_form()
@@ -139,13 +152,10 @@ class BarcodeManager(QObject):
             QMessageBox.warning(self.view, "Erreur", "Prix et stock invalides.")
             return
 
-        category = self.catalog.get_category_by_name(data.get('category', 'Divers'))
+        category_name = data.get('category', 'Divers')
+        category = self.catalog.get_category_by_name(category_name)
         category_id = category["id"] if category else None
         user_id = self.current_user.id if self.current_user else None
-
-        new_barcode = f"LIB{random.randint(100000, 999999)}"
-        while self.catalog.barcode_exists(new_barcode):
-            new_barcode = f"LIB{random.randint(100000, 999999)}"
 
         new_id = self.catalog.create_product(
             name=name, category_id=category_id, sell_price=price, stock_quantity=0
@@ -153,7 +163,14 @@ class BarcodeManager(QObject):
         if stock > 0:
             self.catalog.adjust_stock(new_id, stock, "entry", user_id=user_id,
                                       reason="Stock initial")
+
+        # Générateur unique, partagé avec StockManager — déterministe,
+        # basé sur l'id du produit (déjà unique), aucune boucle nécessaire.
+        new_barcode = self.catalog.generate_internal_barcode(new_id)
         self.catalog.add_barcode(new_barcode, new_id, "internal", is_primary=True)
+
+        sku = self.catalog.generate_sku(new_id, category_name)
+        self.catalog.update_product(new_id, sku=sku)
 
         try:
             ean = barcode_lib.get('code128', new_barcode, writer=ImageWriter())
@@ -165,7 +182,7 @@ class BarcodeManager(QObject):
             self.current_barcode_for_print = new_barcode
             self.current_product_name_for_print = name
             self.load_products()
-            print(f"[BarcodeManager] Code généré: {new_barcode}")
+            print(f"[BarcodeManager] Code généré: {new_barcode} (SKU: {sku})")
         except Exception as e:
             QMessageBox.critical(self.view, "Erreur", f"Erreur génération: {e}")
 

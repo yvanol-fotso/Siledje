@@ -138,6 +138,7 @@ class SyncManager(QObject):
         v.auto_sync_toggled.connect(self.set_auto_sync_enabled)
         v.interval_changed.connect(self.set_interval_minutes)
         v.refresh_requested.connect(self.refresh_view)
+        v.clear_history_requested.connect(self.clear_history)
 
         v.sync_data_requested.connect(self._sync_data_now)
         self.data_sync_manager.sync_started.connect(lambda: self.view.set_data_syncing(True))
@@ -165,6 +166,16 @@ class SyncManager(QObject):
         )
         self.view.set_history(self.repo.get_recent(30))
         self.view.set_data_sync_status(self.data_sync_manager.get_status_summary())
+
+    @Slot()
+    def clear_history(self):
+        if not self._apply_permission():
+            self._deny("vider l'historique de synchronisation")
+            return
+        count = self.repo.clear_history()
+        print(f"[SyncManager] Historique vidé ({count} entrée(s) supprimée(s))")
+        self.history_changed.emit()
+        self.refresh_view()
 
     # ────────────────────────────────────────────────────────────────
     # SYNCHRONISATION DES DONNÉES (délégation à CloudDataSyncManager)

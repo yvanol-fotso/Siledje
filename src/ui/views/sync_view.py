@@ -146,6 +146,7 @@ class SyncView(QWidget):
     auto_sync_toggled    = Signal(bool)
     interval_changed     = Signal(int)
     refresh_requested    = Signal()
+    clear_history_requested = Signal()
 
     # Synchronisation des données (bidirectionnelle)
     sync_data_requested  = Signal()
@@ -296,8 +297,11 @@ class SyncView(QWidget):
 
         hdr = QHBoxLayout()
         hdr.addStretch()
+        clear_btn = _btn("Vider l'historique", primary=False, h=28, w=140)
+        clear_btn.clicked.connect(self._confirm_clear_history)
         ref = _btn("Actualiser", primary=False, h=28, w=100)
         ref.clicked.connect(lambda: self.refresh_requested.emit())
+        hdr.addWidget(clear_btn)
         hdr.addWidget(ref)
         lay.addLayout(hdr)
 
@@ -321,6 +325,17 @@ class SyncView(QWidget):
     # ──────────────────────────────────────────────────────────────
     # API publique — appelée par les managers
     # ──────────────────────────────────────────────────────────────
+
+    def _confirm_clear_history(self):
+        from PySide6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, "Vider l'historique",
+            "Supprimer définitivement tout l'historique de synchronisation ?\n\n"
+            "Les sauvegardes déjà envoyées ne sont pas affectées, seule leur trace ici disparaît.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self.clear_history_requested.emit()
 
     def apply_permissions(self, *, can_configure_system: bool):
         self.btn_sync_now.setEnabled(can_configure_system)

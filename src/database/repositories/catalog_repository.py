@@ -2,6 +2,12 @@
 Accès aux données du catalogue produits — conforme au schéma SILEDJE.
 Couvre : categories, suppliers, products, barcodes, product_components,
 stock_movements.
+
+Génération d'identifiants (SKU / code-barres interne) : voir la section
+dédiée avant BARCODES. Les deux sont dérivés de l'id technique du produit
+(product_id) — déjà unique par construction (clé primaire SQLite) — donc
+aucune boucle de vérification d'unicité n'est nécessaire, contrairement à
+une génération purement aléatoire.
 """
 
 import sqlite3
@@ -372,6 +378,29 @@ class CatalogRepository:
         return cursor.fetchone() is not None
 
     # ────────────────────────────────────────────────────────────────
+    # GÉNÉRATION SKU / CODE-BARRES — déterministe, sans boucle d'unicité
+    # ────────────────────────────────────────────────────────────────
+    #
+    # Les deux sont dérivés de product_id (déjà unique — clé primaire
+    # SQLite). À appeler APRÈS create_product(), une fois l'id connu.
+    # Le préfixe du SKU regroupe les produits par famille (catégorie),
+    # ex: "PAP-000001" (Papeterie), "MSC-000002" (Manuels Scolaires).
+
+    @staticmethod
+    def _normalize_prefix(text: str, length: int = 3) -> str:
+        import unicodedata, re
+        text = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode("ascii")
+        text = re.sub(r"[^A-Za-z]", "", text).upper()
+        return (text[:length] or "GEN").ljust(length, "X")
+
+    def generate_sku(self, product_id: int, category_name: str = None) -> str:
+        prefix = self._normalize_prefix(category_name)
+        return f"{prefix}-{product_id:06d}"
+
+    def generate_internal_barcode(self, product_id: int) -> str:
+        return f"LIB{product_id:08d}"
+
+    # ────────────────────────────────────────────────────────────────
     # BARCODES (relation 1-N avec products)
     # ────────────────────────────────────────────────────────────────
 
@@ -407,7 +436,6 @@ class CatalogRepository:
         try:
             cursor = self.db.get_cursor()
             if is_primary:
-                # Un seul code-barres principal par produit
                 cursor.execute(
                     "UPDATE barcodes SET is_primary = 0 WHERE product_id = ?", (product_id,)
                 )
