@@ -1,10 +1,5 @@
 """
 Manager des codes-barres — connecté à CatalogRepository (products + barcodes).
-
-La génération du code interne réutilise CatalogRepository.generate_internal_barcode()
-— même générateur que StockManager, déterministe (basé sur l'id du produit,
-déjà unique), plus de boucle "tant que le code existe déjà, retire un autre
-nombre aléatoire".
 """
 
 from PySide6.QtCore import QObject, Slot
@@ -15,6 +10,7 @@ from barcode.writer import ImageWriter
 
 from src.database.repositories.catalog_repository import CatalogRepository
 from src.utils.config import get_config
+from src.ui.views.barcode.barcode_table import BarcodeTableModel
 
 
 class BarcodeManager(QObject):
@@ -27,6 +23,7 @@ class BarcodeManager(QObject):
         self.view = None
         self.current_user = current_user
         self.catalog = CatalogRepository()
+        self.model = None
 
         config = get_config()
         self.barcodes_dir = config.base_dir / "barcodes"
@@ -39,7 +36,7 @@ class BarcodeManager(QObject):
 
     def get_ui(self):
         if self.view is None:
-            from src.ui.views.barcode_view import BarcodeView
+            from src.ui.views.barcode.barcode_view import BarcodeView
             self.view = BarcodeView(self.parent)
             self._connect_view_signals()
             self.load_products()
@@ -79,12 +76,10 @@ class BarcodeManager(QObject):
                 'id': '', 'barcode': barcode_text, 'name': '',
                 'category': 'Divers', 'price': '0', 'stock': '0',
             })
-        print(f"[BarcodeManager] Recherche: {barcode_text} - {'Trouvé' if product else 'Non trouvé'}")
+        print(f"[BarcodeManager] Recherche: {barcode_text} - {'Trouve' if product else 'Non trouve'}")
 
     @Slot()
     def on_scan_barcode(self):
-        # Simulation d'un scan matériel (aucun lecteur connecté ici) — un
-        # vrai lecteur enverrait directement le texte scanné à on_search_barcode.
         import random
         simulated = f"{random.randint(1000000000000, 9999999999999)}"
         self.on_search_barcode(simulated)
@@ -128,8 +123,6 @@ class BarcodeManager(QObject):
             if not self.catalog.barcode_exists(barcode_val):
                 self.catalog.add_barcode(barcode_val, new_id, "internal", is_primary=True)
 
-            # SKU auto-généré (même règle que StockManager) — pas de produit
-            # sans identifiant présentable, même créé depuis cet écran.
             sku = self.catalog.generate_sku(new_id, category_name)
             self.catalog.update_product(new_id, sku=sku)
 
@@ -164,8 +157,6 @@ class BarcodeManager(QObject):
             self.catalog.adjust_stock(new_id, stock, "entry", user_id=user_id,
                                       reason="Stock initial")
 
-        # Générateur unique, partagé avec StockManager — déterministe,
-        # basé sur l'id du produit (déjà unique), aucune boucle nécessaire.
         new_barcode = self.catalog.generate_internal_barcode(new_id)
         self.catalog.add_barcode(new_barcode, new_id, "internal", is_primary=True)
 
@@ -182,9 +173,9 @@ class BarcodeManager(QObject):
             self.current_barcode_for_print = new_barcode
             self.current_product_name_for_print = name
             self.load_products()
-            print(f"[BarcodeManager] Code généré: {new_barcode} (SKU: {sku})")
+            print(f"[BarcodeManager] Code genere: {new_barcode} (SKU: {sku})")
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur", f"Erreur génération: {e}")
+            QMessageBox.critical(self.view, "Erreur", f"Erreur generation: {e}")
 
     @Slot()
     def on_print_barcode(self):
@@ -193,7 +184,7 @@ class BarcodeManager(QObject):
                 self.view, "Impression",
                 f"Nom: {self.current_product_name_for_print}\n"
                 f"Code: {self.current_barcode_for_print}\n"
-                f"Vérifiez le dossier 'barcodes'"
+                f"Verifiez le dossier 'barcodes'"
             )
         else:
             QMessageBox.warning(self.view, "Erreur", "Aucun code-barres à imprimer.")
@@ -204,11 +195,10 @@ class BarcodeManager(QObject):
         if not product:
             QMessageBox.critical(self.view, "Erreur", "Produit introuvable.")
             return
-        # Redirige vers l'onglet Stock pour édition complète (tous les champs réels)
         QMessageBox.information(
-            self.view, "Édition",
-            f"Utilisez le module 'Gestion de Stock' pour modifier tous les détails de "
-            f"'{product['name']}'. Cet écran gère uniquement les codes-barres."
+            self.view, "Edition",
+            f"Utilisez le module 'Gestion de Stock' pour modifier tous les details de "
+            f"'{product['name']}'. Cet ecran gere uniquement les codes-barres."
         )
 
     @Slot(int)
@@ -218,12 +208,12 @@ class BarcodeManager(QObject):
             QMessageBox.critical(self.view, "Erreur", "Produit introuvable.")
             return
         reply = QMessageBox.question(
-            self.view, "Confirmation", f"Désactiver '{product['name']}' ?",
+            self.view, "Confirmation", f"Desactiver '{product['name']}' ?",
             QMessageBox.Yes | QMessageBox.No
         )
         if reply == QMessageBox.Yes:
             self.catalog.set_product_active(product_id, False)
-            QMessageBox.information(self.view, "Succès", "Produit désactivé.")
+            QMessageBox.information(self.view, "Succès", "Produit desactive.")
             self.load_products()
 
     def load_products(self):
@@ -241,7 +231,13 @@ class BarcodeManager(QObject):
             })
         if self.view:
             self.view.update_products_table(products_list)
-        print(f"[BarcodeManager] {len(products_list)} produits chargés")
+        print(f"[BarcodeManager] {len(products_list)} produits charges")
 
     def refresh(self):
         self.load_products()
+
+    def set_theme(self, is_dark: bool):
+        """Change le theme de la vue"""
+        if self.view is not None:
+            self.view.set_theme(is_dark)
+            print(f"[BarcodeManager] Theme applique: {'dark' if is_dark else 'light'}")

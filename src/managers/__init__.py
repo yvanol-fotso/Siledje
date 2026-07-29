@@ -1,6 +1,6 @@
 """
 Gestionnaires de l'application.
-Export centralisé de tous les managers.
+Export centralise de tous les managers.
 """
 
 from .stock.stock_manager import StockManager
@@ -12,9 +12,11 @@ from .barcode.barcode_manager import BarcodeManager
 from .ai.ai_manager import AIManager
 from .database import DatabaseSettingsManager
 from .notifications import NotificationSettingsManager
-from .supplier.supplier_manager import SupplierManager          
+from .supplier.supplier_manager import SupplierManager
+from .accueil.accueil_manager import AccueilManager  
 
 __all__ = [
+    'AccueilManager',
     'StockManager',
     'SalesManager',
     'AdminManager',
@@ -24,5 +26,5 @@ __all__ = [
     'AIManager',
     'DatabaseSettingsManager',
     'NotificationSettingsManager',
-    'SupplierManager',                                          
+    'SupplierManager',
 ]

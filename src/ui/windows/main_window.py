@@ -1,5 +1,6 @@
 """
 Fenêtre principale — VERSION FINALE COMPLÈTE.
+Utilise la nouvelle architecture : managers/stock/ + ui/views/stock/
 """
 
 from datetime import datetime
@@ -20,7 +21,7 @@ from src.managers.security.security_manager import SecurityManager
 from src.managers.report.report_manager import ReportManager
 from src.managers.barcode.barcode_manager import BarcodeManager
 from src.managers.ai.ai_manager import AIManager
-from src.managers.accueil_manage import AccueilManager
+from src.managers.accueil.accueil_manager import AccueilManager
 from src.managers.database import DatabaseSettingsManager
 from src.managers.notifications import NotificationSettingsManager
 from src.managers.zoom import ZoomManager
@@ -102,9 +103,10 @@ class MainWindow(QMainWindow):
         self.zoom_manager.apply_saved_zoom()
 
     def init_modules(self):
+        """Initialise tous les modules avec la nouvelle architecture."""
         return {
             'accueil':               AccueilManager(self),
-            'stock':                 StockManager(self, self.current_user),
+            'stock':                 StockManager(self, self.current_user),  
             'sales':                 SalesManager(self, self.current_user), 
             'admin':                 AdminManager(self, self.auth_manager, self.current_user),
             'security':              SecurityManager(self, self.auth_manager.user_repo),
@@ -124,16 +126,20 @@ class MainWindow(QMainWindow):
         lay = QVBoxLayout(central_widget)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
+        # Utilise get_ui() pour obtenir la vue du module
         self.current_module_widget = self.modules['accueil'].get_ui()
         lay.addWidget(self.current_module_widget)
         self.setCentralWidget(central_widget)
 
     def switch_to_module(self, module_name):
+        """Change de module en utilisant get_ui() de chaque manager."""
         if module_name in self.modules:
             if self.current_module_widget:
                 self.current_module_widget.setParent(None)
+            # ✅ Tous les managers ont get_ui() qui retourne la vue
             self.current_module_widget = self.modules[module_name].get_ui()
             self.centralWidget().layout().addWidget(self.current_module_widget)
+            print(f"[MainWindow] Switch vers: {module_name}")
 
     # ── MENUS ─────────────────────────────────────────────────────────
 
@@ -164,7 +170,7 @@ class MainWindow(QMainWindow):
         # ── ACCUEIL ───────────────────────────────────────────────────
         accueil_menu = menubar.addMenu("&Accueil")
         a = QAction("Tableau de bord", self)
-        a.setShortcut("Ctrl+H")
+        # a.setShortcut("Ctrl+H") # va rendre ambigui car definie deux fois dans les raccourcis
         a.triggered.connect(lambda: self.switch_to_module('accueil'))
         accueil_menu.addAction(a)
 
@@ -459,13 +465,23 @@ class MainWindow(QMainWindow):
 
     def setup_shortcuts(self):
         sc = QShortcut
-        sc(QKeySequence("Ctrl+Q"), self).activated.connect(self.close)
+        
+        # ✅ Raccourci Accueil - Ctrl+H
         sc(QKeySequence("Ctrl+H"), self).activated.connect(lambda: self.switch_to_module('accueil'))
-        sc(QKeySequence("F11"),    self).activated.connect(self.toggle_fullscreen)
+        
+        # Quitter
+        sc(QKeySequence("Ctrl+Q"), self).activated.connect(self.close)
+        
+        # Plein écran
+        sc(QKeySequence("F11"), self).activated.connect(self.toggle_fullscreen)
+        
+        # Zoom
         sc(QKeySequence("Ctrl+="), self).activated.connect(self.zoom_in)
         sc(QKeySequence("Ctrl++"), self).activated.connect(self.zoom_in)
         sc(QKeySequence("Ctrl+-"), self).activated.connect(self.zoom_out)
         sc(QKeySequence("Ctrl+0"), self).activated.connect(self.reset_zoom)
+        
+        # Fichier
         sc(QKeySequence("Ctrl+F"), self).activated.connect(lambda: self.switch_to_module('file'))
 
     # ── PERSISTANCE ───────────────────────────────────────────────────

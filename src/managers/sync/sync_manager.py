@@ -125,7 +125,7 @@ class SyncManager(QObject):
 
     def get_ui(self):
         if self.view is None:
-            from src.ui.views.sync_view import SyncView
+            from src.ui.views.sync.sync_view import SyncView
             self.view = SyncView(self.parent_window)
             self._connect_signals()
             self._apply_permissions()

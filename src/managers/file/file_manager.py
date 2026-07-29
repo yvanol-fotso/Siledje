@@ -2,11 +2,6 @@
 Gestionnaire des opérations sur les fichiers.
 Import/Export CSV alignés sur le schéma réel (CatalogRepository / UserRepository)
 + Sauvegarde/Restauration de la base de données + Activation de licence.
-
-Contrôle d'accès basé sur les permissions réelles du rôle de current_user
-(table roles) — double protection : boutons désactivés côté vue via
-apply_permissions(), et revérification systématique côté manager avant
-chaque action sensible.
 """
 
 import csv
@@ -16,7 +11,7 @@ import unicodedata
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Slot
+from PySide6.QtCore import QObject, Slot, QTimer
 from PySide6.QtWidgets import QMessageBox
 
 from src.database.repositories.catalog_repository import CatalogRepository
@@ -46,7 +41,7 @@ def _fmt_money(n) -> str:
 
 
 class FileManager(QObject):
-    """Gère toutes les opérations fichier (import/export/sauvegarde/licence) de l'application."""
+    """Gère toutes les opérations fichier (import/export/sauvegarde/licence)."""
 
     version = "3.0.0"
 
@@ -126,15 +121,11 @@ class FileManager(QObject):
     # ────────────────────────────────────────────────────────────────
 
     def _has_permission(self, permission_name: str) -> bool:
-        """Vérifie une permission réelle du rôle. Aucun utilisateur -> tout refusé."""
         if not self.current_user:
             return False
         return self.current_user.has_permission(permission_name)
 
     def _require_permission(self, permission_name: str, action_label: str) -> bool:
-        """Revérification côté manager avant une action sensible. Affiche un
-        message et retourne False si refusé — filet de sécurité même si un
-        bouton restait cliquable côté vue."""
         if self._has_permission(permission_name):
             return True
         QMessageBox.warning(
@@ -146,12 +137,18 @@ class FileManager(QObject):
 
     def get_ui(self):
         if self.view is None:
-            from src.ui.views.file_view import FileView
+            from src.ui.views.file.file_view import FileView
             self.view = FileView(self.parent_window)
             self._connect_signals()
             self._apply_permissions()
             self._refresh_backups_list()
-            self._refresh_all_panels()
+            
+            # ✅ Rafraîchir la licence immédiatement
+            QTimer.singleShot(100, self._refresh_license_panel)
+            
+            # ✅ Rafraîchir les panels après un court délai
+            QTimer.singleShot(200, self._refresh_all_panels)
+            
         return self.view
 
     def _apply_permissions(self):
@@ -228,53 +225,51 @@ class FileManager(QObject):
                 float(p.get("buy_price") or 0) * float(p.get("stock_quantity") or 0)
                 for p in products
             )
-            self.view.products_panel.set_stats([
-                (_fmt_int(len(products)), "Produit(s)"),
-                (_fmt_int(len(low_stock)), "En stock bas"),
-                (_fmt_money(stock_value), "Valeur du stock"),
-            ])
 
-            with_email = sum(1 for s in suppliers if s.get("email"))
-            with_phone = sum(1 for s in suppliers if s.get("phone"))
-            self.view.suppliers_panel.set_stats([
-                (_fmt_int(len(suppliers)), "Fournisseur(s)"),
-                (_fmt_int(with_email), "Avec email"),
-                (_fmt_int(with_phone), "Avec téléphone"),
-            ])
-
-            main_cats = sum(1 for c in categories if not c.get("parent_id"))
-            sub_cats = len(categories) - main_cats
-            self.view.categories_panel.set_stats([
-                (_fmt_int(len(categories)), "Catégorie(s)"),
-                (_fmt_int(main_cats), "Principales"),
-                (_fmt_int(sub_cats), "Sous-catégories"),
-            ])
+            # Mise à jour des stats via les nouvelles méthodes
+            self.view.update_entity_stats("products", len(products), f"{len(low_stock)} en stock bas")
+            self.view.update_entity_stats("suppliers", len(suppliers), f"{sum(1 for s in suppliers if s.get('email'))} avec email")
+            self.view.update_entity_stats("categories", len(categories), f"{sum(1 for c in categories if not c.get('parent_id'))} principales")
 
             if self._has_permission("can_manage_users"):
                 active_users = sum(1 for u in users if u.get("is_active"))
-                self.view.users_panel.set_stats([
-                    (_fmt_int(len(users)), "Utilisateur(s)"),
-                    (_fmt_int(active_users), "Actif(s)"),
-                    (_fmt_int(len(users) - active_users), "Inactif(s)"),
-                ])
+                self.view.update_entity_stats("users", len(users), f"{active_users} actifs")
+
+            # Mise à jour des graphiques
+            self.view.update_entity_chart("products", [
+                ("En stock", len([p for p in products if p.get("stock_quantity", 0) > 10])),
+                ("Stock bas", len(low_stock)),
+                ("Rupture", len([p for p in products if p.get("stock_quantity", 0) == 0])),
+            ])
+
+            self.view.update_entity_chart("suppliers", [
+                ("Actifs", len([s for s in suppliers if s.get("is_active", 1)])),
+                ("Avec email", sum(1 for s in suppliers if s.get("email"))),
+                ("Avec téléphone", sum(1 for s in suppliers if s.get("phone"))),
+            ])
+
         except Exception as e:
             print(f"[FileManager] Erreur rafraîchissement résumés : {e}")
 
         self._refresh_license_panel()
 
     def _refresh_license_panel(self):
-        if not self.view or not self._has_permission("can_configure_system"):
+        """✅ Rafraîchit le panneau de licence."""
+        if not self.view:
             return
+        
+        # Vérifier la licence même si l'utilisateur n'a pas les droits
         try:
             status = self.license_manager.check_current_license()
             info = self.license_manager.current_license
             days = self.license_manager.days_remaining()
-            self.view.license_panel.set_status(status, info, days)
+            self.view.set_license_status(status, info, days)
+            print(f"[FileManager] Licence rafraîchie: {status}")
         except Exception as e:
             print(f"[FileManager] Erreur rafraîchissement licence : {e}")
 
     # ────────────────────────────────────────────────────────────────
-    # LICENCE — réservé aux profils can_configure_system
+    # LICENCE
     # ────────────────────────────────────────────────────────────────
 
     @Slot(str)
@@ -293,16 +288,18 @@ class FileManager(QObject):
             return
 
         if ok:
-            QMessageBox.information(self.view, "Licence activée", "La nouvelle licence a été activée avec succès.")
+            QMessageBox.information(self.view, "Licence activée", "✅ La nouvelle licence a été activée avec succès.")
         else:
             QMessageBox.critical(
                 self.view, "Licence invalide",
-                "Cette clé est invalide, corrompue, ou déjà expirée."
+                "❌ Cette clé est invalide, corrompue, ou déjà expirée."
             )
+        
+        # ✅ Rafraîchir la licence immédiatement
         self._refresh_license_panel()
 
     # ────────────────────────────────────────────────────────────────
-    # PRODUITS — import réservé à can_manage_stock, export libre
+    # PRODUITS
     # ────────────────────────────────────────────────────────────────
 
     @Slot(str)
@@ -664,7 +661,7 @@ class FileManager(QObject):
         QMessageBox.information(self.view, "Modèle créé", f"Modèle catégories créé :\n{path.absolute()}")
 
     # ────────────────────────────────────────────────────────────────
-    # UTILISATEURS — export réservé à can_manage_users
+    # UTILISATEURS
     # ────────────────────────────────────────────────────────────────
 
     @Slot(str)
@@ -699,7 +696,7 @@ class FileManager(QObject):
             QMessageBox.critical(self.view, "Erreur d'export", str(e))
 
     # ────────────────────────────────────────────────────────────────
-    # SAUVEGARDE / RESTAURATION — restaurer/supprimer réservé à can_configure_system
+    # SAUVEGARDE / RESTAURATION
     # ────────────────────────────────────────────────────────────────
 
     @Slot()
@@ -793,3 +790,8 @@ class FileManager(QObject):
             self.view, "Export réussi",
             f"{count} {label} exporté(s).\n\nFichier : {path.name}\nTaille : {size_kb:.1f} KB"
         )
+
+    def set_theme(self, is_dark: bool):
+        if self.view is not None:
+            self.view.set_theme(is_dark)
+            print(f"[FileManager] Theme applique: {'dark' if is_dark else 'light'}")

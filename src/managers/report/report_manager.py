@@ -1,5 +1,5 @@
 """
-Manager des rapports et statistiques — connecté à SalesRepository.
+Manager des rapports et statistiques — connecte a SalesRepository.
 """
 
 from PySide6.QtCore import QObject, Slot, QDate
@@ -29,11 +29,11 @@ class ReportManager(QObject):
         self.current_end_date = QDate.currentDate()
 
         total_count = self.sales_repo.count_sales()
-        print(f"[ReportManager v{self.version}] Initialisé — {total_count} ventes en base")
+        print(f"[ReportManager v{self.version}] Initialise — {total_count} ventes en base")
 
     def get_ui(self):
         if self.view is None:
-            from src.ui.views.report_view import ReportView
+            from src.ui.views.report.report_view import ReportView
             self.view = ReportView(self.parent)
             self._connect_view_signals()
             self._initialize_view()
@@ -88,7 +88,7 @@ class ReportManager(QObject):
         self.filtered_sales = self.sales_repo.get_sales_between(start, end)
         self._display_results()
         self._calculate_stats()
-        print(f"[ReportManager] {len(self.filtered_sales)} ventes chargées "
+        print(f"[ReportManager] {len(self.filtered_sales)} ventes chargees "
               f"({start} → {end})")
 
     def _display_results(self):
@@ -150,8 +150,8 @@ class ReportManager(QObject):
     @Slot()
     def export_csv(self):
         if not self.filtered_sales:
-            QMessageBox.warning(self.view, "Aucune donnée",
-                                "Aucune vente à exporter pour la période sélectionnée.")
+            QMessageBox.warning(self.view, "Aucune donnee",
+                                "Aucune vente a exporter pour la periode selectionnee.")
             return
         try:
             filename, _ = QFileDialog.getSaveFileName(
@@ -168,16 +168,16 @@ class ReportManager(QObject):
                 for row_data in self.view.get_table_data():
                     writer.writerow(row_data)
 
-            QMessageBox.information(self.view, "Export réussi",
-                                    f"Rapport exporté vers:\n{filename}")
+            QMessageBox.information(self.view, "Export reussi",
+                                    f"Rapport exporte vers:\n{filename}")
         except Exception as e:
             QMessageBox.critical(self.view, "Erreur d'export", f"Erreur:\n{e}")
 
     @Slot()
     def print_report(self):
         if not self.filtered_sales:
-            QMessageBox.warning(self.view, "Aucune donnée",
-                                "Aucune vente à imprimer pour la période sélectionnée.")
+            QMessageBox.warning(self.view, "Aucune donnee",
+                                "Aucune vente a imprimer pour la periode selectionnee.")
             return
         try:
             printer = QPrinter()
@@ -186,8 +186,8 @@ class ReportManager(QObject):
                 doc = QTextDocument()
                 doc.setHtml(self._generate_html_report())
                 doc.print_(printer)
-                QMessageBox.information(self.view, "Impression lancée",
-                                        "Le rapport a été envoyé à l'imprimante.")
+                QMessageBox.information(self.view, "Impression lancee",
+                                        "Le rapport a ete envoye a l'imprimante.")
         except Exception as e:
             QMessageBox.critical(self.view, "Erreur d'impression", f"Erreur:\n{e}")
 
@@ -202,7 +202,7 @@ class ReportManager(QObject):
             .footer {{ margin-top: 20px; text-align: center; color: #7f8c8d; }}
         </style></head><body>
             <h1>Rapport des Ventes</h1>
-            <p><strong>Période:</strong> {self.current_start_date.toString("dd/MM/yyyy")}
+            <p><strong>Periode:</strong> {self.current_start_date.toString("dd/MM/yyyy")}
                - {self.current_end_date.toString("dd/MM/yyyy")}</p>
         """
         html += "<table><tr>"
@@ -216,12 +216,12 @@ class ReportManager(QObject):
             html += "</tr>"
         html += "</table>"
         html += f"""
-            <div class="footer"><p>Rapport généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}</p></div>
+            <div class="footer"><p>Rapport genere le {datetime.now().strftime('%d/%m/%Y a %H:%M')}</p></div>
         </body></html>
         """
         return html
 
-    # ========== MÉTHODES PUBLIQUES ==========
+    # ========== METHODES PUBLIQUES ==========
 
     def get_sales_count(self) -> int:
         return self.sales_repo.count_sales()
@@ -231,3 +231,9 @@ class ReportManager(QObject):
 
     def refresh(self):
         self.load_data()
+
+    def set_theme(self, is_dark: bool):
+        """Change le theme de la vue"""
+        if self.view is not None:
+            self.view.set_theme(is_dark)
+            print(f"[ReportManager] Theme applique: {'dark' if is_dark else 'light'}")

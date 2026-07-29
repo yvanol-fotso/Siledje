@@ -221,6 +221,14 @@ class CatalogRepository:
         row = cursor.fetchone()
         return dict(row) if row else None
 
+    # ✅ AJOUT DE LA METHODE MANQUANTE
+    def get_supplier_by_name(self, name: str) -> Optional[Dict[str, Any]]:
+        """Récupère un fournisseur par son nom."""
+        cursor = self.db.get_cursor()
+        cursor.execute("SELECT * FROM suppliers WHERE name = ?", (name,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
     def create_supplier(self, name: str, contact_name: str = None, email: str = None,
                          phone: str = None, phone2: str = None, address: str = None,
                          city: str = None, payment_terms: str = None, notes: str = None) -> int:
@@ -325,17 +333,19 @@ class CatalogRepository:
                         stock_quantity: int = 0, min_stock_threshold: int = 10,
                         packaging_type: str = "unitaire", units_per_pack: int = 1,
                         location: str = None, image_path: str = None, sku: str = None,
-                        tax_rate: float = 0, is_book: bool = False, notes: str = None) -> int:
+                        tax_rate: float = 0, is_book: bool = False, notes: str = None,
+                        is_active: bool = True) -> int:
         cursor = self.db.get_cursor()
         cursor.execute("""
             INSERT INTO products (
                 name, description, category_id, supplier_id, buy_price, sell_price,
                 stock_quantity, min_stock_threshold, packaging_type, units_per_pack,
-                location, image_path, sku, tax_rate, is_book, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                location, image_path, sku, tax_rate, is_book, notes, is_active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (name, description, category_id, supplier_id, buy_price, sell_price,
               stock_quantity, min_stock_threshold, packaging_type, units_per_pack,
-              location, image_path, sku, tax_rate, 1 if is_book else 0, notes))
+              location, image_path, sku, tax_rate, 1 if is_book else 0, notes,
+              1 if is_active else 0))
         self.db.commit()
         return cursor.lastrowid
 
@@ -378,13 +388,8 @@ class CatalogRepository:
         return cursor.fetchone() is not None
 
     # ────────────────────────────────────────────────────────────────
-    # GÉNÉRATION SKU / CODE-BARRES — déterministe, sans boucle d'unicité
+    # GÉNÉRATION SKU / CODE-BARRES
     # ────────────────────────────────────────────────────────────────
-    #
-    # Les deux sont dérivés de product_id (déjà unique — clé primaire
-    # SQLite). À appeler APRÈS create_product(), une fois l'id connu.
-    # Le préfixe du SKU regroupe les produits par famille (catégorie),
-    # ex: "PAP-000001" (Papeterie), "MSC-000002" (Manuels Scolaires).
 
     @staticmethod
     def _normalize_prefix(text: str, length: int = 3) -> str:
@@ -401,7 +406,7 @@ class CatalogRepository:
         return f"LIB{product_id:08d}"
 
     # ────────────────────────────────────────────────────────────────
-    # BARCODES (relation 1-N avec products)
+    # BARCODES
     # ────────────────────────────────────────────────────────────────
 
     def get_barcodes_for_product(self, product_id: int) -> List[Dict[str, Any]]:
@@ -460,8 +465,17 @@ class CatalogRepository:
         cursor.execute("UPDATE barcodes SET is_primary = 1 WHERE id = ?", (barcode_id,))
         self.db.commit()
 
+    def update_barcode(self, barcode_id: int, new_barcode: str) -> bool:
+        try:
+            cursor = self.db.get_cursor()
+            cursor.execute("UPDATE barcodes SET barcode_text = ? WHERE id = ?", (new_barcode, barcode_id))
+            self.db.commit()
+            return cursor.rowcount > 0
+        except sqlite3.IntegrityError:
+            return False
+
     # ────────────────────────────────────────────────────────────────
-    # PRODUCT_COMPONENTS (composition paquets/cartons)
+    # PRODUCT_COMPONENTS
     # ────────────────────────────────────────────────────────────────
 
     def get_components(self, parent_product_id: int) -> List[Dict[str, Any]]:
@@ -490,18 +504,13 @@ class CatalogRepository:
         return cursor.rowcount > 0
 
     # ────────────────────────────────────────────────────────────────
-    # STOCK_MOVEMENTS (historique + mise à jour de stock atomique)
+    # STOCK_MOVEMENTS
     # ────────────────────────────────────────────────────────────────
 
     def adjust_stock(self, product_id: int, quantity_change: int, movement_type: str,
                       user_id: int = None, reason: str = None, unit_cost: float = None,
                       reference_id: int = None, reference_type: str = None,
                       notes: str = None) -> Optional[int]:
-        """
-        Modifie le stock d'un produit ET trace le mouvement dans stock_movements.
-        movement_type : entry / sale / return / adjustment / inventory
-        quantity_change : positif = entrée, négatif = sortie
-        """
         try:
             cursor = self.db.get_cursor()
 

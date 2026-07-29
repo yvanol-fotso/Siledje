@@ -1,13 +1,10 @@
-""" Manager des ventes — connecté à SalesRepository + CatalogRepository.
+"""
+Manager des ventes — connecté à SalesRepository + CatalogRepository.
 Panier en mémoire, checkout réel avec sale_items/sale_payments et
 déduction de stock tracée dans stock_movements.
-
-L'ID technique du produit (products.id) n'est plus affiché à l'écran —
-c'est le SKU (généré automatiquement, voir CatalogRepository.generate_sku)
-qui sert d'identifiant présentable au caissier. L'ID reste utilisé en
-interne (retrouvé produit <-> panier), simplement invisible.
 """
 
+from src.ui.views.sales import SalesView
 from PySide6.QtCore import QObject, Slot, Qt
 from PySide6.QtWidgets import (
     QMessageBox, QWidget, QFormLayout, QLineEdit,
@@ -36,14 +33,16 @@ class SalesManager(QObject):
         self.catalog = CatalogRepository()
         self.sales_repo = SalesRepository()
 
-        self.current_cart = []  # [{"product": dict, "quantity": int}]
+        self.current_cart = []
         self.current_search = ""
+        self.current_type_filter = None
+        self.all_products = []
 
         print(f"[SalesManager v{self.version}] Initialisé")
 
     def get_ui(self):
         if self.view is None:
-            from src.ui.views.sales_view import SalesView
+            from src.ui.views.sales.sales_view import SalesView
             self.view = SalesView(self.parent)
             self._connect_view_signals()
             self.load_products()
@@ -63,17 +62,21 @@ class SalesManager(QObject):
 
     @Slot()
     def load_products(self):
-        """Charge les produits actifs en stock depuis CatalogRepository."""
+        """Charge les produits depuis CatalogRepository et applique les filtres."""
         search_term = self.view.get_search_term() if self.view else ""
 
+        # 1. Recherche
         if search_term:
             products = self.catalog.search_products(search_term)
         else:
             products = self.catalog.get_all_products()
 
-        # Adapter au format attendu par SalesView. 'sku' remplace l'ID
-        # technique à l'affichage — 'id' reste transporté pour usage
-        # interne (ajout/retrait panier), mais n'est jamais montré.
+        # 2. Filtre par type (packaging_type)
+        type_filter = self.view.get_type_filter() if self.view else None
+        if type_filter:
+            products = [p for p in products if p.get("packaging_type") == type_filter]
+
+        # 3. Adapter au format attendu par SalesView
         adapted = []
         for p in products:
             barcodes = self.catalog.get_barcodes_for_product(p["id"])
@@ -95,6 +98,7 @@ class SalesManager(QObject):
 
     @Slot(str)
     def on_type_filter_changed(self, product_type):
+        """Filtre par type de produit changé"""
         self.load_products()
 
     # ──────────────────────────────────────────────────────────────
@@ -147,7 +151,7 @@ class SalesManager(QObject):
         self.view.update_cart_table(self.current_cart, total)
 
     # ──────────────────────────────────────────────────────────────
-    # PAIEMENT — MODALE 1 : SAISIE CLIENT
+    # PAIEMENT
     # ──────────────────────────────────────────────────────────────
 
     def _build_payment_modal(self, total: float):
@@ -240,7 +244,7 @@ class SalesManager(QObject):
         return modal
 
     # ──────────────────────────────────────────────────────────────
-    # FACTURE — MODALE 2
+    # FACTURE
     # ──────────────────────────────────────────────────────────────
 
     def _build_invoice_html(self, invoice_number, client_name, client_phone,
@@ -350,7 +354,6 @@ class SalesManager(QObject):
             QMessageBox.warning(self.view, "Panier vide", "Aucun article dans le panier.")
             return
 
-        # Revalider les stocks au moment du paiement (peuvent avoir changé)
         for item in self.current_cart:
             fresh = self.catalog.get_product_by_id(item["product"]["id"])
             if not fresh or item["quantity"] > fresh["stock_quantity"]:
@@ -396,7 +399,6 @@ class SalesManager(QObject):
                 QMessageBox.critical(modal, "Erreur", "Impossible d'enregistrer la vente.")
                 return
 
-            # Déduction de stock tracée dans stock_movements
             for item in self.current_cart:
                 self.catalog.adjust_stock(
                     item["product"]["id"], -item["quantity"], "sale",
@@ -440,3 +442,9 @@ class SalesManager(QObject):
             "cart_count": len(self.current_cart),
             "total": sum(item["product"]["price"] * item["quantity"] for item in self.current_cart),
         }
+
+    def set_theme(self, is_dark: bool):
+        """Change le theme de la vue"""
+        if self.view is not None:
+            self.view.set_theme(is_dark)
+            print(f"[SalesManager] Theme appliqué: {'dark' if is_dark else 'light'}")

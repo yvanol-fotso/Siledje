@@ -1,56 +1,19 @@
 """
-Gestionnaire des paramètres IA.
-Séparation complète de la logique métier et de l'interface.
-Utilise ModalView générique pour tous les dialogues. Sans emojis.
+Gestionnaire des parametres IA.
+Separation complete de la logique metier et de l'interface.
+Utilise ModalView generique pour tous les dialogues.
 """
 
-from PySide6.QtCore import QObject, Slot, QSettings
+from PySide6.QtCore import QObject, Slot, QSettings, QTimer
 from PySide6.QtWidgets import QMessageBox
 
-
-class AIConfig:
-    """Modèle de configuration IA."""
-    def __init__(self):
-        self.api_key            = ""
-        self.model              = "gpt-3.5-turbo"
-        self.temperature        = 0.7
-        self.max_tokens         = 2000
-        self.top_p              = 1.0
-        self.frequency_penalty  = 0.0
-        self.presence_penalty   = 0.0
-        self.enabled            = False
-        self.auto_suggestions   = True
-        self.context_window     = 4096
-
-    def to_dict(self):
-        return {
-            'api_key':           self.api_key,
-            'model':             self.model,
-            'temperature':       self.temperature,
-            'max_tokens':        self.max_tokens,
-            'top_p':             self.top_p,
-            'frequency_penalty': self.frequency_penalty,
-            'presence_penalty':  self.presence_penalty,
-            'enabled':           self.enabled,
-            'auto_suggestions':  self.auto_suggestions,
-            'context_window':    self.context_window,
-        }
-
-    def from_dict(self, data):
-        self.api_key           = data.get('api_key', '')
-        self.model             = data.get('model', 'gpt-3.5-turbo')
-        self.temperature       = data.get('temperature', 0.7)
-        self.max_tokens        = data.get('max_tokens', 2000)
-        self.top_p             = data.get('top_p', 1.0)
-        self.frequency_penalty = data.get('frequency_penalty', 0.0)
-        self.presence_penalty  = data.get('presence_penalty', 0.0)
-        self.enabled           = data.get('enabled', False)
-        self.auto_suggestions  = data.get('auto_suggestions', True)
-        self.context_window    = data.get('context_window', 4096)
+from src.ui.views.ai.ai_config import AIConfig
+from src.ui.views.ai.ai_view import AIView
+from src.ui.widgets.ModalView import ModalView
 
 
 class AIManager(QObject):
-    """Gestionnaire des paramètres IA."""
+    """Gestionnaire des parametres IA."""
 
     version = "1.0.0"
 
@@ -65,12 +28,12 @@ class AIManager(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.parent   = parent
-        self.view     = None
-        self.config   = AIConfig()
+        self.parent = parent
+        self.view = None
+        self.config = AIConfig()
         self.settings = QSettings("Siledje", "Siledje")
         self._load_config()
-        print(f"[AIManager v{self.version}] Initialisé - IA activée: {self.config.enabled}")
+        print(f"[AIManager v{self.version}] Initialise - IA activee: {self.config.enabled}")
 
     def _load_config(self):
         try:
@@ -89,11 +52,10 @@ class AIManager(QObject):
 
     def get_ui(self):
         if self.view is None:
-            from src.ui.views.ai_view import AIView
             self.view = AIView(self.parent)
             self._connect_view_signals()
             self.view.update_config_display(self.config)
-            print("[AIManager] Vue créée et initialisée")
+            print("[AIManager] Vue creee et initialisee")
         return self.view
 
     def _connect_view_signals(self):
@@ -101,12 +63,9 @@ class AIManager(QObject):
         self.view.test_connection_requested.connect(self.test_connection)
         self.view.reset_config_requested.connect(self.reset_config)
 
-    # ──────────────────────────────────────────────────────────────────
-    # FORMULAIRE DE CONFIGURATION
-    # ──────────────────────────────────────────────────────────────────
+    # ========== FORMULAIRE DE CONFIGURATION ==========
 
     def _create_config_form(self):
-        from src.ui.widgets.ModalView import ModalView
         from PySide6.QtWidgets import (
             QWidget, QVBoxLayout, QFormLayout, QLineEdit,
             QComboBox, QDoubleSpinBox, QSpinBox, QCheckBox,
@@ -122,8 +81,8 @@ class AIManager(QObject):
             cancel_text="Annuler"
         )
 
-        form_widget  = QWidget()
-        main_layout  = QVBoxLayout()
+        form_widget = QWidget()
+        main_layout = QVBoxLayout()
         main_layout.setSpacing(20)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -174,11 +133,11 @@ class AIManager(QObject):
         model_combo.setCurrentText(self.config.model)
 
         auth_layout.addRow(lbl("Cle API * :"), api_key_input)
-        auth_layout.addRow(lbl("Modele :"),    model_combo)
+        auth_layout.addRow(lbl("Modele :"), model_combo)
         auth_group.setLayout(auth_layout)
         main_layout.addWidget(auth_group)
 
-        # ── Groupe Paramètres de génération ──────────────────────────
+        # ── Groupe Parametres de generation ──────────────────────────
         gen_group = QGroupBox("Parametres de Generation")
         gen_group.setStyleSheet(grp_s)
         gen_layout = QFormLayout()
@@ -201,19 +160,19 @@ class AIManager(QObject):
             s.setValue(val)
             return s
 
-        temperature_spin    = dspin(0.0,   2.0,   0.1, self.config.temperature)
-        max_tokens_spin     = ispin(1,    8000,   100, self.config.max_tokens)
-        top_p_spin          = dspin(0.0,   1.0,   0.1, self.config.top_p)
-        freq_penalty_spin   = dspin(-2.0,  2.0,   0.1, self.config.frequency_penalty)
-        pres_penalty_spin   = dspin(-2.0,  2.0,   0.1, self.config.presence_penalty)
-        context_spin        = ispin(512, 32000,   512, self.config.context_window)
+        temperature_spin = dspin(0.0, 2.0, 0.1, self.config.temperature)
+        max_tokens_spin = ispin(1, 8000, 100, self.config.max_tokens)
+        top_p_spin = dspin(0.0, 1.0, 0.1, self.config.top_p)
+        freq_penalty_spin = dspin(-2.0, 2.0, 0.1, self.config.frequency_penalty)
+        pres_penalty_spin = dspin(-2.0, 2.0, 0.1, self.config.presence_penalty)
+        context_spin = ispin(512, 32000, 512, self.config.context_window)
 
         gen_layout.addRow(lbl("Temperature (0.0-2.0) :"), temperature_spin)
-        gen_layout.addRow(lbl("Max Tokens :"),            max_tokens_spin)
-        gen_layout.addRow(lbl("Top P (0.0-1.0) :"),      top_p_spin)
-        gen_layout.addRow(lbl("Frequency Penalty :"),     freq_penalty_spin)
-        gen_layout.addRow(lbl("Presence Penalty :"),      pres_penalty_spin)
-        gen_layout.addRow(lbl("Context Window :"),        context_spin)
+        gen_layout.addRow(lbl("Max Tokens :"), max_tokens_spin)
+        gen_layout.addRow(lbl("Top P (0.0-1.0) :"), top_p_spin)
+        gen_layout.addRow(lbl("Frequency Penalty :"), freq_penalty_spin)
+        gen_layout.addRow(lbl("Presence Penalty :"), pres_penalty_spin)
+        gen_layout.addRow(lbl("Context Window :"), context_spin)
         gen_group.setLayout(gen_layout)
         main_layout.addWidget(gen_group)
 
@@ -224,11 +183,11 @@ class AIManager(QObject):
         opt_layout.setSpacing(10)
 
         ck_s = "font-size: 14px; padding: 5px;"
-        enabled_chk     = QCheckBox("Activer l'assistant IA")
+        enabled_chk = QCheckBox("Activer l'assistant IA")
         enabled_chk.setStyleSheet(ck_s)
         enabled_chk.setChecked(self.config.enabled)
 
-        auto_sugg_chk   = QCheckBox("Suggestions automatiques")
+        auto_sugg_chk = QCheckBox("Suggestions automatiques")
         auto_sugg_chk.setStyleSheet(ck_s)
         auto_sugg_chk.setChecked(self.config.auto_suggestions)
 
@@ -237,7 +196,7 @@ class AIManager(QObject):
         opt_group.setLayout(opt_layout)
         main_layout.addWidget(opt_group)
 
-        # ── Note info sans emoji ──────────────────────────────────────
+        # ── Note info ──────────────────────────────────────────────────
         note = QLabel(
             "Note : Une temperature plus elevee rend les reponses plus creatives "
             "mais moins previsibles. Une valeur de 0.7 est recommandee."
@@ -254,22 +213,20 @@ class AIManager(QObject):
         form_widget.setLayout(main_layout)
         modal.set_content(form_widget)
 
-        modal.api_key_input       = api_key_input
-        modal.model_combo         = model_combo
-        modal.temperature_spin    = temperature_spin
-        modal.max_tokens_spin     = max_tokens_spin
-        modal.top_p_spin          = top_p_spin
-        modal.freq_penalty_spin   = freq_penalty_spin
-        modal.pres_penalty_spin   = pres_penalty_spin
-        modal.context_spin        = context_spin
-        modal.enabled_chk         = enabled_chk
-        modal.auto_sugg_chk       = auto_sugg_chk
+        modal.api_key_input = api_key_input
+        modal.model_combo = model_combo
+        modal.temperature_spin = temperature_spin
+        modal.max_tokens_spin = max_tokens_spin
+        modal.top_p_spin = top_p_spin
+        modal.freq_penalty_spin = freq_penalty_spin
+        modal.pres_penalty_spin = pres_penalty_spin
+        modal.context_spin = context_spin
+        modal.enabled_chk = enabled_chk
+        modal.auto_sugg_chk = auto_sugg_chk
 
         return modal
 
-    # ──────────────────────────────────────────────────────────────────
-    # SLOTS
-    # ──────────────────────────────────────────────────────────────────
+    # ========== SLOTS ==========
 
     @Slot()
     def edit_config(self):
@@ -282,16 +239,16 @@ class AIManager(QObject):
                                         "La cle API est obligatoire.")
                     return
 
-                self.config.api_key           = modal.api_key_input.text().strip()
-                self.config.model             = modal.model_combo.currentText()
-                self.config.temperature       = modal.temperature_spin.value()
-                self.config.max_tokens        = modal.max_tokens_spin.value()
-                self.config.top_p             = modal.top_p_spin.value()
+                self.config.api_key = modal.api_key_input.text().strip()
+                self.config.model = modal.model_combo.currentText()
+                self.config.temperature = modal.temperature_spin.value()
+                self.config.max_tokens = modal.max_tokens_spin.value()
+                self.config.top_p = modal.top_p_spin.value()
                 self.config.frequency_penalty = modal.freq_penalty_spin.value()
-                self.config.presence_penalty  = modal.pres_penalty_spin.value()
-                self.config.context_window    = modal.context_spin.value()
-                self.config.enabled           = modal.enabled_chk.isChecked()
-                self.config.auto_suggestions  = modal.auto_sugg_chk.isChecked()
+                self.config.presence_penalty = modal.pres_penalty_spin.value()
+                self.config.context_window = modal.context_spin.value()
+                self.config.enabled = modal.enabled_chk.isChecked()
+                self.config.auto_suggestions = modal.auto_sugg_chk.isChecked()
 
                 self._save_config()
                 self.view.update_config_display(self.config)
@@ -311,8 +268,6 @@ class AIManager(QObject):
             QMessageBox.warning(self.view, "Configuration incomplete",
                                 "Veuillez d'abord configurer la cle API.")
             return
-
-        from PySide6.QtCore import QTimer
 
         def show_result():
             QMessageBox.information(
@@ -345,3 +300,9 @@ class AIManager(QObject):
 
     def get_config(self) -> AIConfig:
         return self.config
+
+    def set_theme(self, is_dark: bool):
+        """Change le theme de la vue"""
+        if self.view is not None:
+            self.view.set_theme(is_dark)
+            print(f"[AIManager] Theme applique: {'dark' if is_dark else 'light'}")

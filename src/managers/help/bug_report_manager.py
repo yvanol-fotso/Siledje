@@ -1,6 +1,5 @@
 """
 Gestionnaire de signalement de bugs.
-Emplacement: src/managers/help/bug_report_manager.py
 """
 
 import json
@@ -12,7 +11,7 @@ from PySide6.QtWidgets import QMessageBox
 
 
 class BugReportManager(QObject):
-    """Gère la soumission et la sauvegarde locale des rapports de bugs."""
+    """Gere la soumission et la sauvegarde locale des rapports de bugs."""
 
     version = "1.0.0"
 
@@ -24,22 +23,22 @@ class BugReportManager(QObject):
         self.reports_dir = Path("bug_reports")
         self.reports_dir.mkdir(exist_ok=True)
 
-        print(f"[BugReportManager v{self.version}] Initialisé")
+        print(f"[BugReportManager v{self.version}] Initialise")
 
     def get_ui(self):
-        """Retourne la vue (créée en lazy loading)."""
+        """Retourne la vue (creee en lazy loading)."""
         if self.view is None:
-            from src.ui.views.bug_report_view import BugReportView
+            from src.ui.views.bug_report.bug_report_view import BugReportView
             self.view = BugReportView(self.parent_window)
             self.view.submit_requested.connect(self.submit_report)
-            print("[BugReportManager] Vue créée")
+            print("[BugReportManager] Vue creee")
         return self.view
 
     @Slot(dict)
     def submit_report(self, data: dict):
-        """Sauvegarde le rapport en JSON et confirme à l'utilisateur."""
+        """Sauvegarde le rapport en JSON et confirme a l'utilisateur."""
         try:
-            data['timestamp']   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            data['timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             data['app_version'] = "1.0.0"
 
             fname = f"bug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
@@ -48,17 +47,17 @@ class BugReportManager(QObject):
             with open(fpath, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
 
-            print(f"[BugReportManager] Rapport sauvegardé: {fpath}")
+            print(f"[BugReportManager] Rapport sauvegarde: {fpath}")
 
             if self.view:
                 self.view.reset_form()
 
             QMessageBox.information(
                 self.parent_window,
-                "Rapport envoyé",
+                "Rapport envoye",
                 f"Merci pour votre signalement.\n\n"
-                f"Rapport enregistré sous:\n{fpath.absolute()}\n\n"
-                f"Notre équipe traitera votre demande dans les meilleurs délais."
+                f"Rapport enregistre sous:\n{fpath.absolute()}\n\n"
+                f"Notre equipe traitera votre demande dans les meilleurs delais."
             )
 
         except Exception as e:
@@ -67,3 +66,9 @@ class BugReportManager(QObject):
                 self.parent_window, "Erreur",
                 f"Impossible de sauvegarder le rapport:\n{e}"
             )
+
+    def set_theme(self, is_dark: bool):
+        """Change le theme de la vue"""
+        if self.view is not None:
+            self.view.set_theme(is_dark)
+            print(f"[BugReportManager] Theme applique: {'dark' if is_dark else 'light'}")

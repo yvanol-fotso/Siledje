@@ -1,13 +1,14 @@
 """
-Gestionnaire des paramètres de base de données — requêtes alignées sur le vrai schéma.
+Gestionnaire des parametres de base de donnees.
 """
 
-from PySide6.QtCore import QObject, Slot
-from PySide6.QtWidgets import QMessageBox
 import os
 import shutil
 from datetime import datetime
 from pathlib import Path
+
+from PySide6.QtCore import QObject, Slot
+from PySide6.QtWidgets import QMessageBox
 
 from src.database.connection import get_db_connection
 
@@ -23,11 +24,11 @@ class DatabaseSettingsManager(QObject):
         self.db = get_db_connection()
         self.db_path = self.db.db_name
 
-        print(f"[DatabaseSettingsManager v{self.version}] Initialisé - BDD: {self.db_path}")
+        print(f"[DatabaseSettingsManager v{self.version}] Initialise - BDD: {self.db_path}")
 
     def get_ui(self):
         if self.view is None:
-            from src.ui.views.database_settings_view import DatabaseSettingsView
+            from src.ui.views.database_settings.database_settings_view import DatabaseSettingsView
             self.view = DatabaseSettingsView(self.parent)
             self._connect_view_signals()
             self._update_stats()
@@ -47,27 +48,33 @@ class DatabaseSettingsManager(QObject):
     @Slot()
     def optimize_database(self):
         reply = QMessageBox.question(
-            self.view, "Optimiser la base de données",
-            "Cette opération peut prendre quelques instants. Continuer ?",
+            self.view, "Optimiser la base de donnees",
+            "Cette operation peut prendre quelques instants. Continuer ?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         if reply == QMessageBox.Yes:
-            cursor = self.db.get_cursor()
-            cursor.execute("VACUUM")
-            cursor.execute("ANALYZE")
-            self.db.commit()
-            self._update_stats()
-            QMessageBox.information(self.view, "Succès", "Base de données optimisée.")
+            try:
+                cursor = self.db.get_cursor()
+                cursor.execute("VACUUM")
+                cursor.execute("ANALYZE")
+                self.db.commit()
+                self._update_stats()
+                QMessageBox.information(self.view, "Succes", "Base de donnees optimisee.")
+            except Exception as e:
+                QMessageBox.critical(self.view, "Erreur", f"Erreur lors de l'optimisation:\n{e}")
 
     @Slot()
     def check_integrity(self):
-        cursor = self.db.get_cursor()
-        cursor.execute("PRAGMA integrity_check")
-        result = cursor.fetchone()
-        if result and result[0] == 'ok':
-            QMessageBox.information(self.view, "Vérification", "La base de données est intègre.")
-        else:
-            QMessageBox.warning(self.view, "Problème", f"{result[0] if result else 'Erreur inconnue'}")
+        try:
+            cursor = self.db.get_cursor()
+            cursor.execute("PRAGMA integrity_check")
+            result = cursor.fetchone()
+            if result and result[0] == 'ok':
+                QMessageBox.information(self.view, "Verification", "La base de donnees est integre.")
+            else:
+                QMessageBox.warning(self.view, "Probleme", f"{result[0] if result else 'Erreur inconnue'}")
+        except Exception as e:
+            QMessageBox.critical(self.view, "Erreur", f"Erreur lors de la verification:\n{e}")
 
     @Slot()
     def create_backup(self):
@@ -79,27 +86,40 @@ class DatabaseSettingsManager(QObject):
             shutil.copy2(self.db_path, backup_path)
             size_mb = backup_path.stat().st_size / (1024 * 1024)
             QMessageBox.information(
-                self.view, "Sauvegarde créée",
+                self.view, "Sauvegarde creee",
                 f"Fichier: {backup_path.name}\nTaille: {size_mb:.2f} MB"
             )
         except Exception as e:
             QMessageBox.critical(self.view, "Erreur", f"Erreur sauvegarde:\n{e}")
 
     def get_database_stats(self):
-        stats = {'file_size': 0, 'total_products': 0, 'total_barcodes': 0,
-                 'total_sales': 0, 'total_users': 0, 'total_tables': 0}
+        stats = {
+            'file_size': 0, 'total_products': 0, 'total_barcodes': 0,
+            'total_sales': 0, 'total_users': 0, 'total_tables': 0
+        }
         try:
             if os.path.exists(self.db_path):
                 stats['file_size'] = os.path.getsize(self.db_path) / (1024 * 1024)
 
             cursor = self.db.get_cursor()
-            for table, key in [("products", "total_products"), ("barcodes", "total_barcodes"),
-                               ("sales", "total_sales"), ("users", "total_users")]:
+            for table, key in [
+                ("products", "total_products"),
+                ("barcodes", "total_barcodes"),
+                ("sales", "total_sales"),
+                ("users", "total_users")
+            ]:
                 if self.db.table_exists(table):
                     cursor.execute(f"SELECT COUNT(*) as c FROM {table}")
-                    stats[key] = cursor.fetchone()["c"]
+                    row = cursor.fetchone()
+                    stats[key] = row["c"] if row else 0
 
             stats['total_tables'] = len(self.db.list_tables())
         except Exception as e:
             print(f"[DatabaseSettingsManager] Erreur stats: {e}")
         return stats
+
+    def set_theme(self, is_dark: bool):
+        """Change le theme de la vue"""
+        if self.view is not None:
+            self.view.set_theme(is_dark)
+            print(f"[DatabaseSettingsManager] Theme applique: {'dark' if is_dark else 'light'}")

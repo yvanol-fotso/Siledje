@@ -5,6 +5,7 @@ Seed conforme aux données déjà utilisées par AccueilManager
 (Maternelle/Primaire/Secondaire, Anglophone/Francophone).
 """
 
+import sqlite3
 from typing import Optional, List, Dict, Any
 from src.database.connection import get_db_connection
 
@@ -43,6 +44,7 @@ class SchoolRepository:
             )
         """)
 
+        # ✅ AJOUT de is_active dans books
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS books (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,9 +57,28 @@ class SchoolRepository:
                 isbn TEXT UNIQUE,
                 cover_image_path TEXT,
                 price_fcfa REAL,
-                intitule TEXT
+                intitule TEXT,
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # ✅ AJOUT de la colonne is_active si elle n'existe pas
+        try:
+            cursor.execute("ALTER TABLE books ADD COLUMN is_active INTEGER DEFAULT 1")
+        except sqlite3.OperationalError:
+            pass  # La colonne existe déjà
+
+        try:
+            cursor.execute("ALTER TABLE books ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            cursor.execute("ALTER TABLE books ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        except sqlite3.OperationalError:
+            pass
 
         self.db.commit()
         self._seed_levels_and_systems()
@@ -79,7 +100,6 @@ class SchoolRepository:
 
         self.db.commit()
 
-        # Classes standard par niveau/système (reprend celles déjà vues dans AccueilManager)
         cursor.execute("SELECT COUNT(*) as c FROM school_classes")
         if cursor.fetchone()["c"] > 0:
             return
@@ -91,7 +111,7 @@ class SchoolRepository:
 
         classes_map = {
             ("Maternelle", "Anglophone"): ["Nursery 1", "Nursery 2", "Nursery 3"],
-            ("Maternelle", "Francophone"): ["Petite Section", "Grande Section"],
+            ("Maternelle", "Francophone"): ["Petite Section", "Moyenne Section", "Grande Section"],
             ("Primaire", "Francophone"): ["CP", "CE1", "CE2", "CM1", "CM2"],
             ("Primaire", "Anglophone"): ["Class 1", "Class 2", "Class 3", "Class 4", "Class 5"],
             ("Secondaire", "Anglophone"): ["Form 1", "Form 2", "Form 3", "Form 4", "Form 5"],
@@ -135,7 +155,6 @@ class SchoolRepository:
         return [dict(row) for row in cursor.fetchall()]
 
     def get_all_classes(self) -> List[Dict[str, Any]]:
-        """Toutes les classes, toutes langues/niveaux confondus (pour un filtre global)."""
         cursor = self.db.get_cursor()
         cursor.execute("""
             SELECT sc.id, sc.name, sl.name as level_name, ss.name as system_name
@@ -147,7 +166,6 @@ class SchoolRepository:
         return [dict(row) for row in cursor.fetchall()]
 
     def get_product_ids_for_class(self, class_id: int) -> set:
-        """IDs des produits (manuels) associés à une classe donnée."""
         cursor = self.db.get_cursor()
         cursor.execute("SELECT product_id FROM books WHERE school_class_id = ?", (class_id,))
         return {row["product_id"] for row in cursor.fetchall()}
@@ -155,6 +173,12 @@ class SchoolRepository:
     def get_class_by_name(self, class_name: str) -> Optional[Dict[str, Any]]:
         cursor = self.db.get_cursor()
         cursor.execute("SELECT * FROM school_classes WHERE name = ?", (class_name,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_class_by_id(self, class_id: int) -> Optional[Dict[str, Any]]:
+        cursor = self.db.get_cursor()
+        cursor.execute("SELECT * FROM school_classes WHERE id = ?", (class_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
 
@@ -166,18 +190,120 @@ class SchoolRepository:
             SELECT b.*, p.name as product_name, p.sell_price, p.stock_quantity
             FROM books b
             JOIN products p ON b.product_id = p.id
-            WHERE b.school_class_id = ? AND p.is_active = 1
+            WHERE b.school_class_id = ? AND p.is_active = 1 AND b.is_active = 1
         """, (school_class_id,))
         return [dict(row) for row in cursor.fetchall()]
 
     def create_book(self, product_id: int, school_class_id: int, title: str,
                      subject: str, publisher: str = None, edition: str = None,
-                     isbn: str = None, price_fcfa: float = None) -> int:
+                     isbn: str = None, price_fcfa: float = None, 
+                     intitule: str = None, is_active: bool = True) -> int:
         cursor = self.db.get_cursor()
         cursor.execute("""
             INSERT INTO books (product_id, school_class_id, title, subject,
-                                publisher, edition, isbn, price_fcfa)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (product_id, school_class_id, title, subject, publisher, edition, isbn, price_fcfa))
+                                publisher, edition, isbn, price_fcfa, intitule, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (product_id, school_class_id, title, subject, publisher, edition, 
+              isbn, price_fcfa, intitule, 1 if is_active else 0))
         self.db.commit()
         return cursor.lastrowid
+
+    def update_book(self, product_id: int, school_class_id: int = None, 
+                    title: str = None, subject: str = None, 
+                    publisher: str = None, edition: str = None,
+                    isbn: str = None, price_fcfa: float = None,
+                    intitule: str = None, is_active: bool = None) -> bool:
+        cursor = self.db.get_cursor()
+        
+        updates = []
+        values = []
+        
+        if school_class_id is not None:
+            updates.append("school_class_id = ?")
+            values.append(school_class_id)
+        if title is not None:
+            updates.append("title = ?")
+            values.append(title)
+        if subject is not None:
+            updates.append("subject = ?")
+            values.append(subject)
+        if publisher is not None:
+            updates.append("publisher = ?")
+            values.append(publisher)
+        if edition is not None:
+            updates.append("edition = ?")
+            values.append(edition)
+        if isbn is not None:
+            updates.append("isbn = ?")
+            values.append(isbn)
+        if price_fcfa is not None:
+            updates.append("price_fcfa = ?")
+            values.append(price_fcfa)
+        if intitule is not None:
+            updates.append("intitule = ?")
+            values.append(intitule)
+        if is_active is not None:
+            updates.append("is_active = ?")
+            values.append(1 if is_active else 0)
+        
+        if not updates:
+            return False
+        
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        values.append(product_id)
+        
+        cursor.execute(f"""
+            UPDATE books SET {', '.join(updates)} WHERE product_id = ?
+        """, values)
+        self.db.commit()
+        return cursor.rowcount > 0
+
+    def set_book_active(self, product_id: int, is_active: bool) -> bool:
+        cursor = self.db.get_cursor()
+        cursor.execute("""
+            UPDATE books SET is_active = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE product_id = ?
+        """, (1 if is_active else 0, product_id))
+        self.db.commit()
+        return cursor.rowcount > 0
+
+    def get_all_books_with_classes(self, active_only: bool = True) -> List[Dict[str, Any]]:
+        """Recupere TOUS les livres avec leurs classes."""
+        cursor = self.db.get_cursor()
+        
+        # ✅ Si active_only est False, on ne filtre pas par is_active
+        active_condition = " AND p.is_active = 1"  # Toujours filtrer les produits actifs
+        
+        # ✅ On ne filtre par b.is_active que si active_only est True
+        if active_only:
+            active_condition += " AND b.is_active = 1"
+        
+        cursor.execute(f"""
+            SELECT 
+                b.*,
+                p.name as product_name,
+                p.sell_price,
+                p.stock_quantity,
+                sc.name as class_name,
+                sl.name as level_name,
+                ss.name as system_name
+            FROM books b
+            JOIN products p ON b.product_id = p.id
+            LEFT JOIN school_classes sc ON b.school_class_id = sc.id
+            LEFT JOIN school_levels sl ON sc.level_id = sl.id
+            LEFT JOIN school_systems ss ON sc.system_id = ss.id
+            WHERE p.is_book = 1 {active_condition}
+            ORDER BY p.name
+        """)
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_book_by_product_id(self, product_id: int) -> Optional[Dict[str, Any]]:
+        cursor = self.db.get_cursor()
+        cursor.execute("""
+            SELECT b.*, p.name as product_name, p.sell_price, p.stock_quantity
+            FROM books b
+            JOIN products p ON b.product_id = p.id
+            WHERE b.product_id = ?
+        """, (product_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
