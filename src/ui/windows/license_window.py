@@ -1,14 +1,15 @@
 """
 Fenetre de saisie/activation de la cle de licence - Version finale agrandie.
-Sans emojis.
+Sans emojis. Dialogues = InfoDialog (plus de QMessageBox).
 """
 
 from src.utils.compat import (
-    QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox,
-    Qt, QFont, Signal, QHBoxLayout, QFrame, QIcon  
+    QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton,
+    Qt, QFont, Signal, QHBoxLayout, QFrame, QIcon
 )
 
 from src.utils.helpers import get_asset_path
+from src.ui.widgets.InfoDialog import InfoDialog
 
 
 class LicenseDialog(QDialog):
@@ -23,17 +24,17 @@ class LicenseDialog(QDialog):
         self.license_manager = license_manager
         self._setup_window()
         self._setup_ui(message)
-    
+
     def _setup_window(self):
         """Configure la fenetre - AGRANDIE."""
         self.setWindowTitle("Activation de licence - Siledje")
         self.setFixedSize(560, 420)
         self.setWindowFlags(Qt.Dialog | Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
-        
+
         app_icon_path = get_asset_path("icons", "app.png")
         if app_icon_path.exists():
             self.setWindowIcon(QIcon(str(app_icon_path)))
-    
+
     def _setup_ui(self, message: str = ""):
         """Construit l'interface utilisateur."""
         layout = QVBoxLayout(self)
@@ -93,12 +94,12 @@ class LicenseDialog(QDialog):
         """)
         contact_layout = QHBoxLayout(contact_frame)
         contact_layout.setContentsMargins(10, 6, 10, 6)
-        
+
         contact = QLabel("support@siledje.cm  |  +237 694 122 436")
         contact.setAlignment(Qt.AlignCenter)
         contact.setStyleSheet("color: #7f8c8d; font-size: 13px;")
         contact_layout.addWidget(contact)
-        
+
         layout.addWidget(contact_frame)
         layout.addStretch()
 
@@ -109,15 +110,15 @@ class LicenseDialog(QDialog):
         """Active la licence."""
         key = self.txt_key.text().strip()
         if not key:
-            QMessageBox.warning(self, "Champ requis", "Veuillez saisir une cle de licence.")
+            InfoDialog.warning(self, "Champ requis", "Veuillez saisir une cle de licence.")
             return
 
         if self.license_manager.activate_license(key):
-            QMessageBox.information(self, "Succes", "Licence activee avec succes.")
+            InfoDialog.success(self, "Succes", "Licence activee avec succes.")
             self.license_activated.emit()
             self.accept()
         else:
-            QMessageBox.critical(
+            InfoDialog.error(
                 self, "Cle invalide",
                 "Cette cle de licence est invalide ou expiree.\n"
                 "Verifiez la saisie ou contactez le support."

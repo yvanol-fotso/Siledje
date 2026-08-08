@@ -1,67 +1,53 @@
 """
-Modele de tableau pour les rapports et statistiques.
+Tableau des rapports — basé sur ThemedTable (style unifié).
 """
 
-from PySide6.QtCore import QAbstractTableModel, Qt
+from PySide6.QtWidgets import QHeaderView
+from src.ui.widgets.themed_table import ThemedTable
 
 
-class ReportTableModel(QAbstractTableModel):
-    """Modele de tableau pour les rapports de ventes."""
-    
-    HEADERS = ["N° Facture", "Date/Heure", "Client", "Produits", "Quantite", "Total", "Paiement"]
-    
-    def __init__(self, sales: list = None):
-        super().__init__()
-        self._sales = sales or []
-    
-    def rowCount(self, parent=None):
-        return len(self._sales)
-    
-    def columnCount(self, parent=None):
-        return len(self.HEADERS)
-    
-    def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid():
-            return None
-        
-        sale = self._sales[index.row()]
-        col = index.column()
-        
-        if role == Qt.DisplayRole:
-            values = [
-                sale.get("invoice_id", ""),
-                sale.get("date_str", ""),
-                sale.get("client", ""),
-                sale.get("products_str", ""),
-                str(sale.get("quantities", 0)),
-                f"{sale.get('total', 0):.0f} FCFA",
-                sale.get("payment_method", ""),
-            ]
-            return values[col]
-        
-        if role == Qt.TextAlignmentRole:
-            return Qt.AlignCenter
-        
-        if role == Qt.UserRole:
-            return sale
-        
-        return None
-    
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
-        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self.HEADERS[section]
-        return None
-    
-    def get_sale(self, row: int) -> dict:
-        if 0 <= row < len(self._sales):
-            return self._sales[row]
-        return None
-    
+class ReportResultsTable(ThemedTable):
+    COLUMNS = [
+        "N° Facture", "Date/Heure", "Client", "Produits",
+        "Quantite", "Total", "Paiement",
+    ]
+
+    def __init__(self, parent=None):
+        super().__init__(
+            self.COLUMNS,
+            parent=parent,
+            object_name="reportTable",
+            row_height=38,
+        )
+        self.set_column_resize_modes({
+            0: QHeaderView.ResizeToContents,
+            1: QHeaderView.ResizeToContents,
+            2: QHeaderView.Interactive,
+            3: QHeaderView.Stretch,
+            4: QHeaderView.ResizeToContents,
+            5: QHeaderView.ResizeToContents,
+            6: QHeaderView.ResizeToContents,
+        })
+
     def set_sales(self, sales: list):
-        self.beginResetModel()
-        self._sales = sales
-        self.endResetModel()
-    
-    def refresh(self):
-        self.beginResetModel()
-        self.endResetModel()
+        """
+        sales = liste de dicts avec clés :
+        invoice_id, date_str, client, products_str, quantities, total, payment_method
+        """
+        if not sales:
+            self.set_empty_message("Aucune vente pour cette periode")
+            return
+
+        rows = []
+        for s in sales:
+            total = s.get("total", 0)
+            rows.append({
+                "N° Facture": s.get("invoice_id", ""),
+                "Date/Heure": s.get("date_str", ""),
+                "Client": s.get("client", ""),
+                "Produits": s.get("products_str", ""),
+                "Quantite": str(s.get("quantities", 0)),
+                "Total": f"{total:.0f} FCFA",
+                "Paiement": s.get("payment_method", ""),
+            })
+        self.set_rows(rows)

@@ -223,7 +223,7 @@ SILEDJE/
 │   │       ├── ModalView.py
 │   │       ├── InfoDialog.py
 │   │       ├── custom_button.py
-│   │       └── custom_table.py
+│   │       └── theme_table.py
 │   │
 │   └── utils/
 │       ├── __init__.py

@@ -2,8 +2,10 @@
 Manager des rapports et statistiques — connecte a SalesRepository.
 """
 
+from tkinter.filedialog import FileDialog
+
 from PySide6.QtCore import QObject, Slot, QDate
-from PySide6.QtWidgets import QMessageBox, QFileDialog
+from src.ui.widgets.InfoDialog import InfoDialog
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog
 from PySide6.QtGui import QTextDocument
 from datetime import datetime
@@ -146,38 +148,42 @@ class ReportManager(QObject):
               f"Articles={total_items}, Top={top_product[0]}")
 
     # ========== EXPORT / IMPRESSION ==========
-
+    
     @Slot()
     def export_csv(self):
         if not self.filtered_sales:
-            QMessageBox.warning(self.view, "Aucune donnee",
-                                "Aucune vente a exporter pour la periode selectionnee.")
+            InfoDialog.warning(
+                self.view, "Aucune donnee",
+                "Aucune vente a exporter pour la periode selectionnee.",
+            )
             return
         try:
-            filename, _ = QFileDialog.getSaveFileName(
+            filename, _ = FileDialog.getSaveFileName(
                 self.view, "Exporter en CSV",
                 f"rapport_ventes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                "CSV Files (*.csv)"
+                "CSV Files (*.csv)",
             )
             if not filename:
                 return
-
-            with open(filename, 'w', newline='', encoding='utf-8') as file:
-                writer = csv.writer(file, delimiter=';')
+            with open(filename, "w", newline="", encoding="utf-8") as file:
+                writer = csv.writer(file, delimiter=";")
                 writer.writerow(self.view.get_table_headers())
                 for row_data in self.view.get_table_data():
                     writer.writerow(row_data)
-
-            QMessageBox.information(self.view, "Export reussi",
-                                    f"Rapport exporte vers:\n{filename}")
+            InfoDialog.success(
+                self.view, "Export reussi",
+                f"Rapport exporte vers:\n{filename}",
+            )
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur d'export", f"Erreur:\n{e}")
+            InfoDialog.error(self.view, "Erreur d'export", f"Erreur:\n{e}")
 
     @Slot()
     def print_report(self):
         if not self.filtered_sales:
-            QMessageBox.warning(self.view, "Aucune donnee",
-                                "Aucune vente a imprimer pour la periode selectionnee.")
+            InfoDialog.warning(
+                self.view, "Aucune donnee",
+                "Aucune vente a imprimer pour la periode selectionnee.",
+            )
             return
         try:
             printer = QPrinter()
@@ -186,23 +192,28 @@ class ReportManager(QObject):
                 doc = QTextDocument()
                 doc.setHtml(self._generate_html_report())
                 doc.print_(printer)
-                QMessageBox.information(self.view, "Impression lancee",
-                                        "Le rapport a ete envoye a l'imprimante.")
+                InfoDialog.success(
+                    self.view, "Impression lancee",
+                    "Le rapport a ete envoye a l'imprimante.",
+                )
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur d'impression", f"Erreur:\n{e}")
+            InfoDialog.error(self.view, "Erreur d'impression", f"Erreur:\n{e}")
 
     def _generate_html_report(self) -> str:
+        # header teal/accent au lieu de violet
+        header_color = "#1abc9c"
         html = f"""
         <html><head><style>
-            body {{ font-family: Arial, sans-serif; }}
+            body {{ font-family: Segoe UI, Arial, sans-serif; }}
             h1 {{ color: #2c3e50; text-align: center; }}
             table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th {{ background-color: #9b59b6; color: white; padding: 10px; text-align: left; }}
+            th {{ background-color: {header_color}; color: white; padding: 10px; text-align: left; }}
             td {{ border: 1px solid #ddd; padding: 8px; }}
             .footer {{ margin-top: 20px; text-align: center; color: #7f8c8d; }}
         </style></head><body>
             <h1>Rapport des Ventes</h1>
-            <p><strong>Periode:</strong> {self.current_start_date.toString("dd/MM/yyyy")}
+            <p><strong>Periode:</strong>
+               {self.current_start_date.toString("dd/MM/yyyy")}
                - {self.current_end_date.toString("dd/MM/yyyy")}</p>
         """
         html += "<table><tr>"
@@ -216,11 +227,13 @@ class ReportManager(QObject):
             html += "</tr>"
         html += "</table>"
         html += f"""
-            <div class="footer"><p>Rapport genere le {datetime.now().strftime('%d/%m/%Y a %H:%M')}</p></div>
+            <div class="footer">
+              <p>Rapport genere le {datetime.now().strftime('%d/%m/%Y a %H:%M')}</p>
+            </div>
         </body></html>
         """
         return html
-
+    
     # ========== METHODES PUBLIQUES ==========
 
     def get_sales_count(self) -> int:

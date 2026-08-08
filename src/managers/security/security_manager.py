@@ -1,39 +1,35 @@
 """
-Gestionnaire de gestion des roles et permissions.
-Connecte a UserRepository (table roles reelle).
+Manager roles / permissions — UserRepository + InfoDialog.
 """
 
 from PySide6.QtCore import QObject, Slot
-from PySide6.QtWidgets import QMessageBox
 
 from src.database.repositories.user_repository import UserRepository
-from src.ui.views.security.security_table import RoleTableModel
-from src.ui.views.security.security_form import SecurityRoleForm, AVAILABLE_PERMISSIONS
+from src.ui.views.security.security_form import SecurityRoleForm
 from src.ui.widgets.ModalView import ModalView
+from src.ui.widgets.InfoDialog import InfoDialog
 
 SYSTEM_ROLES = {"admin", "gerant", "employe"}
 
 
 class SecurityManager(QObject):
-    """Gestionnaire de gestion des roles et permissions."""
-
-    version = "2.0.0"
+    version = "3.0.0"
 
     def __init__(self, parent=None, user_repo=None):
         super().__init__(parent)
         self.parent = parent
         self.view = None
-
         self.user_repo = user_repo if user_repo else UserRepository()
-
         self.roles = self.user_repo.get_all_roles()
-        self.model = RoleTableModel(self.roles)
-
-        print(f"[SecurityManager v{self.version}] Initialise avec {len(self.roles)} roles")
+        print(
+            f"[SecurityManager v{self.version}] Initialise avec "
+            f"{len(self.roles)} roles"
+        )
 
     def get_ui(self):
         if self.view is None:
             from src.ui.views.security.security_view import SecurityView
+
             self.view = SecurityView(self.parent)
             self._connect_view_signals()
             self._initialize_view()
@@ -41,7 +37,7 @@ class SecurityManager(QObject):
         return self.view
 
     def _initialize_view(self):
-        self.view.set_table_model(self.model)
+        self.view.update_roles(self.roles)
 
     def _connect_view_signals(self):
         self.view.search_requested.connect(self.on_search_requested)
@@ -50,154 +46,187 @@ class SecurityManager(QObject):
         self.view.delete_role_requested.connect(self.delete_role)
         self.view.refresh_requested.connect(self.refresh)
 
-    # ========== SLOTS ==========
-
     @Slot(str)
     def on_search_requested(self, search_text: str):
         search_text = search_text.strip().lower()
         all_roles = self.user_repo.get_all_roles()
         if search_text:
-            all_roles = [r for r in all_roles if search_text in r.get("name", "").lower()]
+            all_roles = [
+                r for r in all_roles
+                if search_text in r.get("name", "").lower()
+            ]
         self.roles = all_roles
-        self.model.set_roles(self.roles)
-        print(f"[SecurityManager] Recherche: {len(all_roles)} roles trouves")
+        self.view.update_roles(self.roles)
+        print(f"[SecurityManager] Recherche: {len(all_roles)} roles")
 
     @Slot()
     def add_role(self):
         try:
-            # Recuperer les noms existants pour validation
-            existing_names = [r.get("name") for r in self.user_repo.get_all_roles()]
-
+            existing_names = [
+                r.get("name") for r in self.user_repo.get_all_roles()
+            ]
             form = SecurityRoleForm()
-            
             modal = ModalView(
                 title="Nouveau role",
                 parent=self.view,
-                width=800, height=700,
-                ok_text="Enregistrer", cancel_text="Annuler"
+                width=800,
+                height=700,
+                ok_text="Enregistrer",
+                cancel_text="Annuler",
             )
             modal.set_content(form)
 
             def on_save():
                 valid, msg = form.validate(existing_names)
                 if not valid:
-                    QMessageBox.warning(self.view, "Validation", msg)
+                    InfoDialog.warning(self.view, "Validation", msg)
                     return
-
                 data = form.get_data()
                 self.user_repo.create_role(
-                    name=data['name'],
-                    description=data['description'],
-                    **data['permissions']
+                    name=data["name"],
+                    description=data["description"],
+                    **data["permissions"],
                 )
-
                 self.refresh()
                 modal.accept()
-                QMessageBox.information(self.view, "Succes",
-                    f"Le role '{data['name']}' a ete cree avec succes.")
+                InfoDialog.success(
+                    self.view, "Succes",
+                    f"Le role '{data['name']}' a ete cree.",
+                )
                 print(f"[SecurityManager] Role cree: {data['name']}")
 
             modal.ok_clicked.connect(on_save)
             modal.exec()
-
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur", f"Erreur lors de l'ajout du role:\n{e}")
-            print(f"[SecurityManager] ERREUR ajout role: {e}")
+            InfoDialog.error(
+                self.view, "Erreur", f"Erreur lors de l'ajout:\n{e}"
+            )
+            print(f"[SecurityManager] ERREUR ajout: {e}")
 
     @Slot(int)
     def edit_role(self, row: int):
-        role = self.model.get_role(row)
-        if not role:
-            QMessageBox.warning(self.view, "Selection requise", "Selectionnez un role a modifier.")
+        if row < 0 or row >= len(self.roles):
+            InfoDialog.warning(
+                self.view, "Selection requise",
+                "Selectionnez un role a modifier.",
+            )
             return
-
+        role = self.roles[row]
         try:
-            existing_names = [r.get("name") for r in self.user_repo.get_all_roles() if r["id"] != role["id"]]
-
+            existing_names = [
+                r.get("name")
+                for r in self.user_repo.get_all_roles()
+                if r["id"] != role["id"]
+            ]
             form = SecurityRoleForm(role)
-            
             modal = ModalView(
                 title="Modifier le role",
                 parent=self.view,
-                width=800, height=700,
-                ok_text="Enregistrer", cancel_text="Annuler"
+                width=800,
+                height=700,
+                ok_text="Enregistrer",
+                cancel_text="Annuler",
             )
             modal.set_content(form)
 
             def on_save():
-                valid, msg = form.validate(existing_names, exclude_id=role["id"])
+                valid, msg = form.validate(
+                    existing_names, exclude_id=role["id"]
+                )
                 if not valid:
-                    QMessageBox.warning(self.view, "Validation", msg)
+                    InfoDialog.warning(self.view, "Validation", msg)
                     return
-
                 data = form.get_data()
-                
-                # Si c'est un role systeme, on ne modifie pas le nom
-                name_to_update = None if role.get("name") in SYSTEM_ROLES else data['name']
-
+                name_to_update = (
+                    None if role.get("name") in SYSTEM_ROLES else data["name"]
+                )
                 self.user_repo.update_role(
                     role["id"],
                     name=name_to_update,
-                    description=data['description'],
-                    **data['permissions']
+                    description=data["description"],
+                    **data["permissions"],
                 )
-
                 self.refresh()
                 modal.accept()
-                QMessageBox.information(self.view, "Succes",
-                    f"Le role '{role['name']}' a ete modifie avec succes.")
+                InfoDialog.success(
+                    self.view, "Succes",
+                    f"Le role '{role['name']}' a ete modifie.",
+                )
                 print(f"[SecurityManager] Role modifie: ID {role['id']}")
 
             modal.ok_clicked.connect(on_save)
             modal.exec()
-
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur", f"Erreur lors de la modification:\n{e}")
-            print(f"[SecurityManager] ERREUR modification role: {e}")
+            InfoDialog.error(
+                self.view, "Erreur",
+                f"Erreur lors de la modification:\n{e}",
+            )
+            print(f"[SecurityManager] ERREUR modification: {e}")
 
     @Slot(int)
     def delete_role(self, row: int):
-        role = self.model.get_role(row)
-        if not role:
-            QMessageBox.warning(self.view, "Selection requise", "Selectionnez un role a supprimer.")
+        if row < 0 or row >= len(self.roles):
+            InfoDialog.warning(
+                self.view, "Selection requise",
+                "Selectionnez un role a supprimer.",
+            )
             return
+        role = self.roles[row]
 
         if role.get("name") in SYSTEM_ROLES:
-            QMessageBox.warning(self.view, "Suppression impossible",
-                f"Le role '{role['name']}' est un role systeme et ne peut pas etre supprime.")
+            InfoDialog.warning(
+                self.view, "Suppression impossible",
+                f"Le role '{role['name']}' est un role systeme "
+                "et ne peut pas etre supprime.",
+            )
             return
 
         users_count = self.user_repo.count_users_with_role(role["id"])
         if users_count > 0:
-            QMessageBox.warning(self.view, "Suppression impossible",
+            InfoDialog.warning(
+                self.view, "Suppression impossible",
                 f"{users_count} utilisateur(s) ont encore ce role.\n"
-                "Reassignez-les a un autre role avant de supprimer celui-ci.")
+                "Reassignez-les avant de supprimer.",
+            )
             return
 
-        reply = QMessageBox.question(
-            self.view, "Confirmer la suppression",
-            f"Supprimer le role '{role['name']}' ?\n\nCette action est irreversible.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        ok = InfoDialog.question(
+            self.view,
+            "Confirmer la suppression",
+            f"Supprimer le role '{role['name']}' ?\n\n"
+            "Cette action est irreversible.",
+            ok_text="Yes",
+            cancel_text="No",
         )
-
-        if reply == QMessageBox.Yes:
-            try:
-                cursor = self.user_repo.db.get_cursor()
-                cursor.execute("DELETE FROM roles WHERE id = ?", (role["id"],))
-                self.user_repo.db.commit()
-                self.refresh()
-                QMessageBox.information(self.view, "Succes", f"Role '{role['name']}' supprime.")
-                print(f"[SecurityManager] Role supprime: ID {role['id']}")
-            except Exception as e:
-                QMessageBox.critical(self.view, "Erreur", f"Erreur lors de la suppression:\n{e}")
+        if not ok:
+            return
+        try:
+            cursor = self.user_repo.db.get_cursor()
+            cursor.execute("DELETE FROM roles WHERE id = ?", (role["id"],))
+            self.user_repo.db.commit()
+            self.refresh()
+            InfoDialog.success(
+                self.view, "Succes",
+                f"Role '{role['name']}' supprime.",
+            )
+            print(f"[SecurityManager] Role supprime: ID {role['id']}")
+        except Exception as e:
+            InfoDialog.error(
+                self.view, "Erreur",
+                f"Erreur lors de la suppression:\n{e}",
+            )
 
     @Slot()
     def refresh(self):
         self.roles = self.user_repo.get_all_roles()
-        self.model.set_roles(self.roles)
-        print(f"[SecurityManager] Vue rafraichie: {len(self.roles)} roles")
+        if self.view:
+            self.view.update_roles(self.roles)
+        print(f"[SecurityManager] Rafraichi: {len(self.roles)} roles")
 
     def set_theme(self, is_dark: bool):
         if self.view is not None:
             self.view.set_theme(is_dark)
-            print(f"[SecurityManager] Theme applique: {'dark' if is_dark else 'light'}")
+            print(
+                f"[SecurityManager] Theme: "
+                f"{'dark' if is_dark else 'light'}"
+            )

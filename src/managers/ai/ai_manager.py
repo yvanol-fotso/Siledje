@@ -5,17 +5,17 @@ Utilise ModalView generique pour tous les dialogues.
 """
 
 from PySide6.QtCore import QObject, Slot, QSettings, QTimer
-from PySide6.QtWidgets import QMessageBox
 
 from src.ui.views.ai.ai_config import AIConfig
 from src.ui.views.ai.ai_view import AIView
 from src.ui.widgets.ModalView import ModalView
+from src.ui.widgets.InfoDialog import InfoDialog
 
 
 class AIManager(QObject):
     """Gestionnaire des parametres IA."""
 
-    version = "1.0.0"
+    version = "1.1.0"
 
     AVAILABLE_MODELS = [
         "gpt-4",
@@ -82,53 +82,29 @@ class AIManager(QObject):
         )
 
         form_widget = QWidget()
+        form_widget.setObjectName("aiConfigForm")
         main_layout = QVBoxLayout()
         main_layout.setSpacing(20)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
-        lbl_s = "font-size: 14px; font-weight: bold;"
-        inp_s = """
-            font-size: 14px;
-            padding: 10px;
-            border: 2px solid #bdc3c7;
-            border-radius: 8px;
-            min-height: 40px;
-        """
-        grp_s = """
-            QGroupBox {
-                font-size: 14px;
-                font-weight: bold;
-                border: 2px solid #bdc3c7;
-                border-radius: 10px;
-                margin-top: 15px;
-                padding-top: 20px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 4px 14px;
-                color: #3498db;
-            }
-        """
-
         def lbl(t):
             l = QLabel(t)
-            l.setStyleSheet(lbl_s)
+            l.setObjectName("aiConfigLabel")
             return l
 
         # ── Groupe Authentification ───────────────────────────────────
         auth_group = QGroupBox("Authentification")
-        auth_group.setStyleSheet(grp_s)
+        auth_group.setObjectName("aiConfigGroup")
         auth_layout = QFormLayout()
         auth_layout.setSpacing(14)
 
         api_key_input = QLineEdit(self.config.api_key)
-        api_key_input.setStyleSheet(inp_s)
+        api_key_input.setObjectName("aiConfigInput")
         api_key_input.setEchoMode(QLineEdit.Password)
         api_key_input.setPlaceholderText("sk-...")
 
         model_combo = QComboBox()
-        model_combo.setStyleSheet(inp_s)
+        model_combo.setObjectName("aiConfigInput")
         model_combo.addItems(self.AVAILABLE_MODELS)
         model_combo.setCurrentText(self.config.model)
 
@@ -139,13 +115,13 @@ class AIManager(QObject):
 
         # ── Groupe Parametres de generation ──────────────────────────
         gen_group = QGroupBox("Parametres de Generation")
-        gen_group.setStyleSheet(grp_s)
+        gen_group.setObjectName("aiConfigGroup")
         gen_layout = QFormLayout()
         gen_layout.setSpacing(14)
 
         def dspin(lo, hi, step, val, dec=1):
             s = QDoubleSpinBox()
-            s.setStyleSheet(inp_s)
+            s.setObjectName("aiConfigInput")
             s.setRange(lo, hi)
             s.setSingleStep(step)
             s.setValue(val)
@@ -154,7 +130,7 @@ class AIManager(QObject):
 
         def ispin(lo, hi, step, val):
             s = QSpinBox()
-            s.setStyleSheet(inp_s)
+            s.setObjectName("aiConfigInput")
             s.setRange(lo, hi)
             s.setSingleStep(step)
             s.setValue(val)
@@ -178,17 +154,16 @@ class AIManager(QObject):
 
         # ── Groupe Options ────────────────────────────────────────────
         opt_group = QGroupBox("Options")
-        opt_group.setStyleSheet(grp_s)
+        opt_group.setObjectName("aiConfigGroup")
         opt_layout = QVBoxLayout()
         opt_layout.setSpacing(10)
 
-        ck_s = "font-size: 14px; padding: 5px;"
         enabled_chk = QCheckBox("Activer l'assistant IA")
-        enabled_chk.setStyleSheet(ck_s)
+        enabled_chk.setObjectName("aiConfigCheckbox")
         enabled_chk.setChecked(self.config.enabled)
 
         auto_sugg_chk = QCheckBox("Suggestions automatiques")
-        auto_sugg_chk.setStyleSheet(ck_s)
+        auto_sugg_chk.setObjectName("aiConfigCheckbox")
         auto_sugg_chk.setChecked(self.config.auto_suggestions)
 
         opt_layout.addWidget(enabled_chk)
@@ -201,12 +176,7 @@ class AIManager(QObject):
             "Note : Une temperature plus elevee rend les reponses plus creatives "
             "mais moins previsibles. Une valeur de 0.7 est recommandee."
         )
-        note.setStyleSheet("""
-            font-size: 13px;
-            padding: 12px;
-            border-radius: 8px;
-            border-left: 4px solid #3498db;
-        """)
+        note.setObjectName("aiConfigNote")
         note.setWordWrap(True)
         main_layout.addWidget(note)
 
@@ -235,7 +205,7 @@ class AIManager(QObject):
 
             def on_save():
                 if not modal.api_key_input.text().strip():
-                    QMessageBox.warning(self.view, "Validation",
+                    InfoDialog.warning(self.view, "Validation",
                                         "La cle API est obligatoire.")
                     return
 
@@ -253,24 +223,24 @@ class AIManager(QObject):
                 self._save_config()
                 self.view.update_config_display(self.config)
                 modal.accept()
-                QMessageBox.information(self.view, "Succes",
-                                        "La configuration IA a ete enregistree.")
+                InfoDialog.success(self.view, "Succes",
+                                    "La configuration IA a ete enregistree.")
 
             modal.ok_clicked.connect(on_save)
             modal.exec()
 
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur", str(e))
+            InfoDialog.error(self.view, "Erreur", str(e))
 
     @Slot()
     def test_connection(self):
         if not self.config.api_key:
-            QMessageBox.warning(self.view, "Configuration incomplete",
+            InfoDialog.warning(self.view, "Configuration incomplete",
                                 "Veuillez d'abord configurer la cle API.")
             return
 
         def show_result():
-            QMessageBox.information(
+            InfoDialog.success(
                 self.view, "Test de connexion",
                 f"Connexion reussie au modele {self.config.model}.\n\n"
                 f"Temperature : {self.config.temperature}\n"
@@ -282,18 +252,17 @@ class AIManager(QObject):
 
     @Slot()
     def reset_config(self):
-        reply = QMessageBox.question(
+        confirmed = InfoDialog.confirm(
             self.view, "Confirmer la reinitialisation",
             "Reinitialiser tous les parametres IA aux valeurs par defaut ?\n\n"
             "Cette action est irreversible.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
-        if reply == QMessageBox.Yes:
+        if confirmed:
             self.config = AIConfig()
             self._save_config()
             self.view.update_config_display(self.config)
-            QMessageBox.information(self.view, "Succes",
-                                    "Configuration IA reinitialisee.")
+            InfoDialog.success(self.view, "Succes",
+                                "Configuration IA reinitialisee.")
 
     def is_enabled(self) -> bool:
         return self.config.enabled

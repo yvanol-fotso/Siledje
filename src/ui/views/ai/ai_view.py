@@ -1,17 +1,20 @@
 """
 Vue de gestion des parametres IA - Interface utilisateur.
-Herite de BaseView pour une structure coherente.
-Support complet mode Dark/Light avec design moderne.
+Herite de BaseView. Boutons = CustomButton, dialogues = InfoDialog (via manager).
+Le style de base (QGroupBox, QLabel, couleurs) vient de BaseView / QSS global.
+Seuls les éléments propres à cette vue (bannière, chips de valeur) sont stylés ici.
 """
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QGroupBox, QGridLayout, QFrame, QSizePolicy
+    QGroupBox, QGridLayout, QFrame, QSizePolicy
 )
-from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon, QPixmap
 
-from src.ui.views.base.base_view import BaseView, Palette
+from src.ui.views.base.base_view import BaseView
+from src.ui.views.base.palette import Palette
+from src.ui.widgets.custom_button import primary_btn, outline_btn, CustomButton
 from src.utils.helpers import get_asset_path
 
 
@@ -51,7 +54,6 @@ class AIView(BaseView):
         self.context_label = None
         self.suggestions_label = None
 
-        # Reconstruire le contenu
         self.main_layout.removeWidget(self.content_area)
         self.content_area.deleteLater()
         self.content_area = QWidget()
@@ -60,14 +62,13 @@ class AIView(BaseView):
         self.content_area.setLayout(self.content_layout)
         self.main_layout.addWidget(self.content_area, 1)
 
-        # Initialiser les composants
         self._init_info_banner()
         self._init_config_display()
         self._init_action_buttons()
-        self._apply_theme_styles()
+        self._apply_local_styles()
+        self._restyle_all_buttons()
 
     def _init_info_banner(self) -> QFrame:
-        """Banniere d'information."""
         banner = QFrame()
         banner.setObjectName("infoBanner")
 
@@ -94,7 +95,6 @@ class AIView(BaseView):
         return banner
 
     def _init_config_display(self):
-        """Affichage de la configuration."""
         group = QGroupBox("Configuration Actuelle")
         group.setObjectName("configGroup")
 
@@ -102,21 +102,13 @@ class AIView(BaseView):
         grid.setSpacing(16)
         grid.setContentsMargins(24, 24, 24, 24)
 
-        lbl_s = "font-size: 14px; font-weight: bold;"
-        val_s = """
-            font-size: 14px;
-            padding: 6px 14px;
-            border: 2px solid #bdc3c7;
-            border-radius: 6px;
-        """
-
         def add_row(row, label_text):
             lbl = QLabel(label_text)
-            lbl.setStyleSheet(lbl_s)
+            lbl.setObjectName("configRowLabel")
             lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
             val = QLabel("—")
-            val.setStyleSheet(val_s)
+            val.setObjectName("configRowValue")
             val.setFixedHeight(36)
 
             grid.addWidget(lbl, row, 0)
@@ -137,159 +129,101 @@ class AIView(BaseView):
         self.content_layout.addWidget(group)
 
     def _init_action_buttons(self):
-        """Boutons d'action."""
         layout = QHBoxLayout()
         layout.setSpacing(15)
 
-        layout.addWidget(self._make_btn(
-            "Configurer", "settings", "#3498db", "#2980b9", "#21618c", w=180,
-            slot=lambda: self.edit_config_requested.emit()
-        ))
+        self.configure_btn = primary_btn("Configurer", "settings")
+        self.configure_btn.clicked.connect(lambda: self.edit_config_requested.emit())
 
-        layout.addWidget(self._make_btn(
-            "Tester la connexion", "cpu", "#2ecc71", "#27ae60", "#1e8449", w=200,
-            slot=lambda: self.test_connection_requested.emit()
-        ))
+        self.test_btn = outline_btn("Tester la connexion", "cpu")
+        self.test_btn.clicked.connect(lambda: self.test_connection_requested.emit())
 
+        self.reset_btn = outline_btn("Reinitialiser", "refresh")
+        self.reset_btn.clicked.connect(lambda: self.reset_config_requested.emit())
+
+        for btn in (self.configure_btn, self.test_btn, self.reset_btn):
+            btn.setMinimumHeight(48)
+            btn.setMinimumWidth(180)
+            btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        layout.addWidget(self.configure_btn)
+        layout.addWidget(self.test_btn)
         layout.addStretch()
-
-        layout.addWidget(self._make_btn(
-            "Reinitialiser", "refresh", "#e74c3c", "#c0392b", "#a93226", w=180,
-            slot=lambda: self.reset_config_requested.emit()
-        ))
+        layout.addWidget(self.reset_btn)
 
         self.content_layout.addLayout(layout)
 
-    def _make_btn(self, label, icon_name, bg, hover, pressed, w=None, slot=None) -> QPushButton:
-        btn = QPushButton(label)
-        btn.setMinimumHeight(48)
-        if w:
-            btn.setMinimumWidth(w)
-        btn.setCursor(Qt.PointingHandCursor)
-        px = load_svg_icon(icon_name, size=18)
-        if not px.isNull():
-            btn.setIcon(QIcon(px))
-            btn.setIconSize(QSize(18, 18))
-        btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {bg};
-                color: white;
-                padding: 10px 20px;
-                border: none;
-                border-radius: 10px;
-                font-weight: bold;
-                font-size: 14px;
-            }}
-            QPushButton:hover   {{ background-color: {hover};   }}
-            QPushButton:pressed {{ background-color: {pressed}; }}
-            QPushButton:disabled {{ background-color: #95a5a6; }}
-        """)
-        if slot:
-            btn.clicked.connect(slot)
-        return btn
+    def _restyle_all_buttons(self):
+        is_dark = getattr(self, "_is_dark", False)
+        for btn in self.findChildren(CustomButton):
+            btn.apply_theme(is_dark)
 
     # ========== SUPPORT THEME ==========
 
     def set_theme(self, is_dark: bool):
-        """Applique le theme."""
+        """Applique le theme (BaseView pose deja le style generique)."""
         super().set_theme(is_dark)
-        self._apply_theme_styles()
+        self._apply_local_styles()
+        self._restyle_all_buttons()
+        # Re-applique les couleurs actif/inactif du statut si deja affiche
+        if self.status_label is not None:
+            self._style_status_label(self.status_label.text() == "Actif")
 
-    def _apply_theme_styles(self):
-        """Applique les styles selon le theme."""
-        if self._is_dark:
-            border = "#3d3d5c"
-            bg = "#2d2d44"
-            text = "#e0e0e0"
-            banner_bg = "#2d2d44"
-            banner_border = "#3d3d5c"
-            note_bg = "#2d2d44"
-            note_border = "#567ba1"
-        else:
-            border = "#bdc3c7"
-            bg = "#ffffff"
-            text = "#2c3e50"
-            banner_bg = "#f8f9fa"
-            banner_border = "#bdc3c7"
-            note_bg = "#f8f9fa"
-            note_border = "#3498db"
+    def _apply_local_styles(self):
+        """Styles propres a AIView uniquement (pas deja geres par BaseView) :
+        bannere d'info + chips des valeurs de config."""
+        colors = Palette.get_theme_colors(getattr(self, "_is_dark", False))
+        accent = Palette.TEAL if self._is_dark else Palette.ACCENT
 
         self.setStyleSheet(self.styleSheet() + f"""
             QFrame#infoBanner {{
-                border-left: 5px solid #3498db;
+                border-left: 5px solid {accent};
                 border-radius: 8px;
                 padding: 5px;
-                background: {banner_bg};
-                border: 1px solid {banner_border};
+                background: {colors['bg']};
+                border: 1px solid {colors['border']};
                 border-left-width: 5px;
             }}
             QLabel#bannerText {{
                 font-size: 14px;
-                color: {text};
+                color: {colors['text']};
             }}
-            QGroupBox#configGroup {{
-                font-size: 15px;
+            QLabel#configRowLabel {{
+                font-size: 14px;
                 font-weight: bold;
-                border: 2px solid {border};
-                border-radius: 10px;
-                margin-top: 15px;
-                padding-top: 10px;
-                color: {text};
+                color: {colors['text']};
             }}
-            QGroupBox#configGroup::title {{
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 4px 14px;
-                color: #3498db;
-                font-weight: bold;
+            QLabel#configRowValue {{
+                font-size: 14px;
+                padding: 6px 14px;
+                border: 2px solid {colors['border']};
+                border-radius: 6px;
+                color: {colors['text']};
+                background: transparent;
             }}
+        """)
+
+    def _style_status_label(self, is_active: bool):
+        colors = Palette.get_theme_colors(getattr(self, "_is_dark", False))
+        color = Palette.SUCCESS if is_active else Palette.DANGER
+        self.status_label.setStyleSheet(f"""
+            font-size: 14px;
+            font-weight: bold;
+            padding: 6px 14px;
+            border: 2px solid {color};
+            border-radius: 6px;
+            color: {color};
         """)
 
     # ========== API PUBLIQUE ==========
 
     def update_config_display(self, config):
-        """Met a jour l'affichage de la configuration."""
-        from src.ui.views.ai.ai_config import AIConfig
-
-        if config.enabled:
-            self.status_label.setText("Actif")
-            self.status_label.setStyleSheet("""
-                font-size: 14px;
-                font-weight: bold;
-                padding: 6px 14px;
-                border: 2px solid #27ae60;
-                border-radius: 6px;
-                color: #27ae60;
-            """)
-        else:
-            self.status_label.setText("Desactive")
-            self.status_label.setStyleSheet("""
-                font-size: 14px;
-                font-weight: bold;
-                padding: 6px 14px;
-                border: 2px solid #e74c3c;
-                border-radius: 6px;
-                color: #e74c3c;
-            """)
-
-        val_s = """
-            font-size: 14px;
-            padding: 6px 14px;
-            border: 2px solid #bdc3c7;
-            border-radius: 6px;
-        """
+        is_active = bool(config.enabled)
+        self.status_label.setText("Actif" if is_active else "Desactive")
+        self._style_status_label(is_active)
 
         self.model_label.setText(config.model)
-        self.model_label.setStyleSheet(val_s)
-
         self.temperature_label.setText(str(config.temperature))
-        self.temperature_label.setStyleSheet(val_s)
-
         self.max_tokens_label.setText(str(config.max_tokens))
-        self.max_tokens_label.setStyleSheet(val_s)
-
         self.context_label.setText(f"{config.context_window} tokens")
-        self.context_label.setStyleSheet(val_s)
-
         self.suggestions_label.setText("Oui" if config.auto_suggestions else "Non")
-        self.suggestions_label.setStyleSheet(val_s)

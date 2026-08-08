@@ -8,14 +8,14 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Slot
-from PySide6.QtWidgets import QMessageBox
 
 from src.database.connection import get_db_connection
+from src.ui.widgets.InfoDialog import InfoDialog
 
 
 class DatabaseSettingsManager(QObject):
 
-    version = "2.0"
+    version = "2.1"
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -47,21 +47,21 @@ class DatabaseSettingsManager(QObject):
 
     @Slot()
     def optimize_database(self):
-        reply = QMessageBox.question(
+        confirmed = InfoDialog.question(
             self.view, "Optimiser la base de donnees",
             "Cette operation peut prendre quelques instants. Continuer ?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            ok_text="Oui", cancel_text="Non",
         )
-        if reply == QMessageBox.Yes:
+        if confirmed:
             try:
                 cursor = self.db.get_cursor()
                 cursor.execute("VACUUM")
                 cursor.execute("ANALYZE")
                 self.db.commit()
                 self._update_stats()
-                QMessageBox.information(self.view, "Succes", "Base de donnees optimisee.")
+                InfoDialog.success(self.view, "Succes", "Base de donnees optimisee.")
             except Exception as e:
-                QMessageBox.critical(self.view, "Erreur", f"Erreur lors de l'optimisation:\n{e}")
+                InfoDialog.error(self.view, "Erreur", f"Erreur lors de l'optimisation:\n{e}")
 
     @Slot()
     def check_integrity(self):
@@ -70,11 +70,11 @@ class DatabaseSettingsManager(QObject):
             cursor.execute("PRAGMA integrity_check")
             result = cursor.fetchone()
             if result and result[0] == 'ok':
-                QMessageBox.information(self.view, "Verification", "La base de donnees est integre.")
+                InfoDialog.success(self.view, "Verification", "La base de donnees est integre.")
             else:
-                QMessageBox.warning(self.view, "Probleme", f"{result[0] if result else 'Erreur inconnue'}")
+                InfoDialog.warning(self.view, "Probleme", f"{result[0] if result else 'Erreur inconnue'}")
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur", f"Erreur lors de la verification:\n{e}")
+            InfoDialog.error(self.view, "Erreur", f"Erreur lors de la verification:\n{e}")
 
     @Slot()
     def create_backup(self):
@@ -85,12 +85,12 @@ class DatabaseSettingsManager(QObject):
             backup_path = backup_dir / f"librairie_backup_{timestamp}.db"
             shutil.copy2(self.db_path, backup_path)
             size_mb = backup_path.stat().st_size / (1024 * 1024)
-            QMessageBox.information(
+            InfoDialog.success(
                 self.view, "Sauvegarde creee",
                 f"Fichier: {backup_path.name}\nTaille: {size_mb:.2f} MB"
             )
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur", f"Erreur sauvegarde:\n{e}")
+            InfoDialog.error(self.view, "Erreur", f"Erreur sauvegarde:\n{e}")
 
     def get_database_stats(self):
         stats = {

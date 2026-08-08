@@ -24,6 +24,7 @@ from src.database.repositories.sync_repository import SyncRepository
 from src.database.connection import get_db_connection
 from src.managers.sync.network_utils import has_internet_connection
 from src.managers.sync.cloud_data_sync_manager import CloudDataSyncManager
+from src.ui.widgets.InfoDialog import InfoDialog
 
 load_dotenv()
 
@@ -53,15 +54,9 @@ class CloudSyncClient:
 
         url = self.base_url.rstrip("/") + "/" + path.name
         data = path.read_bytes()
-        # POST pour créer un nouvel objet (ex: Supabase Storage). Si le
-        # stockage choisi utilise une URL pré-signée de type S3 (qui exige
-        # PUT), bascule cette méthode sur "PUT" à la place.
         req = urllib.request.Request(url, data=data, method="POST")
         req.add_header("Content-Type", "application/octet-stream")
         if self.token:
-            # Supabase (Storage comme REST) exige les DEUX en-têtes : apikey
-            # pour identifier le projet, Authorization pour l'autorisation.
-            # N'envoyer que l'un des deux produit "Invalid Compact JWS".
             req.add_header("apikey", self.token)
             req.add_header("Authorization", f"Bearer {self.token}")
 
@@ -78,7 +73,7 @@ class SyncManager(QObject):
     """Orchestre la sauvegarde cloud complète ET porte le manager de
     synchronisation de données (délégation, pas de logique dupliquée)."""
 
-    version = "2.0.0"
+    version = "2.1.0"
 
     status_changed = Signal()
     history_changed = Signal()
@@ -93,7 +88,6 @@ class SyncManager(QObject):
         self.cloud_client = CloudSyncClient()
         self.settings = QSettings("Siledje", "Siledje")
 
-        # Synchronisation des données (délégué complet — voir cloud_data_sync_manager.py)
         self.data_sync_manager = CloudDataSyncManager(parent, current_user)
 
         conn = get_db_connection()
@@ -106,13 +100,11 @@ class SyncManager(QObject):
         self.backup_dir.mkdir(parents=True, exist_ok=True)
 
         self._is_syncing = False
-        self._is_online_cached = True  # optimiste ; corrigé au premier tick du timer
+        self._is_online_cached = True
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._on_timer_tick)
         self.timer.start(TIMER_TICK_MS)
-        # Premier vrai test de connectivité un instant après le démarrage,
-        # hors du chemin d'ouverture de la vue (évite de geler l'UI à l'ouverture).
         QTimer.singleShot(500, self._refresh_connectivity_cache)
 
         print(f"[SyncManager v{self.version}] Initialisé — "
@@ -271,8 +263,7 @@ class SyncManager(QObject):
     def _deny(self, action_label: str):
         if not self.view:
             return
-        from PySide6.QtWidgets import QMessageBox
-        QMessageBox.warning(
+        InfoDialog.warning(
             self.view, "Permission refusée",
             f"Vous n'avez pas la permission d'effectuer cette action : {action_label}."
         )

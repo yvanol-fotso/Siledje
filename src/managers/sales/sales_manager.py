@@ -2,33 +2,34 @@
 Manager des ventes — connecté à SalesRepository + CatalogRepository.
 Panier en mémoire, checkout réel avec sale_items/sale_payments et
 déduction de stock tracée dans stock_movements.
+
+v2.2 — ThemedTable (via SalesView) + InfoDialog (plus de QMessageBox),
+modals via ModalView + SalesPaymentForm / InvoiceViewer (sales_forms.py),
+meme pattern que StockManager.
 """
 
-from src.ui.views.sales import SalesView
-from PySide6.QtCore import QObject, Slot, Qt
-from PySide6.QtWidgets import (
-    QMessageBox, QWidget, QFormLayout, QLineEdit,
-    QComboBox, QLabel, QFrame, QVBoxLayout, QHBoxLayout,
-    QPushButton, QDialog, QTextEdit,
-)
-from PySide6.QtGui import QFont, QTextDocument
-from PySide6.QtPrintSupport import QPrinter, QPrintDialog
-from datetime import datetime
+from PySide6.QtCore import QObject, Slot
 
 from src.database.repositories.catalog_repository import CatalogRepository
 from src.database.repositories.sales_repository import SalesRepository
+
+from src.ui.views.sales.sales_view import SalesView
+from src.ui.views.sales.sales_form import SalesPaymentForm, InvoiceViewer, build_invoice_html
+from src.ui.widgets.ModalView import ModalView
+from src.ui.widgets.InfoDialog import InfoDialog
 
 
 class SalesManager(QObject):
     """Manager des ventes — vrai schéma, plus de dummy data."""
 
-    version = "2.1"
+    version = "2.2"
 
     def __init__(self, parent=None, current_user=None):
         super().__init__(parent)
         self.parent = parent
         self.view = None
         self.current_user = current_user
+        self._is_dark = False
 
         self.catalog = CatalogRepository()
         self.sales_repo = SalesRepository()
@@ -42,10 +43,10 @@ class SalesManager(QObject):
 
     def get_ui(self):
         if self.view is None:
-            from src.ui.views.sales.sales_view import SalesView
             self.view = SalesView(self.parent)
             self._connect_view_signals()
             self.load_products()
+            self.view.set_theme(self._is_dark)
         return self.view
 
     def _connect_view_signals(self):
@@ -65,18 +66,15 @@ class SalesManager(QObject):
         """Charge les produits depuis CatalogRepository et applique les filtres."""
         search_term = self.view.get_search_term() if self.view else ""
 
-        # 1. Recherche
         if search_term:
             products = self.catalog.search_products(search_term)
         else:
             products = self.catalog.get_all_products()
 
-        # 2. Filtre par type (packaging_type)
         type_filter = self.view.get_type_filter() if self.view else None
         if type_filter:
             products = [p for p in products if p.get("packaging_type") == type_filter]
 
-        # 3. Adapter au format attendu par SalesView
         adapted = []
         for p in products:
             barcodes = self.catalog.get_barcodes_for_product(p["id"])
@@ -112,7 +110,9 @@ class SalesManager(QObject):
             return
 
         if product["stock"] <= 0:
-            QMessageBox.warning(self.view, "Stock épuisé", f"{product['name']} n'est plus en stock")
+            InfoDialog.warning(
+                self.view, "Stock épuisé", f"{product['name']} n'est plus en stock."
+            )
             return
 
         existing = next(
@@ -120,13 +120,16 @@ class SalesManager(QObject):
         )
         if existing:
             if existing["quantity"] + 1 > product["stock"]:
-                QMessageBox.warning(self.view, "Stock insuffisant",
-                                    f"Stock disponible : {product['stock']}")
+                InfoDialog.warning(
+                    self.view, "Stock insuffisant",
+                    f"Stock disponible : {product['stock']}",
+                )
                 return
             existing["quantity"] += 1
         else:
-            self.current_cart.append({"product": product, "quantity": 1,
-                                      "type_display": product["type"]})
+            self.current_cart.append({
+                "product": product, "quantity": 1, "type_display": product["type"],
+            })
 
         self.update_cart_display()
 
@@ -151,227 +154,44 @@ class SalesManager(QObject):
         self.view.update_cart_table(self.current_cart, total)
 
     # ──────────────────────────────────────────────────────────────
-    # PAIEMENT
-    # ──────────────────────────────────────────────────────────────
-
-    def _build_payment_modal(self, total: float):
-        from src.ui.widgets.ModalView import ModalView
-
-        modal = ModalView(
-            title="Finaliser le Paiement", parent=self.view,
-            width=520, height=480, ok_text="Valider le paiement", cancel_text="Annuler",
-        )
-
-        container = QWidget()
-        main_layout = QVBoxLayout(container)
-        main_layout.setSpacing(18)
-        main_layout.setContentsMargins(8, 8, 8, 8)
-
-        recap_frame = QFrame()
-        recap_frame.setStyleSheet("""
-            QFrame { background-color: #f0f8ff; border: 2px solid #9b59b6; border-radius: 10px; }
-        """)
-        recap_layout = QHBoxLayout(recap_frame)
-        recap_layout.setContentsMargins(16, 10, 16, 10)
-
-        items_count = sum(item["quantity"] for item in self.current_cart)
-        recap_items_label = QLabel(f"{items_count} article(s)")
-        recap_items_label.setStyleSheet(
-            "font-size: 14px; color: #555555; border: none; background: transparent;")
-        recap_total_label = QLabel(f"Total : {total:.0f} FCFA")
-        recap_total_label.setStyleSheet(
-            "font-size: 18px; font-weight: bold; color: #9b59b6; border: none; background: transparent;")
-
-        recap_layout.addWidget(recap_items_label)
-        recap_layout.addStretch()
-        recap_layout.addWidget(recap_total_label)
-        main_layout.addWidget(recap_frame)
-
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet("background-color: #e0e0e0;")
-        sep.setFixedHeight(2)
-        main_layout.addWidget(sep)
-
-        LABEL_STYLE = "font-weight: bold; font-size: 14px; color: #2c3e50;"
-        INPUT_STYLE = """
-            QLineEdit { font-size: 14px; padding: 10px 12px; border: 2px solid #bdc3c7;
-                border-radius: 8px; background-color: #ffffff; color: #1a1a1a; min-height: 42px; }
-            QLineEdit:focus { border-color: #9b59b6; background-color: #fafafa; }
-        """
-        COMBO_STYLE = """
-            QComboBox { font-size: 14px; padding: 8px 12px; border: 2px solid #bdc3c7;
-                border-radius: 8px; background-color: #ffffff; color: #1a1a1a; min-height: 42px; }
-            QComboBox:focus { border-color: #9b59b6; }
-        """
-
-        def make_label(text):
-            lbl = QLabel(text)
-            lbl.setStyleSheet(LABEL_STYLE)
-            lbl.setMinimumWidth(110)
-            return lbl
-
-        form_widget = QWidget()
-        form_layout = QFormLayout(form_widget)
-        form_layout.setSpacing(14)
-        form_layout.setContentsMargins(0, 0, 0, 0)
-        form_layout.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-        name_input = QLineEdit()
-        name_input.setPlaceholderText("Ex: Jean-Paul Nguema (optionnel)")
-        name_input.setStyleSheet(INPUT_STYLE)
-        form_layout.addRow(make_label("Nom du client :"), name_input)
-
-        phone_input = QLineEdit()
-        phone_input.setPlaceholderText("Ex: 6XX XXX XXX (optionnel)")
-        phone_input.setStyleSheet(INPUT_STYLE)
-        form_layout.addRow(make_label("Numéro :"), phone_input)
-
-        payment_combo = QComboBox()
-        payment_combo.setStyleSheet(COMBO_STYLE)
-        for method in self.sales_repo.get_payment_methods():
-            payment_combo.addItem(method["name"], method["id"])
-        form_layout.addRow(make_label("Paiement :"), payment_combo)
-
-        main_layout.addWidget(form_widget)
-        main_layout.addStretch()
-        modal.set_content(container)
-
-        modal._name_input = name_input
-        modal._phone_input = phone_input
-        modal._payment_combo = payment_combo
-
-        return modal
-
-    # ──────────────────────────────────────────────────────────────
-    # FACTURE
-    # ──────────────────────────────────────────────────────────────
-
-    def _build_invoice_html(self, invoice_number, client_name, client_phone,
-                             payment_label, total, cart_snapshot):
-        date_str = datetime.now().strftime("%d/%m/%Y %H:%M")
-        rows = ""
-        for item in cart_snapshot:
-            product = item["product"]
-            subtotal = product["price"] * item["quantity"]
-            rows += f"""
-            <tr>
-                <td>{product['name']}</td>
-                <td style="text-align:center;">{item['type_display']}</td>
-                <td style="text-align:center;">{item['quantity']}</td>
-                <td style="text-align:right;">{product['price']:.0f} FCFA</td>
-                <td style="text-align:right;"><b>{subtotal:.0f} FCFA</b></td>
-            </tr>
-            """
-        return f"""
-        <html><head><style>
-            body {{ font-family: Arial, sans-serif; font-size: 13px; color: #1a1a1a; margin: 20px; }}
-            h2 {{ color: #9b59b6; margin-bottom: 4px; }}
-            .meta {{ color: #555; font-size: 12px; margin-bottom: 16px; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
-            th {{ background-color: #9b59b6; color: white; padding: 8px 6px; text-align: left; }}
-            td {{ padding: 7px 6px; border-bottom: 1px solid #e0e0e0; }}
-            .total-row td {{ font-size: 15px; font-weight: bold; border-top: 2px solid #9b59b6;
-                             background-color: #f0f8ff; color: #9b59b6; padding: 10px 6px; }}
-            .info-block {{ background: #f9f9f9; border: 1px solid #ddd; border-radius: 6px;
-                           padding: 10px 14px; margin-bottom: 14px; }}
-        </style></head><body>
-        <h2>Facture de Vente</h2>
-        <p class="meta">N° {invoice_number} — Émise le : {date_str}</p>
-        <div class="info-block">
-            <p><b>Client :</b> {client_name or 'Anonyme'}</p>
-            <p><b>Téléphone :</b> {client_phone or '—'}</p>
-            <p><b>Mode de paiement :</b> {payment_label}</p>
-        </div>
-        <table><thead><tr>
-            <th>Produit</th><th style="text-align:center;">Type</th>
-            <th style="text-align:center;">Qté</th><th style="text-align:right;">Prix unit.</th>
-            <th style="text-align:right;">Sous-total</th>
-        </tr></thead><tbody>
-            {rows}
-            <tr class="total-row"><td colspan="4" style="text-align:right;">TOTAL</td>
-                <td style="text-align:right;">{total:.0f} FCFA</td></tr>
-        </tbody></table>
-        <p style="margin-top:24px; color:#888; font-size:11px; text-align:center;">
-            Merci pour votre achat — Librairie Papeterie Siledje
-        </p></body></html>
-        """
-
-    def _show_invoice_modal(self, invoice_number, client_name, client_phone,
-                             payment_label, total, cart_snapshot):
-        html = self._build_invoice_html(invoice_number, client_name, client_phone,
-                                        payment_label, total, cart_snapshot)
-
-        dialog = QDialog(self.view)
-        dialog.setWindowTitle(f"Facture {invoice_number}")
-        dialog.setMinimumSize(600, 580)
-        dialog.setModal(True)
-
-        layout = QVBoxLayout(dialog)
-        layout.setSpacing(12)
-        layout.setContentsMargins(16, 16, 16, 16)
-
-        title_lbl = QLabel(f"Facture {invoice_number}")
-        title_lbl.setFont(QFont("Arial", 16, QFont.Bold))
-        title_lbl.setStyleSheet("color: #9b59b6;")
-        layout.addWidget(title_lbl)
-
-        preview = QTextEdit()
-        preview.setReadOnly(True)
-        preview.setHtml(html)
-        layout.addWidget(preview)
-
-        btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(10)
-        print_btn = QPushButton("Imprimer la facture")
-        print_btn.setMinimumHeight(42)
-        close_btn = QPushButton("Fermer")
-        close_btn.setMinimumHeight(42)
-        btn_layout.addStretch()
-        btn_layout.addWidget(close_btn)
-        btn_layout.addWidget(print_btn)
-        layout.addLayout(btn_layout)
-
-        def on_print():
-            printer = QPrinter(QPrinter.HighResolution)
-            print_dialog = QPrintDialog(printer, dialog)
-            if print_dialog.exec() == QPrintDialog.Accepted:
-                doc = QTextDocument()
-                doc.setHtml(html)
-                doc.print_(printer)
-
-        print_btn.clicked.connect(on_print)
-        close_btn.clicked.connect(dialog.accept)
-        dialog.exec()
-
-    # ──────────────────────────────────────────────────────────────
     # PROCESSUS DE VENTE COMPLET
     # ──────────────────────────────────────────────────────────────
 
     @Slot()
     def process_sale(self):
         if not self.current_cart:
-            QMessageBox.warning(self.view, "Panier vide", "Aucun article dans le panier.")
+            InfoDialog.warning(self.view, "Panier vide", "Aucun article dans le panier.")
             return
 
         for item in self.current_cart:
             fresh = self.catalog.get_product_by_id(item["product"]["id"])
             if not fresh or item["quantity"] > fresh["stock_quantity"]:
-                QMessageBox.critical(
+                InfoDialog.error(
                     self.view, "Stock insuffisant",
                     f"Stock insuffisant pour {item['product']['name']}\n"
-                    f"Disponible : {fresh['stock_quantity'] if fresh else 0}"
+                    f"Disponible : {fresh['stock_quantity'] if fresh else 0}",
                 )
                 return
 
         total = sum(item["product"]["price"] * item["quantity"] for item in self.current_cart)
-        modal = self._build_payment_modal(total)
+        payment_methods = self.sales_repo.get_payment_methods()
+
+        form = SalesPaymentForm(total=total, payment_methods=payment_methods)
+
+        modal = ModalView(
+            title="Finaliser le Paiement",
+            parent=self.view,
+            width=520, height=480,
+            ok_text="Valider le paiement", cancel_text="Annuler",
+        )
+        modal.set_content(form)
 
         def on_validate():
-            client_name = modal._name_input.text().strip()
-            client_phone = modal._phone_input.text().strip()
-            payment_label = modal._payment_combo.currentText()
-            payment_method_id = modal._payment_combo.currentData()
+            data = form.get_data()
+            client_name = data["client_name"]
+            client_phone = data["client_phone"]
+            payment_label = data["payment_method_name"]
+            payment_method_id = data["payment_method_id"]
 
             client_id = None
             if client_phone:
@@ -396,7 +216,7 @@ class SalesManager(QObject):
             )
 
             if not result:
-                QMessageBox.critical(modal, "Erreur", "Impossible d'enregistrer la vente.")
+                InfoDialog.error(modal, "Erreur", "Impossible d'enregistrer la vente.")
                 return
 
             for item in self.current_cart:
@@ -404,7 +224,7 @@ class SalesManager(QObject):
                     item["product"]["id"], -item["quantity"], "sale",
                     user_id=user_id, reference_id=result["sale_id"],
                     reference_type="sale",
-                    reason=f"Vente {result['invoice_number']}"
+                    reason=f"Vente {result['invoice_number']}",
                 )
 
             cart_snapshot = [
@@ -419,13 +239,26 @@ class SalesManager(QObject):
             self.clear_cart()
             self.load_products()
 
-            self._show_invoice_modal(
+            self._show_invoice(
                 result["invoice_number"], client_name, client_phone,
-                payment_label, total, cart_snapshot
+                payment_label, total, cart_snapshot,
             )
 
         modal.ok_clicked.connect(on_validate)
         modal.exec()
+
+    # ──────────────────────────────────────────────────────────────
+    # FACTURE
+    # ──────────────────────────────────────────────────────────────
+
+    def _show_invoice(self, invoice_number, client_name, client_phone,
+                       payment_label, total, cart_snapshot):
+        html = build_invoice_html(
+            invoice_number, client_name, client_phone,
+            payment_label, total, cart_snapshot,
+        )
+        viewer = InvoiceViewer(invoice_number, html, parent=self.view)
+        viewer.exec()
 
     # ──────────────────────────────────────────────────────────────
     # UTILITAIRES
@@ -445,6 +278,7 @@ class SalesManager(QObject):
 
     def set_theme(self, is_dark: bool):
         """Change le theme de la vue"""
+        self._is_dark = is_dark
         if self.view is not None:
             self.view.set_theme(is_dark)
             print(f"[SalesManager] Theme appliqué: {'dark' if is_dark else 'light'}")

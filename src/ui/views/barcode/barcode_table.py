@@ -1,67 +1,58 @@
 """
-Modèle de tableau pour la gestion des codes-barres.
+Tableau codes-barres — basé sur ThemedTable.
 """
 
-from PySide6.QtCore import QAbstractTableModel, Qt
+from PySide6.QtWidgets import QHeaderView
+from src.ui.widgets.themed_table import ThemedTable
 
 
-class BarcodeTableModel(QAbstractTableModel):
-    """Modèle de tableau pour les codes-barres."""
+class BarcodeProductsTable(ThemedTable):
+    COLUMNS = [
+        "ID", "Code-Barres", "Nom", "Categorie", "Prix", "Stock", "Interne",
+    ]
 
-    HEADERS = ["ID", "Code-Barres", "Nom", "Catégorie", "Prix", "Stock", "Interne"]
-
-    def __init__(self, products: list = None):
-        super().__init__()
-        self._products = products or []
-
-    def rowCount(self, parent=None):
-        return len(self._products)
-
-    def columnCount(self, parent=None):
-        return len(self.HEADERS)
-
-    def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid():
-            return None
-
-        product = self._products[index.row()]
-        col = index.column()
-
-        if role == Qt.DisplayRole:
-            values = [
-                str(product.get('id', '')),
-                product.get('barcode', ''),
-                product.get('name', ''),
-                product.get('category', ''),
-                f"{product.get('price', 0):.2f}",
-                str(product.get('stock', 0)),
-                "Oui" if product.get('is_internal_barcode', False) else "Non",
-            ]
-            return values[col]
-
-        if role == Qt.TextAlignmentRole:
-            return Qt.AlignCenter
-
-        if role == Qt.UserRole:
-            return product
-
-        return None
-
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
-        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self.HEADERS[section]
-        return None
-
-    def get_product(self, row: int) -> dict:
-        if 0 <= row < len(self._products):
-            return self._products[row]
-        return None
+    def __init__(self, parent=None):
+        super().__init__(
+            self.COLUMNS,
+            parent=parent,
+            object_name="barcodeTable",
+            row_height=38,
+        )
+        self.set_column_resize_modes({
+            0: QHeaderView.ResizeToContents,
+            1: QHeaderView.ResizeToContents,
+            2: QHeaderView.Stretch,
+            3: QHeaderView.Interactive,
+            4: QHeaderView.ResizeToContents,
+            5: QHeaderView.ResizeToContents,
+            6: QHeaderView.ResizeToContents,
+        })
 
     def set_products(self, products: list):
-        self.beginResetModel()
-        self._products = products
-        self.endResetModel()
+        if not products:
+            self.set_empty_message("Aucun produit")
+            return
+        rows = []
+        for p in products:
+            rows.append({
+                "ID": str(p.get("id", "")),
+                "Code-Barres": p.get("barcode", ""),
+                "Nom": p.get("name", ""),
+                "Categorie": p.get("category", ""),
+                "Prix": f"{float(p.get('price', 0)):.2f}",
+                "Stock": str(p.get("stock", 0)),
+                "Interne": "Oui" if p.get("is_internal_barcode") else "Non",
+            })
+        self.set_rows(rows)
 
-    def refresh(self):
-        self.beginResetModel()
-        self.endResetModel()
+    def get_selected_product_id(self) -> int | None:
+        row = self.currentRow()
+        if row < 0:
+            return None
+        item = self.item(row, 0)
+        if not item:
+            return None
+        try:
+            return int(item.text())
+        except ValueError:
+            return None

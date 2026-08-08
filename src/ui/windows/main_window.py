@@ -1,5 +1,5 @@
 """
-Fenêtre principale — VERSION FINALE COMPLÈTE.
+Fenêtre principale — VERSION FINALE COMPLÈTE (corrigée : propagation du thème).
 Utilise la nouvelle architecture : managers/stock/ + ui/views/stock/
 """
 
@@ -53,6 +53,8 @@ class MainWindow(QMainWindow):
         self.current_user  = current_user
         self.authenticated = bool(current_user)
 
+        self.current_module_widget = None
+
         self.zoom_manager = ZoomManager(self)
         self.zoom_manager.zoom_changed.connect(self._on_zoom_changed)
         self.theme_manager.theme_changed.connect(self.on_theme_changed)
@@ -101,13 +103,17 @@ class MainWindow(QMainWindow):
         self.apply_current_theme()
         self.load_persistent_settings()
         self.zoom_manager.apply_saved_zoom()
+        # ✅ S'assure que la vue affichée au démarrage reçoit bien le thème courant
+        # (utile si load_persistent_settings() vient de changer le thème après
+        # la création de la vue dans setup_main_content()).
+        self.propagate_theme_to_current_view()
 
     def init_modules(self):
         """Initialise tous les modules avec la nouvelle architecture."""
         return {
             'accueil':               AccueilManager(self),
-            'stock':                 StockManager(self, self.current_user),  
-            'sales':                 SalesManager(self, self.current_user), 
+            'stock':                 StockManager(self, self.current_user),
+            'sales':                 SalesManager(self, self.current_user),
             'admin':                 AdminManager(self, self.auth_manager, self.current_user),
             'security':              SecurityManager(self, self.auth_manager.user_repo),
             'reports':               ReportManager(self),
@@ -130,6 +136,8 @@ class MainWindow(QMainWindow):
         self.current_module_widget = self.modules['accueil'].get_ui()
         lay.addWidget(self.current_module_widget)
         self.setCentralWidget(central_widget)
+        # ✅ Applique immédiatement le thème courant à la vue nouvellement créée
+        self.propagate_theme_to_current_view()
 
     def switch_to_module(self, module_name):
         """Change de module en utilisant get_ui() de chaque manager."""
@@ -139,7 +147,65 @@ class MainWindow(QMainWindow):
             # ✅ Tous les managers ont get_ui() qui retourne la vue
             self.current_module_widget = self.modules[module_name].get_ui()
             self.centralWidget().layout().addWidget(self.current_module_widget)
+            # ✅ La nouvelle vue doit refléter le thème courant, pas le défaut clair
+            self.propagate_theme_to_current_view()
             print(f"[MainWindow] Switch vers: {module_name}")
+
+    # ── PROPAGATION DU THÈME AUX VUES ────────────────────────────────
+    # C'est le cœur du correctif : apply_current_theme() ne fait que poser
+    # le QSS global sur MainWindow. Les vues des modules (AccueilView,
+    # StockView, etc.) doivent recevoir explicitement l'état dark/light,
+    # sinon elles restent figées avec leurs couleurs de fond par défaut
+    # (généralement claires) même quand le thème global passe en sombre.
+
+    def propagate_theme_to_current_view(self):
+        """Applique le thème courant (dark/light) à la vue du module actif."""
+        widget = getattr(self, 'current_module_widget', None)
+        if widget is None:
+            return
+        is_dark = self.theme_manager.get_current_theme() == 'dark'
+        self._apply_theme_to_widget(widget, is_dark)
+
+    def propagate_theme_to_all_modules(self):
+        """
+        Applique le thème courant à TOUTES les vues des modules, y compris
+        celles qui ne sont pas actuellement affichées. Utile si certaines
+        vues gardent un état en mémoire (ex: tables déjà peuplées) qui doit
+        être re-stylé même hors écran.
+        """
+        if not hasattr(self, 'modules'):
+            return
+        is_dark = self.theme_manager.get_current_theme() == 'dark'
+        for name, module in self.modules.items():
+            # On ne force pas get_ui() ici pour ne pas créer des vues
+            # inutilement ; on ne touche que celles déjà instanciées.
+            widget = getattr(module, '_view', None) or getattr(module, 'view', None)
+            if widget is not None:
+                self._apply_theme_to_widget(widget, is_dark)
+
+    @staticmethod
+    def _apply_theme_to_widget(widget, is_dark):
+        """
+        Tente d'appliquer le thème à un widget en essayant les conventions
+        les plus courantes du projet, dans l'ordre. Adapte cette liste aux
+        méthodes réellement présentes sur tes vues (AccueilView, etc.).
+        """
+        try:
+            if hasattr(widget, 'set_theme'):
+                widget.set_theme(is_dark)
+            elif hasattr(widget, 'apply_theme'):
+                widget.apply_theme(is_dark)
+            elif hasattr(widget, 'update_theme'):
+                widget.update_theme('dark' if is_dark else 'light')
+            elif hasattr(widget, 'setProperty'):
+                # Fallback générique : propriété Qt + repolish, si la vue
+                # est stylée en QSS via un sélecteur [theme="dark"].
+                widget.setProperty("theme", "dark" if is_dark else "light")
+                widget.style().unpolish(widget)
+                widget.style().polish(widget)
+                widget.update()
+        except Exception as e:
+            print(f"[MainWindow] Erreur propagation thème sur {widget}: {e}")
 
     # ── MENUS ─────────────────────────────────────────────────────────
 
@@ -431,13 +497,14 @@ class MainWindow(QMainWindow):
         self.apply_current_theme()
 
     def apply_current_theme(self):
-        stylesheet = self.theme_manager.load_stylesheet('main_style')
-        current    = self.theme_manager.get_current_theme()
+        current = self.theme_manager.get_current_theme()
+        # Le stylesheet est déjà sur QApplication via ThemeManager
         self.setProperty("theme", current)
-        self.setStyleSheet(stylesheet)
         self.style().unpolish(self)
         self.style().polish(self)
         self.update()
+        self.propagate_theme_to_current_view()
+        self.propagate_theme_to_all_modules()
 
     # ── STATUSBAR ─────────────────────────────────────────────────────
 
@@ -465,22 +532,22 @@ class MainWindow(QMainWindow):
 
     def setup_shortcuts(self):
         sc = QShortcut
-        
+
         # ✅ Raccourci Accueil - Ctrl+H
         sc(QKeySequence("Ctrl+H"), self).activated.connect(lambda: self.switch_to_module('accueil'))
-        
+
         # Quitter
         sc(QKeySequence("Ctrl+Q"), self).activated.connect(self.close)
-        
+
         # Plein écran
         sc(QKeySequence("F11"), self).activated.connect(self.toggle_fullscreen)
-        
+
         # Zoom
         sc(QKeySequence("Ctrl+="), self).activated.connect(self.zoom_in)
         sc(QKeySequence("Ctrl++"), self).activated.connect(self.zoom_in)
         sc(QKeySequence("Ctrl+-"), self).activated.connect(self.zoom_out)
         sc(QKeySequence("Ctrl+0"), self).activated.connect(self.reset_zoom)
-        
+
         # Fichier
         sc(QKeySequence("Ctrl+F"), self).activated.connect(lambda: self.switch_to_module('file'))
 

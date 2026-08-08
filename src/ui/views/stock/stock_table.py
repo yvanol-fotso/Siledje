@@ -1,74 +1,49 @@
-"""
-Modele de tableau pour la gestion du stock.
-"""
+"""Tableau stock — ThemedTable (comme Accueil / File / Sales)."""
 
-from PySide6.QtCore import QAbstractTableModel, Qt
+from PySide6.QtWidgets import QHeaderView
+from src.ui.widgets.themed_table import ThemedTable
 
 
-class StockTableModel(QAbstractTableModel):
-    """Modele de tableau pour les produits"""
-    
-    HEADERS = [
+class StockProductsTable(ThemedTable):
+    COLUMNS = [
         "ID", "Nom", "Categorie", "Fournisseur",
         "Prix Achat", "Prix Vente", "Stock",
-        "Seuil", "SKU", "Actif"
+        "Seuil", "SKU", "Actif",
     ]
-    
-    def __init__(self, products: list = None):
-        super().__init__()
+
+    def __init__(self, parent=None):
+        super().__init__(self.COLUMNS, parent=parent, object_name="stockTable")
+        self._products = []
+        header = self.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Stretch)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+
+    def set_products(self, products: list):
         self._products = products or []
-    
-    def rowCount(self, parent=None):
-        return len(self._products)
-    
-    def columnCount(self, parent=None):
-        return len(self.HEADERS)
-    
-    def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid():
-            return None
-        
-        product = self._products[index.row()]
-        col = index.column()
-        
-        if role == Qt.DisplayRole:
-            values = [
-                str(product["id"]),
-                product["name"],
-                product.get("category_name") or "-",
-                product.get("supplier_name") or "-",
-                f"{product['buy_price']:.2f}",
-                f"{product['sell_price']:.2f}",
-                str(product["stock_quantity"]),
-                str(product["min_stock_threshold"]),
-                product.get("sku") or "-",
-                "Oui" if product["is_active"] else "Non",
-            ]
-            return values[col]
-        
-        if role == Qt.TextAlignmentRole:
-            return Qt.AlignCenter
-        
-        if role == Qt.UserRole:
-            return product
-        
-        return None
-    
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
-        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self.HEADERS[section]
-        return None
-    
-    def get_product(self, row: int) -> dict:
+        if not self._products:
+            self.set_empty_message("Aucun produit")
+            return
+        rows = []
+        for p in self._products:
+            rows.append({
+                "ID": str(p["id"]),
+                "Nom": p.get("name", ""),
+                "Categorie": p.get("category_name") or "-",
+                "Fournisseur": p.get("supplier_name") or "-",
+                "Prix Achat": f"{p.get('buy_price', 0):.2f}",
+                "Prix Vente": f"{p.get('sell_price', 0):.2f}",
+                "Stock": str(p.get("stock_quantity", 0)),
+                "Seuil": str(p.get("min_stock_threshold", 0)),
+                "SKU": p.get("sku") or "-",
+                "Actif": "Oui" if p.get("is_active") else "Non",
+            })
+        self.set_rows(rows)
+
+    def get_product(self, row: int):
         if 0 <= row < len(self._products):
             return self._products[row]
         return None
-    
-    def set_products(self, products: list):
-        self.beginResetModel()
-        self._products = products
-        self.endResetModel()
-    
-    def refresh(self):
-        self.beginResetModel()
-        self.endResetModel()
+
+    def get_selected_product(self):
+        return self.get_product(self.currentRow())

@@ -1,20 +1,23 @@
 """
 Vue du formulaire de signalement de bug.
 Herite de BaseView pour une structure coherente.
-Support complet mode Dark/Light avec design moderne.
+Boutons = CustomButton. Style des groupes/inputs/scrollbar = accent normal
+de BaseView (pas de theme rouge local — retire, non voulu).
 """
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QLineEdit, QTextEdit, QComboBox,
-    QFormLayout, QMessageBox, QGroupBox, QFrame,
+    QLineEdit, QTextEdit, QComboBox,
+    QFormLayout, QGroupBox, QFrame,
     QScrollArea, QSizePolicy
 )
-from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QFont, QIcon, QPixmap
+from PySide6.QtCore import Qt, Signal
 
-from src.ui.views.base.base_view import BaseView, Palette
+from src.ui.views.base.base_view import BaseView
+from src.ui.widgets.custom_button import primary_btn, outline_btn, CustomButton
+from src.ui.widgets.InfoDialog import InfoDialog
 from src.utils.helpers import get_asset_path
+from PySide6.QtGui import QIcon, QPixmap
 
 
 def load_svg_icon(icon_name: str, size: int = 24) -> QPixmap:
@@ -26,7 +29,7 @@ def load_svg_icon(icon_name: str, size: int = 24) -> QPixmap:
         if icon.isNull():
             return QPixmap()
         return icon.pixmap(size, size)
-    except:
+    except Exception:
         return QPixmap()
 
 
@@ -34,7 +37,7 @@ class BugReportView(BaseView):
     """Formulaire de signalement de bug. Herite de BaseView."""
 
     submit_requested = Signal(dict)
-    version = "1.0.0"
+    version = "1.2.0"
 
     def __init__(self, parent=None):
         super().__init__(
@@ -62,7 +65,8 @@ class BugReportView(BaseView):
         self._init_subtitle()
         self._init_form()
         self._init_buttons()
-        self._apply_theme_styles()
+        self._apply_local_styles()
+        self._restyle_all_buttons()
 
     def _init_subtitle(self):
         """Sous-titre."""
@@ -73,7 +77,6 @@ class BugReportView(BaseView):
 
     def _init_form(self):
         """Formulaire."""
-        # Scroll area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
@@ -163,52 +166,31 @@ class BugReportView(BaseView):
         btn_row.setSpacing(10)
         btn_row.addStretch()
 
-        reset_btn = self._make_btn(
-            "Effacer", "clear", "#95a5a6", "#7f8c8d",
-            "#6c7a7a", w=110, slot=self.reset_form
-        )
+        self.reset_btn = outline_btn("Effacer", "clear")
+        self.reset_btn.clicked.connect(self.reset_form)
 
-        send_btn = self._make_btn(
-            "Envoyer le rapport", "send", "#e74c3c", "#c0392b",
-            "#a93226", w=180, slot=self._on_submit
-        )
+        self.send_btn = primary_btn("Envoyer le rapport", "send")
+        self.send_btn.clicked.connect(self._on_submit)
 
-        btn_row.addWidget(reset_btn)
-        btn_row.addWidget(send_btn)
+        for btn in (self.reset_btn, self.send_btn):
+            btn.setMinimumHeight(40)
+            btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.reset_btn.setMinimumWidth(110)
+        self.send_btn.setMinimumWidth(180)
+
+        btn_row.addWidget(self.reset_btn)
+        btn_row.addWidget(self.send_btn)
         self.content_layout.addLayout(btn_row)
 
-    def _make_btn(self, label, icon_name, bg, hover, pressed, w=None, slot=None) -> QPushButton:
-        btn = QPushButton(label)
-        btn.setMinimumHeight(40)
-        if w:
-            btn.setMinimumWidth(w)
-        btn.setCursor(Qt.PointingHandCursor)
-        px = load_svg_icon(icon_name, size=16)
-        if not px.isNull():
-            btn.setIcon(QIcon(px))
-            btn.setIconSize(QSize(16, 16))
-        btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {bg};
-                color: white;
-                border: none;
-                border-radius: 8px;
-                font-size: 13px;
-                font-weight: bold;
-                padding: 6px 16px;
-            }}
-            QPushButton:hover   {{ background-color: {hover};   }}
-            QPushButton:pressed {{ background-color: {pressed}; }}
-            QPushButton:disabled {{ background-color: #95a5a6; }}
-        """)
-        if slot:
-            btn.clicked.connect(slot)
-        return btn
+    def _restyle_all_buttons(self):
+        is_dark = getattr(self, "_is_dark", False)
+        for btn in self.findChildren(CustomButton):
+            btn.apply_theme(is_dark)
 
     def _on_submit(self):
         desc = self.desc_input.toPlainText().strip()
         if not desc:
-            QMessageBox.warning(self, "Champ requis",
+            InfoDialog.warning(self, "Champ requis",
                 "Veuillez decrire le probleme avant d'envoyer le rapport.")
             return
         self.submit_requested.emit({
@@ -230,119 +212,29 @@ class BugReportView(BaseView):
     # ========== SUPPORT THEME ==========
 
     def set_theme(self, is_dark: bool):
-        """Applique le theme."""
+        """Applique le theme (BaseView pose deja QGroupBox/QLineEdit/QComboBox/
+        QScrollBar generiques avec l'accent normal)."""
         super().set_theme(is_dark)
-        self._apply_theme_styles()
+        self._apply_local_styles()
+        self._restyle_all_buttons()
 
-    def _apply_theme_styles(self):
-        """Applique les styles selon le theme."""
-        if self._is_dark:
-            border = "#3d3d5c"
-            bg = "#2d2d44"
-            text = "#e0e0e0"
-            input_bg = "#2d2d44"
-            input_border = "#3d3d5c"
-            group_title = "#e74c3c"
-        else:
-            border = "#bdc3c7"
-            bg = "#ffffff"
-            text = "#2c3e50"
-            input_bg = "#ffffff"
-            input_border = "rgba(150,150,150,0.4)"
-            group_title = "#e74c3c"
-
-        self.setStyleSheet(self.styleSheet() + f"""
-            QLabel#subtitleLabel {{
+    def _apply_local_styles(self):
+        """Styles propres a cette vue uniquement : sous-titre + transparence
+        de la scroll area. Groupes/inputs/scrollbar deja geres par BaseView."""
+        self.setStyleSheet(self.styleSheet() + """
+            QLabel#subtitleLabel {
                 font-size: 13px;
                 color: #7f8c8d;
                 padding-bottom: 8px;
-            }}
-            QScrollArea#scrollArea {{
+            }
+            QScrollArea#scrollArea {
                 background: transparent;
                 border: none;
-            }}
-            QScrollArea#scrollArea > QWidget > QWidget {{
+            }
+            QScrollArea#scrollArea > QWidget > QWidget {
                 background: transparent;
-            }}
-            QWidget#scrollContent {{
+            }
+            QWidget#scrollContent {
                 background: transparent;
-            }}
-            QGroupBox#identityGroup {{
-                font-size: 13px;
-                font-weight: bold;
-                border: 1px solid rgba(150,150,150,0.35);
-                border-radius: 10px;
-                margin-top: 12px;
-                color: {text};
-            }}
-            QGroupBox#identityGroup::title {{
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 3px 12px;
-                color: {group_title};
-                font-weight: bold;
-            }}
-            QGroupBox#bugGroup {{
-                font-size: 13px;
-                font-weight: bold;
-                border: 1px solid rgba(150,150,150,0.35);
-                border-radius: 10px;
-                margin-top: 12px;
-                color: {text};
-            }}
-            QGroupBox#bugGroup::title {{
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 3px 12px;
-                color: {group_title};
-                font-weight: bold;
-            }}
-            QLineEdit#nameInput, QLineEdit#emailInput,
-            QComboBox#severityCombo, QComboBox#moduleCombo,
-            QTextEdit#descInput {{
-                font-size: 13px;
-                padding: 8px 12px;
-                border: 1px solid {input_border};
-                border-radius: 7px;
-                min-height: 34px;
-                background: {input_bg};
-                color: {text};
-            }}
-            QLineEdit#nameInput:focus, QLineEdit#emailInput:focus,
-            QComboBox#severityCombo:focus, QComboBox#moduleCombo:focus,
-            QTextEdit#descInput:focus {{
-                border: 2px solid #e74c3c;
-            }}
-            QComboBox#severityCombo::drop-down,
-            QComboBox#moduleCombo::drop-down {{
-                border: none;
-                padding-right: 8px;
-            }}
-            QComboBox#severityCombo QAbstractItemView,
-            QComboBox#moduleCombo QAbstractItemView {{
-                background: {input_bg};
-                color: {text};
-                selection-background-color: #e74c3c;
-                selection-color: white;
-                border: 1px solid {input_border};
-                border-radius: 7px;
-            }}
-            QScrollBar:vertical {{
-                border: none;
-                background: transparent;
-                width: 10px;
-                border-radius: 5px;
-            }}
-            QScrollBar::handle:vertical {{
-                background: #e74c3c;
-                min-height: 20px;
-                border-radius: 5px;
-            }}
-            QScrollBar::handle:vertical:hover {{
-                background: #c0392b;
-            }}
-            QScrollBar::add-line:vertical,
-            QScrollBar::sub-line:vertical {{
-                height: 0;
-            }}
+            }
         """)

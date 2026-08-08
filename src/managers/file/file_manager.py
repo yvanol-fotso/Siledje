@@ -1,7 +1,7 @@
 """
 Gestionnaire des opérations sur les fichiers.
-Import/Export CSV alignés sur le schéma réel (CatalogRepository / UserRepository)
-+ Sauvegarde/Restauration de la base de données + Activation de licence.
+Import/Export CSV + Sauvegarde/Restauration + Licence.
+Messages UI : InfoDialog uniquement (thémé dark/light).
 """
 
 import csv
@@ -12,8 +12,8 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Slot, QTimer
-from PySide6.QtWidgets import QMessageBox
 
+from src.ui.widgets.InfoDialog import InfoDialog
 from src.database.repositories.catalog_repository import CatalogRepository
 from src.database.repositories.user_repository import UserRepository
 from src.database.connection import get_db_connection
@@ -43,7 +43,7 @@ def _fmt_money(n) -> str:
 class FileManager(QObject):
     """Gère toutes les opérations fichier (import/export/sauvegarde/licence)."""
 
-    version = "3.0.0"
+    version = "3.1.0"
 
     PRODUCT_COLUMNS_FR = [
         "Nom", "Description", "Catégorie", "Fournisseur", "SKU",
@@ -84,7 +84,9 @@ class FileManager(QObject):
         "notes": "notes",
     }
 
-    CATEGORY_COLUMNS_FR = ["Nom", "Catégorie Parent", "Description", "Icône", "Couleur", "Ordre"]
+    CATEGORY_COLUMNS_FR = [
+        "Nom", "Catégorie Parent", "Description", "Icône", "Couleur", "Ordre",
+    ]
     CATEGORY_HEADER_MAP = {
         "nom": "name",
         "categorieparent": "parent_name", "parent": "parent_name",
@@ -128,27 +130,24 @@ class FileManager(QObject):
     def _require_permission(self, permission_name: str, action_label: str) -> bool:
         if self._has_permission(permission_name):
             return True
-        QMessageBox.warning(
-            self.view, "Permission refusée",
+        InfoDialog.warning(
+            self.view,
+            "Permission refusee",
             f"Vous n'avez pas la permission d'effectuer cette action : {action_label}.\n"
-            "Contactez un administrateur si vous pensez que c'est une erreur."
+            "Contactez un administrateur si vous pensez que c'est une erreur.",
         )
         return False
 
     def get_ui(self):
         if self.view is None:
             from src.ui.views.file.file_view import FileView
+
             self.view = FileView(self.parent_window)
             self._connect_signals()
             self._apply_permissions()
             self._refresh_backups_list()
-            
-            # ✅ Rafraîchir la licence immédiatement
             QTimer.singleShot(100, self._refresh_license_panel)
-            
-            # ✅ Rafraîchir les panels après un court délai
             QTimer.singleShot(200, self._refresh_all_panels)
-            
         return self.view
 
     def _apply_permissions(self):
@@ -175,7 +174,6 @@ class FileManager(QObject):
         v.template_categories_requested.connect(self.generate_categories_template)
 
         v.export_users_requested.connect(self.export_users_csv)
-
         v.activate_license_requested.connect(self.activate_license)
 
         v.create_backup_requested.connect(self.create_backup)
@@ -193,7 +191,8 @@ class FileManager(QObject):
             size_kb = f.stat().st_size / 1024
             mtime = datetime.fromtimestamp(f.stat().st_mtime)
             backups.append({
-                "name": f.name, "path": str(f),
+                "name": f.name,
+                "path": str(f),
                 "size": f"{size_kb:.1f} KB",
                 "date": mtime.strftime("%d/%m/%Y %H:%M:%S"),
             })
@@ -221,44 +220,44 @@ class FileManager(QObject):
             categories = self.catalog_repo.get_all_categories(active_only=False)
             users = self.user_repo.get_all_users()
 
-            stock_value = sum(
-                float(p.get("buy_price") or 0) * float(p.get("stock_quantity") or 0)
-                for p in products
+            self.view.update_entity_stats(
+                "products", len(products), f"{len(low_stock)} en stock bas"
             )
-
-            # Mise à jour des stats via les nouvelles méthodes
-            self.view.update_entity_stats("products", len(products), f"{len(low_stock)} en stock bas")
-            self.view.update_entity_stats("suppliers", len(suppliers), f"{sum(1 for s in suppliers if s.get('email'))} avec email")
-            self.view.update_entity_stats("categories", len(categories), f"{sum(1 for c in categories if not c.get('parent_id'))} principales")
+            self.view.update_entity_stats(
+                "suppliers",
+                len(suppliers),
+                f"{sum(1 for s in suppliers if s.get('email'))} avec email",
+            )
+            self.view.update_entity_stats(
+                "categories",
+                len(categories),
+                f"{sum(1 for c in categories if not c.get('parent_id'))} principales",
+            )
 
             if self._has_permission("can_manage_users"):
                 active_users = sum(1 for u in users if u.get("is_active"))
-                self.view.update_entity_stats("users", len(users), f"{active_users} actifs")
+                self.view.update_entity_stats(
+                    "users", len(users), f"{active_users} actifs"
+                )
 
-            # Mise à jour des graphiques
             self.view.update_entity_chart("products", [
                 ("En stock", len([p for p in products if p.get("stock_quantity", 0) > 10])),
                 ("Stock bas", len(low_stock)),
                 ("Rupture", len([p for p in products if p.get("stock_quantity", 0) == 0])),
             ])
-
             self.view.update_entity_chart("suppliers", [
                 ("Actifs", len([s for s in suppliers if s.get("is_active", 1)])),
                 ("Avec email", sum(1 for s in suppliers if s.get("email"))),
                 ("Avec téléphone", sum(1 for s in suppliers if s.get("phone"))),
             ])
-
         except Exception as e:
             print(f"[FileManager] Erreur rafraîchissement résumés : {e}")
 
         self._refresh_license_panel()
 
     def _refresh_license_panel(self):
-        """✅ Rafraîchit le panneau de licence."""
         if not self.view:
             return
-        
-        # Vérifier la licence même si l'utilisateur n'a pas les droits
         try:
             status = self.license_manager.check_current_license()
             info = self.license_manager.current_license
@@ -279,23 +278,29 @@ class FileManager(QObject):
 
         key = (key_text or "").strip()
         if not key:
-            QMessageBox.warning(self.view, "Clé requise", "Veuillez saisir ou charger une clé de licence.")
+            InfoDialog.warning(
+                self.view, "Cle requise",
+                "Veuillez saisir ou charger une cle de licence.",
+            )
             return
         try:
             ok = self.license_manager.activate_license(key)
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur", f"Erreur lors de l'activation :\n{e}")
+            InfoDialog.error(
+                self.view, "Erreur", f"Erreur lors de l'activation :\n{e}"
+            )
             return
 
         if ok:
-            QMessageBox.information(self.view, "Licence activée", "✅ La nouvelle licence a été activée avec succès.")
-        else:
-            QMessageBox.critical(
-                self.view, "Licence invalide",
-                "❌ Cette clé est invalide, corrompue, ou déjà expirée."
+            InfoDialog.success(
+                self.view, "Licence activee",
+                "La nouvelle licence a ete activee avec succes.",
             )
-        
-        # ✅ Rafraîchir la licence immédiatement
+        else:
+            InfoDialog.error(
+                self.view, "Licence invalide",
+                "Cette cle est invalide, corrompue, ou deja expiree.",
+            )
         self._refresh_license_panel()
 
     # ────────────────────────────────────────────────────────────────
@@ -309,21 +314,25 @@ class FileManager(QObject):
         try:
             path = Path(file_path)
             if not path.exists():
-                QMessageBox.warning(self.view, "Fichier introuvable", f"{file_path}")
+                InfoDialog.warning(self.view, "Fichier introuvable", str(file_path))
                 return
 
             imported, errors = 0, []
             with open(path, "r", encoding="utf-8-sig", newline="") as f:
                 reader = csv.DictReader(f, delimiter=";")
                 if not reader.fieldnames:
-                    QMessageBox.warning(self.view, "CSV vide", "Le fichier est vide ou mal formaté.")
+                    InfoDialog.warning(
+                        self.view, "CSV vide",
+                        "Le fichier est vide ou mal formate.",
+                    )
                     return
 
                 cols = self._map_headers(reader.fieldnames, self.PRODUCT_HEADER_MAP)
                 if "name" not in cols:
-                    QMessageBox.warning(
+                    InfoDialog.warning(
                         self.view, "Colonne manquante",
-                        f"La colonne 'Nom' est obligatoire.\n\nColonnes trouvées :\n{', '.join(reader.fieldnames)}"
+                        f"La colonne 'Nom' est obligatoire.\n\n"
+                        f"Colonnes trouvees :\n{', '.join(reader.fieldnames)}",
                     )
                     return
 
@@ -355,9 +364,13 @@ class FileManager(QObject):
                         if category_name:
                             category_id = category_cache.get(category_name.lower())
                             if category_id is None:
-                                existing = self.catalog_repo.get_category_by_name(category_name)
-                                category_id = existing["id"] if existing else \
-                                    self.catalog_repo.create_category(category_name)
+                                existing = self.catalog_repo.get_category_by_name(
+                                    category_name
+                                )
+                                category_id = (
+                                    existing["id"] if existing
+                                    else self.catalog_repo.create_category(category_name)
+                                )
                                 category_cache[category_name.lower()] = category_id
 
                         supplier_id = None
@@ -365,14 +378,23 @@ class FileManager(QObject):
                             supplier_id = supplier_cache.get(supplier_name.lower())
                             if supplier_id is None:
                                 match = next(
-                                    (s for s in self.catalog_repo.get_all_suppliers(active_only=False)
-                                     if s["name"].lower() == supplier_name.lower()), None
+                                    (
+                                        s for s in self.catalog_repo.get_all_suppliers(
+                                            active_only=False
+                                        )
+                                        if s["name"].lower() == supplier_name.lower()
+                                    ),
+                                    None,
                                 )
-                                supplier_id = match["id"] if match else \
-                                    self.catalog_repo.create_supplier(supplier_name)
+                                supplier_id = (
+                                    match["id"] if match
+                                    else self.catalog_repo.create_supplier(supplier_name)
+                                )
                                 supplier_cache[supplier_name.lower()] = supplier_id
 
-                        is_book_raw = row.get(cols.get("is_book", ""), "").strip().lower()
+                        is_book_raw = row.get(
+                            cols.get("is_book", ""), ""
+                        ).strip().lower()
                         is_book = is_book_raw in ("1", "oui", "true", "vrai", "yes")
 
                         sku = row.get(cols.get("sku", ""), "").strip() or None
@@ -381,29 +403,48 @@ class FileManager(QObject):
                             self.catalog_repo.update_product(
                                 existing_product["id"],
                                 name=name,
-                                description=row.get(cols.get("description", ""), "").strip(),
-                                category_id=category_id, supplier_id=supplier_id,
-                                buy_price=num("buy_price"), sell_price=num("sell_price"),
+                                description=row.get(
+                                    cols.get("description", ""), ""
+                                ).strip(),
+                                category_id=category_id,
+                                supplier_id=supplier_id,
+                                buy_price=num("buy_price"),
+                                sell_price=num("sell_price"),
                                 stock_quantity=integer("stock_quantity"),
                                 min_stock_threshold=integer("min_stock_threshold", 10),
-                                packaging_type=row.get(cols.get("packaging_type", ""), "unitaire").strip() or "unitaire",
+                                packaging_type=row.get(
+                                    cols.get("packaging_type", ""), "unitaire"
+                                ).strip() or "unitaire",
                                 units_per_pack=integer("units_per_pack", 1),
-                                location=row.get(cols.get("location", ""), "").strip(),
-                                tax_rate=num("tax_rate"), is_book=is_book,
+                                location=row.get(
+                                    cols.get("location", ""), ""
+                                ).strip(),
+                                tax_rate=num("tax_rate"),
+                                is_book=is_book,
                                 notes=row.get(cols.get("notes", ""), "").strip(),
                             )
                         else:
                             self.catalog_repo.create_product(
                                 name=name,
-                                description=row.get(cols.get("description", ""), "").strip(),
-                                category_id=category_id, supplier_id=supplier_id,
-                                buy_price=num("buy_price"), sell_price=num("sell_price"),
+                                description=row.get(
+                                    cols.get("description", ""), ""
+                                ).strip(),
+                                category_id=category_id,
+                                supplier_id=supplier_id,
+                                buy_price=num("buy_price"),
+                                sell_price=num("sell_price"),
                                 stock_quantity=integer("stock_quantity"),
                                 min_stock_threshold=integer("min_stock_threshold", 10),
-                                packaging_type=row.get(cols.get("packaging_type", ""), "unitaire").strip() or "unitaire",
+                                packaging_type=row.get(
+                                    cols.get("packaging_type", ""), "unitaire"
+                                ).strip() or "unitaire",
                                 units_per_pack=integer("units_per_pack", 1),
-                                location=row.get(cols.get("location", ""), "").strip(),
-                                sku=sku, tax_rate=num("tax_rate"), is_book=is_book,
+                                location=row.get(
+                                    cols.get("location", ""), ""
+                                ).strip(),
+                                sku=sku,
+                                tax_rate=num("tax_rate"),
+                                is_book=is_book,
                                 notes=row.get(cols.get("notes", ""), "").strip(),
                             )
                         imported += 1
@@ -414,14 +455,17 @@ class FileManager(QObject):
             self._refresh_all_panels()
 
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur d'import", str(e))
+            InfoDialog.error(self.view, "Erreur d'import", str(e))
 
     @Slot(str)
     def export_products_csv(self, file_path: str):
         try:
             products = self.catalog_repo.get_all_products(active_only=False)
             if not products:
-                QMessageBox.information(self.view, "Aucune donnée", "Il n'y a aucun produit à exporter.")
+                InfoDialog.info(
+                    self.view, "Aucune donnee",
+                    "Il n'y a aucun produit a exporter.",
+                )
                 return
 
             path = Path(file_path)
@@ -439,7 +483,8 @@ class FileManager(QObject):
                         str(p["buy_price"]).replace(".", ","),
                         str(p["sell_price"]).replace(".", ","),
                         p["stock_quantity"], p["min_stock_threshold"],
-                        p.get("location") or "", p.get("packaging_type") or "unitaire",
+                        p.get("location") or "",
+                        p.get("packaging_type") or "unitaire",
                         p.get("units_per_pack") or 1,
                         str(p.get("tax_rate") or 0).replace(".", ","),
                         "Oui" if p.get("is_book") else "Non",
@@ -448,22 +493,31 @@ class FileManager(QObject):
 
             self._report_export(path, len(products), "produit(s)")
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur d'export", str(e))
+            InfoDialog.error(self.view, "Erreur d'export", str(e))
 
     def generate_products_template(self, file_path: str):
-        if not self._require_permission("can_manage_stock", "télécharger un modèle d'import"):
+        if not self._require_permission(
+            "can_manage_stock", "telecharger un modele d'import"
+        ):
             return
         path = Path(file_path)
         with open(path, "w", encoding="utf-8-sig", newline="") as f:
             writer = csv.writer(f, delimiter=";")
             writer.writerow(self.PRODUCT_COLUMNS_FR)
-            writer.writerow(["Stylo Bic", "Stylo à bille bleu", "Papeterie", "Fournisseur ABC",
-                              "STY-001", "150", "250", "100", "10", "Rayon A2",
-                              "unitaire", "1", "19,25", "Non", ""])
-            writer.writerow(["Dictionnaire Larousse", "Édition 2024", "Manuels Scolaires", "",
-                              "DIC-002", "3000", "5000", "20", "5", "Rayon B1",
-                              "unitaire", "1", "0", "Oui", ""])
-        QMessageBox.information(self.view, "Modèle créé", f"Modèle produits créé :\n{path.absolute()}")
+            writer.writerow([
+                "Stylo Bic", "Stylo a bille bleu", "Papeterie", "Fournisseur ABC",
+                "STY-001", "150", "250", "100", "10", "Rayon A2",
+                "unitaire", "1", "19,25", "Non", "",
+            ])
+            writer.writerow([
+                "Dictionnaire Larousse", "Edition 2024", "Manuels Scolaires", "",
+                "DIC-002", "3000", "5000", "20", "5", "Rayon B1",
+                "unitaire", "1", "0", "Oui", "",
+            ])
+        InfoDialog.success(
+            self.view, "Modele cree",
+            f"Modele produits cree :\n{path.absolute()}",
+        )
 
     # ────────────────────────────────────────────────────────────────
     # FOURNISSEURS
@@ -476,22 +530,29 @@ class FileManager(QObject):
         try:
             path = Path(file_path)
             if not path.exists():
-                QMessageBox.warning(self.view, "Fichier introuvable", f"{file_path}")
+                InfoDialog.warning(self.view, "Fichier introuvable", str(file_path))
                 return
 
             imported, errors = 0, []
             with open(path, "r", encoding="utf-8-sig", newline="") as f:
                 reader = csv.DictReader(f, delimiter=";")
                 if not reader.fieldnames:
-                    QMessageBox.warning(self.view, "CSV vide", "Le fichier est vide ou mal formaté.")
+                    InfoDialog.warning(
+                        self.view, "CSV vide",
+                        "Le fichier est vide ou mal formate.",
+                    )
                     return
                 cols = self._map_headers(reader.fieldnames, self.SUPPLIER_HEADER_MAP)
                 if "name" not in cols:
-                    QMessageBox.warning(self.view, "Colonne manquante", "La colonne 'Nom' est obligatoire.")
+                    InfoDialog.warning(
+                        self.view, "Colonne manquante",
+                        "La colonne 'Nom' est obligatoire.",
+                    )
                     return
 
                 existing_suppliers = {
-                    s["name"].lower(): s for s in self.catalog_repo.get_all_suppliers(active_only=False)
+                    s["name"].lower(): s
+                    for s in self.catalog_repo.get_all_suppliers(active_only=False)
                 }
 
                 for row_num, row in enumerate(reader, start=2):
@@ -502,13 +563,17 @@ class FileManager(QObject):
                             continue
 
                         fields = dict(
-                            contact_name=row.get(cols.get("contact_name", ""), "").strip(),
+                            contact_name=row.get(
+                                cols.get("contact_name", ""), ""
+                            ).strip(),
                             email=row.get(cols.get("email", ""), "").strip(),
                             phone=row.get(cols.get("phone", ""), "").strip(),
                             phone2=row.get(cols.get("phone2", ""), "").strip(),
                             address=row.get(cols.get("address", ""), "").strip(),
                             city=row.get(cols.get("city", ""), "").strip(),
-                            payment_terms=row.get(cols.get("payment_terms", ""), "").strip(),
+                            payment_terms=row.get(
+                                cols.get("payment_terms", ""), ""
+                            ).strip(),
                             notes=row.get(cols.get("notes", ""), "").strip(),
                         )
 
@@ -524,14 +589,17 @@ class FileManager(QObject):
             self._report_result("fournisseur(s)", imported, errors)
             self._refresh_all_panels()
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur d'import", str(e))
+            InfoDialog.error(self.view, "Erreur d'import", str(e))
 
     @Slot(str)
     def export_suppliers_csv(self, file_path: str):
         try:
             suppliers = self.catalog_repo.get_all_suppliers(active_only=False)
             if not suppliers:
-                QMessageBox.information(self.view, "Aucune donnée", "Il n'y a aucun fournisseur à exporter.")
+                InfoDialog.info(
+                    self.view, "Aucune donnee",
+                    "Il n'y a aucun fournisseur a exporter.",
+                )
                 return
             path = Path(file_path)
             if not path.suffix:
@@ -542,23 +610,31 @@ class FileManager(QObject):
                 for s in suppliers:
                     writer.writerow([
                         s["name"], s.get("contact_name") or "", s.get("email") or "",
-                        s.get("phone") or "", s.get("phone2") or "", s.get("address") or "",
-                        s.get("city") or "", s.get("payment_terms") or "", s.get("notes") or "",
+                        s.get("phone") or "", s.get("phone2") or "",
+                        s.get("address") or "", s.get("city") or "",
+                        s.get("payment_terms") or "", s.get("notes") or "",
                     ])
             self._report_export(path, len(suppliers), "fournisseur(s)")
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur d'export", str(e))
+            InfoDialog.error(self.view, "Erreur d'export", str(e))
 
     def generate_suppliers_template(self, file_path: str):
-        if not self._require_permission("can_manage_stock", "télécharger un modèle d'import"):
+        if not self._require_permission(
+            "can_manage_stock", "telecharger un modele d'import"
+        ):
             return
         path = Path(file_path)
         with open(path, "w", encoding="utf-8-sig", newline="") as f:
             writer = csv.writer(f, delimiter=";")
             writer.writerow(self.SUPPLIER_COLUMNS_FR)
-            writer.writerow(["Fournisseur ABC", "Jean Dupont", "contact@abc.cm", "699000000",
-                              "", "Rue du Marché", "Bafoussam", "30 jours", ""])
-        QMessageBox.information(self.view, "Modèle créé", f"Modèle fournisseurs créé :\n{path.absolute()}")
+            writer.writerow([
+                "Fournisseur ABC", "Jean Dupont", "contact@abc.cm", "699000000",
+                "", "Rue du Marche", "Bafoussam", "30 jours", "",
+            ])
+        InfoDialog.success(
+            self.view, "Modele cree",
+            f"Modele fournisseurs cree :\n{path.absolute()}",
+        )
 
     # ────────────────────────────────────────────────────────────────
     # CATÉGORIES
@@ -566,27 +642,35 @@ class FileManager(QObject):
 
     @Slot(str)
     def import_categories_csv(self, file_path: str):
-        if not self._require_permission("can_manage_stock", "importer des catégories"):
+        if not self._require_permission("can_manage_stock", "importer des categories"):
             return
         try:
             path = Path(file_path)
             if not path.exists():
-                QMessageBox.warning(self.view, "Fichier introuvable", f"{file_path}")
+                InfoDialog.warning(self.view, "Fichier introuvable", str(file_path))
                 return
 
             imported, errors = 0, []
             with open(path, "r", encoding="utf-8-sig", newline="") as f:
                 reader = csv.DictReader(f, delimiter=";")
                 if not reader.fieldnames:
-                    QMessageBox.warning(self.view, "CSV vide", "Le fichier est vide ou mal formaté.")
+                    InfoDialog.warning(
+                        self.view, "CSV vide",
+                        "Le fichier est vide ou mal formate.",
+                    )
                     return
                 cols = self._map_headers(reader.fieldnames, self.CATEGORY_HEADER_MAP)
                 if "name" not in cols:
-                    QMessageBox.warning(self.view, "Colonne manquante", "La colonne 'Nom' est obligatoire.")
+                    InfoDialog.warning(
+                        self.view, "Colonne manquante",
+                        "La colonne 'Nom' est obligatoire.",
+                    )
                     return
 
-                name_to_id = {c["name"].lower(): c["id"]
-                              for c in self.catalog_repo.get_all_categories(active_only=False)}
+                name_to_id = {
+                    c["name"].lower(): c["id"]
+                    for c in self.catalog_repo.get_all_categories(active_only=False)
+                }
 
                 for row_num, row in enumerate(reader, start=2):
                     try:
@@ -594,24 +678,36 @@ class FileManager(QObject):
                         if not name:
                             errors.append(f"Ligne {row_num} : nom manquant")
                             continue
-                        parent_name = row.get(cols.get("parent_name", ""), "").strip()
-                        parent_id = name_to_id.get(parent_name.lower()) if parent_name else None
+                        parent_name = row.get(
+                            cols.get("parent_name", ""), ""
+                        ).strip()
+                        parent_id = (
+                            name_to_id.get(parent_name.lower()) if parent_name else None
+                        )
 
-                        sort_order_raw = row.get(cols.get("sort_order", ""), "0").strip()
+                        sort_order_raw = row.get(
+                            cols.get("sort_order", ""), "0"
+                        ).strip()
                         sort_order = int(sort_order_raw) if sort_order_raw else 0
 
                         if name.lower() in name_to_id:
                             self.catalog_repo.update_category(
-                                name_to_id[name.lower()], parent_id=parent_id,
-                                description=row.get(cols.get("description", ""), "").strip(),
+                                name_to_id[name.lower()],
+                                parent_id=parent_id,
+                                description=row.get(
+                                    cols.get("description", ""), ""
+                                ).strip(),
                                 icon=row.get(cols.get("icon", ""), "").strip(),
                                 color=row.get(cols.get("color", ""), "").strip(),
                                 sort_order=sort_order,
                             )
                         else:
                             new_id = self.catalog_repo.create_category(
-                                name=name, parent_id=parent_id,
-                                description=row.get(cols.get("description", ""), "").strip(),
+                                name=name,
+                                parent_id=parent_id,
+                                description=row.get(
+                                    cols.get("description", ""), ""
+                                ).strip(),
                                 icon=row.get(cols.get("icon", ""), "").strip(),
                                 color=row.get(cols.get("color", ""), "").strip(),
                                 sort_order=sort_order,
@@ -621,17 +717,20 @@ class FileManager(QObject):
                     except Exception as e:
                         errors.append(f"Ligne {row_num} : {e}")
 
-            self._report_result("catégorie(s)", imported, errors)
+            self._report_result("categorie(s)", imported, errors)
             self._refresh_all_panels()
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur d'import", str(e))
+            InfoDialog.error(self.view, "Erreur d'import", str(e))
 
     @Slot(str)
     def export_categories_csv(self, file_path: str):
         try:
             categories = self.catalog_repo.get_all_categories(active_only=False)
             if not categories:
-                QMessageBox.information(self.view, "Aucune donnée", "Il n'y a aucune catégorie à exporter.")
+                InfoDialog.info(
+                    self.view, "Aucune donnee",
+                    "Il n'y a aucune categorie a exporter.",
+                )
                 return
             id_to_name = {c["id"]: c["name"] for c in categories}
             path = Path(file_path)
@@ -646,19 +745,26 @@ class FileManager(QObject):
                         c.get("description") or "", c.get("icon") or "",
                         c.get("color") or "", c.get("sort_order") or 0,
                     ])
-            self._report_export(path, len(categories), "catégorie(s)")
+            self._report_export(path, len(categories), "categorie(s)")
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur d'export", str(e))
+            InfoDialog.error(self.view, "Erreur d'export", str(e))
 
     def generate_categories_template(self, file_path: str):
-        if not self._require_permission("can_manage_stock", "télécharger un modèle d'import"):
+        if not self._require_permission(
+            "can_manage_stock", "telecharger un modele d'import"
+        ):
             return
         path = Path(file_path)
         with open(path, "w", encoding="utf-8-sig", newline="") as f:
             writer = csv.writer(f, delimiter=";")
             writer.writerow(self.CATEGORY_COLUMNS_FR)
-            writer.writerow(["Cahiers", "Papeterie", "Tous formats de cahiers", "", "", "1"])
-        QMessageBox.information(self.view, "Modèle créé", f"Modèle catégories créé :\n{path.absolute()}")
+            writer.writerow([
+                "Cahiers", "Papeterie", "Tous formats de cahiers", "", "", "1",
+            ])
+        InfoDialog.success(
+            self.view, "Modele cree",
+            f"Modele categories cree :\n{path.absolute()}",
+        )
 
     # ────────────────────────────────────────────────────────────────
     # UTILISATEURS
@@ -666,34 +772,42 @@ class FileManager(QObject):
 
     @Slot(str)
     def export_users_csv(self, file_path: str):
-        if not self._require_permission("can_manage_users", "exporter la liste des utilisateurs"):
+        if not self._require_permission(
+            "can_manage_users", "exporter la liste des utilisateurs"
+        ):
             return
         try:
             users = self.user_repo.get_all_users()
             if not users:
-                QMessageBox.information(self.view, "Aucune donnée", "Il n'y a aucun utilisateur à exporter.")
+                InfoDialog.info(
+                    self.view, "Aucune donnee",
+                    "Il n'y a aucun utilisateur a exporter.",
+                )
                 return
             path = Path(file_path)
             if not path.suffix:
                 path = path.with_suffix(".csv")
             with open(path, "w", encoding="utf-8-sig", newline="") as f:
                 writer = csv.writer(f, delimiter=";")
-                writer.writerow(["Nom d'utilisateur", "Nom complet", "Email", "Téléphone",
-                                  "Rôle", "Actif", "Dernière connexion"])
+                writer.writerow([
+                    "Nom d'utilisateur", "Nom complet", "Email", "Telephone",
+                    "Role", "Actif", "Derniere connexion",
+                ])
                 for u in users:
                     writer.writerow([
-                        u["username"], u.get("full_name") or "", u.get("email") or "",
-                        u.get("phone") or "", u.get("role_name") or "",
+                        u["username"], u.get("full_name") or "",
+                        u.get("email") or "", u.get("phone") or "",
+                        u.get("role_name") or "",
                         "Oui" if u.get("is_active") else "Non",
                         u.get("last_login_at") or "",
                     ])
             self._report_export(path, len(users), "utilisateur(s)")
-            QMessageBox.information(
-                self.view, "Rappel sécurité",
-                "Cet export ne contient jamais les mots de passe (hachés ou non)."
+            InfoDialog.info(
+                self.view, "Rappel securite",
+                "Cet export ne contient jamais les mots de passe (haches ou non).",
             )
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur d'export", str(e))
+            InfoDialog.error(self.view, "Erreur d'export", str(e))
 
     # ────────────────────────────────────────────────────────────────
     # SAUVEGARDE / RESTAURATION
@@ -703,38 +817,50 @@ class FileManager(QObject):
     def create_backup(self):
         try:
             if not self.db_path.exists():
-                QMessageBox.warning(self.view, "Base introuvable", f"{self.db_path}")
+                InfoDialog.warning(
+                    self.view, "Base introuvable", str(self.db_path)
+                )
                 return
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = self.backup_dir / f"sauvegarde_{timestamp}.db"
             shutil.copy2(str(self.db_path), str(backup_path))
             self._refresh_backups_list()
             size_kb = backup_path.stat().st_size / 1024
-            QMessageBox.information(
-                self.view, "Sauvegarde créée",
-                f"Fichier : {backup_path.name}\nTaille : {size_kb:.1f} KB"
+            InfoDialog.success(
+                self.view, "Sauvegarde creee",
+                f"Fichier : {backup_path.name}\nTaille : {size_kb:.1f} KB",
             )
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur", str(e))
+            InfoDialog.error(self.view, "Erreur", str(e))
 
     @Slot(str)
     def restore_backup(self, backup_path: str):
-        if not self._require_permission("can_configure_system", "restaurer une sauvegarde"):
+        if not self._require_permission(
+            "can_configure_system", "restaurer une sauvegarde"
+        ):
             return
         try:
             path = Path(backup_path)
             if not path.exists():
-                QMessageBox.warning(self.view, "Fichier introuvable", f"{backup_path}")
+                InfoDialog.warning(self.view, "Fichier introuvable", str(backup_path))
                 return
-            reply = QMessageBox.question(
-                self.view, "Confirmer la restauration",
-                f"Cette action remplacera la base de données actuelle par :\n{path.name}\n\n"
-                f"Une sauvegarde automatique de sécurité sera créée avant. Continuer ?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+
+            ok = InfoDialog.question(
+                self.view,
+                "Confirmer la restauration",
+                f"Cette action remplacera la base de donnees actuelle par :\n"
+                f"{path.name}\n\n"
+                "Une sauvegarde automatique de securite sera creee avant. Continuer ?",
+                ok_text="Yes",
+                cancel_text="No",
             )
-            if reply != QMessageBox.Yes:
+            if not ok:
                 return
-            auto_backup = self.backup_dir / f"avant_restauration_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+
+            auto_backup = (
+                self.backup_dir
+                / f"avant_restauration_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+            )
             if self.db_path.exists():
                 shutil.copy2(str(self.db_path), str(auto_backup))
             shutil.copy2(str(path), str(self.db_path))
@@ -742,56 +868,68 @@ class FileManager(QObject):
             if self.current_user:
                 self.user_repo.log_audit(
                     self.current_user.id, "RESTORE_DB", "database", None,
-                    description=f"Restauration depuis {path.name}"
+                    description=f"Restauration depuis {path.name}",
                 )
 
-            QMessageBox.information(
-                self.view, "Restauration réussie",
-                f"Base restaurée depuis {path.name}.\nRedémarrez l'application."
+            InfoDialog.success(
+                self.view, "Restauration reussie",
+                f"Base restauree depuis {path.name}.\nRedemarrez l'application.",
             )
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur", str(e))
+            InfoDialog.error(self.view, "Erreur", str(e))
 
     @Slot(str)
     def delete_backup(self, backup_path: str):
-        if not self._require_permission("can_configure_system", "supprimer une sauvegarde"):
+        if not self._require_permission(
+            "can_configure_system", "supprimer une sauvegarde"
+        ):
             return
         try:
             path = Path(backup_path)
-            reply = QMessageBox.question(
-                self.view, "Supprimer la sauvegarde",
-                f"Supprimer définitivement {path.name} ?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            ok = InfoDialog.question(
+                self.view,
+                "Supprimer la sauvegarde",
+                f"Supprimer definitivement {path.name} ?",
+                ok_text="Yes",
+                cancel_text="No",
             )
-            if reply != QMessageBox.Yes:
+            if not ok:
                 return
             path.unlink()
             self._refresh_backups_list()
+            InfoDialog.success(
+                self.view, "Sauvegarde supprimee",
+                f"{path.name} a ete supprime.",
+            )
         except Exception as e:
-            QMessageBox.critical(self.view, "Erreur", str(e))
+            InfoDialog.error(self.view, "Erreur", str(e))
 
     # ────────────────────────────────────────────────────────────────
     # HELPERS
     # ────────────────────────────────────────────────────────────────
 
     def _report_result(self, label: str, imported: int, errors: list):
-        msg = f"Import terminé.\n\n{imported} {label} traité(s) avec succès."
+        msg = f"Import termine.\n\n{imported} {label} traite(s) avec succes."
         if errors:
             msg += f"\n\n{len(errors)} erreur(s) :\n" + "\n".join(errors[:10])
             if len(errors) > 10:
                 msg += f"\n... et {len(errors) - 10} autre(s)."
-            QMessageBox.warning(self.view, "Import partiel", msg)
+            InfoDialog.warning(self.view, "Import partiel", msg)
         else:
-            QMessageBox.information(self.view, "Import réussi", msg)
+            InfoDialog.success(self.view, "Import reussi", msg)
 
     def _report_export(self, path: Path, count: int, label: str):
         size_kb = path.stat().st_size / 1024
-        QMessageBox.information(
-            self.view, "Export réussi",
-            f"{count} {label} exporté(s).\n\nFichier : {path.name}\nTaille : {size_kb:.1f} KB"
+        InfoDialog.success(
+            self.view, "Export reussi",
+            f"{count} {label} exporte(s).\n\n"
+            f"Fichier : {path.name}\nTaille : {size_kb:.1f} KB",
         )
 
     def set_theme(self, is_dark: bool):
         if self.view is not None:
             self.view.set_theme(is_dark)
-            print(f"[FileManager] Theme applique: {'dark' if is_dark else 'light'}")
+            print(
+                f"[FileManager] Theme applique: "
+                f"{'dark' if is_dark else 'light'}"
+            )

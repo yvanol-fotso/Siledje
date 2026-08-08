@@ -8,10 +8,11 @@ load_dotenv()
 import sys
 import os
 
-# Utiliser compat pour la compatibilité PySide6/PyQt5
 from src.utils.compat import QApplication, QCoreApplication, qt_exec
+from PySide6.QtWidgets import QStyleFactory
+
 from src.ui.windows.main_window import MainWindow
-from src.ui.windows.login_window import LoginDialog 
+from src.ui.windows.login_window import LoginDialog
 from src.utils.theme_manager import ThemeManager
 from src.utils.config import AppConfig
 from src.managers.auth.auth_manager import AuthManager
@@ -19,20 +20,11 @@ from src.managers.auth.auth_manager import AuthManager
 from src.managers.license.license_manager import LicenseManager, LicenseStatus
 from src.ui.windows.license_window import LicenseDialog
 from src.database.migrations.migration_manager import run_migrations
+
 run_migrations()
 
 
 def main():
-    """
-    Fonction principale de l'application.
-
-    Étapes:
-    1. Configuration de l'application Qt
-    2. Initialisation du thème et de l'authentification
-    3. Affichage de la fenêtre de connexion
-    4. Si authentification réussie, lancement de la fenêtre principale
-    """
-
     print("=" * 50)
     print("Démarrage de Siledje...")
     print("=" * 50)
@@ -44,7 +36,9 @@ def main():
     QCoreApplication.setApplicationVersion("1.0.0")
 
     app = QApplication(sys.argv)
-    app.setStyle('Fusion')
+
+    # Fusion : obligatoire pour QCheckBox / QRadioButton / QComboBox sous Windows
+    app.setStyle(QStyleFactory.create("Fusion"))
 
     # ========== CONFIGURATION ==========
     config = AppConfig()
@@ -53,10 +47,11 @@ def main():
     # ========== THÈME ==========
     theme_manager = ThemeManager(config)
     current_theme = theme_manager.get_current_theme()
-    theme_manager.set_theme(current_theme)
+    # force=True : re-émet theme_changed même si le thème est déjà chargé
+    theme_manager.set_theme(current_theme, force=True)
     print(f"Theme actuel: {current_theme}")
 
-     # ========== VÉRIFICATION DE LICENCE ==========
+    # ========== VÉRIFICATION DE LICENCE ==========
     license_manager = LicenseManager()
     status = license_manager.check_current_license()
 
@@ -72,7 +67,6 @@ def main():
             sys.exit(0)
 
     print(f"✅ Licence valide - Plan: {license_manager.current_license['plan']}")
-
 
     # ========== AUTHENTIFICATION ==========
     auth_manager = AuthManager()

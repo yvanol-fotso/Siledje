@@ -1,11 +1,10 @@
 """
-Modele de tableau pour la gestion des roles et permissions.
+Tableau roles — ThemedTable + liste des permissions.
 """
 
-from PySide6.QtCore import QAbstractTableModel, Qt
+from PySide6.QtWidgets import QHeaderView
+from src.ui.widgets.themed_table import ThemedTable
 
-
-# Permissions disponibles
 AVAILABLE_PERMISSIONS = [
     ("can_manage_stock", "Gestion du stock"),
     ("can_manage_users", "Gestion des utilisateurs"),
@@ -17,62 +16,45 @@ AVAILABLE_PERMISSIONS = [
 ]
 
 
-class RoleTableModel(QAbstractTableModel):
-    """Modele de tableau pour les roles."""
+class SecurityRolesTable(ThemedTable):
+    COLUMNS = ["ID", "Nom du role", "Description", "Permissions actives"]
 
-    HEADERS = ["ID", "Nom du role", "Description", "Permissions actives"]
+    def __init__(self, parent=None):
+        super().__init__(
+            self.COLUMNS,
+            parent=parent,
+            object_name="securityTable",
+            row_height=40,
+        )
+        self._roles: list = []
+        self.set_column_resize_modes({
+            0: QHeaderView.ResizeToContents,
+            1: QHeaderView.Interactive,
+            2: QHeaderView.Stretch,
+            3: QHeaderView.ResizeToContents,
+        })
 
-    def __init__(self, roles: list = None):
-        super().__init__()
-        self._roles = roles or []
+    def set_roles(self, roles: list):
+        self._roles = list(roles or [])
+        if not self._roles:
+            self.set_empty_message("Aucun role")
+            return
+        rows = []
+        n = len(AVAILABLE_PERMISSIONS)
+        for r in self._roles:
+            active = sum(1 for key, _ in AVAILABLE_PERMISSIONS if r.get(key, 0))
+            rows.append({
+                "ID": str(r.get("id", "")),
+                "Nom du role": r.get("name", ""),
+                "Description": r.get("description") or "-",
+                "Permissions actives": f"{active}/{n} permission(s)",
+            })
+        self.set_rows(rows)
 
-    def rowCount(self, parent=None):
-        return len(self._roles)
-
-    def columnCount(self, parent=None):
-        return len(self.HEADERS)
-
-    def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid():
-            return None
-        
-        r = self._roles[index.row()]
-        col = index.column()
-
-        if role == Qt.DisplayRole:
-            if col == 0:
-                return str(r.get("id", ""))
-            elif col == 1:
-                return r.get("name", "")
-            elif col == 2:
-                return r.get("description") or "-"
-            elif col == 3:
-                active_count = sum(1 for key, _ in AVAILABLE_PERMISSIONS if r.get(key, 0))
-                return f"{active_count}/{len(AVAILABLE_PERMISSIONS)} permission(s)"
-        
-        if role == Qt.TextAlignmentRole:
-            return Qt.AlignCenter
-        
-        if role == Qt.UserRole:
-            return r
-
-        return None
-
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
-        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self.HEADERS[section]
-        return None
-
-    def get_role(self, row: int) -> dict:
+    def get_role(self, row: int) -> dict | None:
         if 0 <= row < len(self._roles):
             return self._roles[row]
         return None
 
-    def set_roles(self, roles: list):
-        self.beginResetModel()
-        self._roles = roles
-        self.endResetModel()
-
-    def refresh(self):
-        self.beginResetModel()
-        self.endResetModel()
+    def get_selected_role(self) -> dict | None:
+        return self.get_role(self.currentRow())

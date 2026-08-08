@@ -1,67 +1,54 @@
 """
-Modele de tableau pour la gestion des fournisseurs.
+Tableau fournisseurs — ThemedTable.
 """
 
-from PySide6.QtCore import QAbstractTableModel, Qt
+from PySide6.QtWidgets import QHeaderView
+from src.ui.widgets.themed_table import ThemedTable
 
 
-class SupplierTableModel(QAbstractTableModel):
-    """Modele de tableau pour les fournisseurs."""
+class SupplierTable(ThemedTable):
+    COLUMNS = ["ID", "Nom", "Contact", "Telephone", "Email", "Ville", "Actif"]
 
-    HEADERS = ["ID", "Nom", "Contact", "Telephone", "Email", "Ville", "Actif"]
+    def __init__(self, parent=None):
+        super().__init__(
+            self.COLUMNS,
+            parent=parent,
+            object_name="supplierTable",
+            row_height=40,
+        )
+        self._suppliers: list = []
+        self.set_column_resize_modes({
+            0: QHeaderView.ResizeToContents,
+            1: QHeaderView.Stretch,
+            2: QHeaderView.Interactive,
+            3: QHeaderView.ResizeToContents,
+            4: QHeaderView.Stretch,
+            5: QHeaderView.ResizeToContents,
+            6: QHeaderView.ResizeToContents,
+        })
 
-    def __init__(self, suppliers: list = None):
-        super().__init__()
-        self._suppliers = suppliers or []
+    def set_suppliers(self, suppliers: list):
+        self._suppliers = list(suppliers or [])
+        if not self._suppliers:
+            self.set_empty_message("Aucun fournisseur")
+            return
+        rows = []
+        for s in self._suppliers:
+            rows.append({
+                "ID": str(s.get("id", "")),
+                "Nom": s.get("name", ""),
+                "Contact": s.get("contact_name") or "-",
+                "Telephone": s.get("phone") or "-",
+                "Email": s.get("email") or "-",
+                "Ville": s.get("city") or "-",
+                "Actif": "Oui" if s.get("is_active", 1) else "Non",
+            })
+        self.set_rows(rows)
 
-    def rowCount(self, parent=None):
-        return len(self._suppliers)
-
-    def columnCount(self, parent=None):
-        return len(self.HEADERS)
-
-    def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid():
-            return None
-        
-        s = self._suppliers[index.row()]
-        col = index.column()
-
-        if role == Qt.DisplayRole:
-            values = [
-                str(s.get("id", "")),
-                s.get("name", ""),
-                s.get("contact_name") or "-",
-                s.get("phone") or "-",
-                s.get("email") or "-",
-                s.get("city") or "-",
-                "Oui" if s.get("is_active", 1) else "Non",
-            ]
-            return values[col]
-        
-        if role == Qt.TextAlignmentRole:
-            return Qt.AlignVCenter | Qt.AlignLeft
-        
-        if role == Qt.UserRole:
-            return s
-
-        return None
-
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
-        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self.HEADERS[section]
-        return None
-
-    def get_supplier(self, row: int) -> dict:
+    def get_supplier(self, row: int) -> dict | None:
         if 0 <= row < len(self._suppliers):
             return self._suppliers[row]
         return None
 
-    def set_suppliers(self, suppliers: list):
-        self.beginResetModel()
-        self._suppliers = suppliers
-        self.endResetModel()
-
-    def refresh(self):
-        self.beginResetModel()
-        self.endResetModel()
+    def get_selected_supplier(self) -> dict | None:
+        return self.get_supplier(self.currentRow())

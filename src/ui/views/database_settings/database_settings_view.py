@@ -1,17 +1,20 @@
 """
 Vue de gestion de la base de données - Interface utilisateur moderne.
 Herite de BaseView pour une structure coherente.
-Support complet Dark/Light avec design moderne.
+Boutons = CustomButton, dialogues = InfoDialog (via manager).
+CSS local uniquement pour ce qui n'est pas deja couvert par BaseView.
 """
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QFrame, QGridLayout, QScrollArea
+    QFrame, QGridLayout, QScrollArea, QSizePolicy
 )
-from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen, QFont
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen
 
-from src.ui.views.base.base_view import BaseView, Palette
+from src.ui.views.base.base_view import BaseView
+from src.ui.views.base.palette import Palette
+from src.ui.widgets.custom_button import primary_btn, outline_btn, CustomButton
 from src.utils.helpers import get_asset_path
 
 
@@ -116,7 +119,8 @@ class DatabaseSettingsView(BaseView):
         # Initialiser les composants
         self._init_header()
         self._init_scroll_content()
-        self._apply_theme_styles()
+        self._apply_local_styles()
+        self._restyle_all_buttons()
 
     def _init_header(self):
         """En-tete avec gradient."""
@@ -209,16 +213,22 @@ class DatabaseSettingsView(BaseView):
         buttons_grid = QGridLayout()
         buttons_grid.setSpacing(15)
 
+        # NOTE: couleur distincte par action non conservee (CustomButton
+        # ne supporte que primary/outline dans les vues deja vues).
         buttons_config = [
-            ("Optimiser la BDD", "refresh", "#3498db", self.optimize_requested),
-            ("Verifier l'integrite", "shield", "#2ecc71", self.check_integrity_requested),
-            ("Creer une sauvegarde", "package", "#e67e22", self.backup_requested),
-            ("Actualiser les stats", "refresh", "#95a5a6", self.refresh_stats_requested),
+            ("Optimiser la BDD", "refresh", primary_btn, self.optimize_requested),
+            ("Verifier l'integrite", "shield", primary_btn, self.check_integrity_requested),
+            ("Creer une sauvegarde", "package", outline_btn, self.backup_requested),
+            ("Actualiser les stats", "refresh", outline_btn, self.refresh_stats_requested),
         ]
 
         row, col = 0, 0
-        for text, icon_name, color, signal in buttons_config:
-            btn = self._make_action_button(text, icon_name, color, signal)
+        for text, icon_name, btn_factory, signal in buttons_config:
+            btn = btn_factory(text, icon_name)
+            btn.setMinimumHeight(55)
+            btn.setMinimumWidth(180)
+            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            btn.clicked.connect(signal.emit)
             buttons_grid.addWidget(btn, row, col)
             col += 1
             if col >= 2:
@@ -227,20 +237,6 @@ class DatabaseSettingsView(BaseView):
 
         layout.addLayout(buttons_grid)
         return layout
-
-    def _make_action_button(self, text: str, icon_name: str, color: str, signal: Signal) -> QPushButton:
-        btn = QPushButton(text)
-        btn.setMinimumHeight(55)
-        btn.setMinimumWidth(180)
-        btn.setCursor(Qt.PointingHandCursor)
-        btn.setObjectName("actionBtn")
-
-        px = load_svg_icon(icon_name, size=20)
-        btn.setIcon(QIcon(px))
-        btn.setIconSize(QSize(20, 20))
-
-        btn.clicked.connect(signal.emit)
-        return btn
 
     def _create_info_box(self) -> QFrame:
         info_box = QFrame()
@@ -277,31 +273,24 @@ class DatabaseSettingsView(BaseView):
 
         return info_box
 
+    def _restyle_all_buttons(self):
+        is_dark = getattr(self, "_is_dark", False)
+        for btn in self.findChildren(CustomButton):
+            btn.apply_theme(is_dark)
+
     # ========== SUPPORT THEME ==========
 
     def set_theme(self, is_dark: bool):
-        """Applique le theme."""
+        """Applique le theme (BaseView pose deja QLabel/QScrollBar generiques)."""
         super().set_theme(is_dark)
-        self._apply_theme_styles()
+        self._apply_local_styles()
+        self._restyle_all_buttons()
 
-    def _apply_theme_styles(self):
-        """Applique les styles selon le theme."""
-        if self._is_dark:
-            border = "#3d3d5c"
-            bg = "#2d2d44"
-            text = "#e0e0e0"
-            info_bg = "#2d2d44"
-            info_border = "#3d3d5c"
-            card_border = "#3d3d5c"
-        else:
-            border = "#bdc3c7"
-            bg = "#ffffff"
-            text = "#2c3e50"
-            info_bg = "#f8f9fa"
-            info_border = "#bdc3c7"
-            card_border = "#bdc3c7"
+    def _apply_local_styles(self):
+        """Styles propres a cette vue : header gradient, stat cards, info box,
+        scroll area. QLabel/QScrollBar generiques deja geres par BaseView."""
+        colors = Palette.get_theme_colors(getattr(self, "_is_dark", False))
 
-        # Style header (gardé avec gradient)
         self.setStyleSheet(self.styleSheet() + f"""
             QFrame#dbHeader {{
                 background: qlineargradient(
@@ -322,7 +311,7 @@ class DatabaseSettingsView(BaseView):
             QLabel#sectionTitle {{
                 font-size: 18px;
                 font-weight: bold;
-                color: {text};
+                color: {colors['text']};
             }}
             QScrollArea#scrollArea {{
                 background: transparent;
@@ -332,9 +321,9 @@ class DatabaseSettingsView(BaseView):
                 background: transparent;
             }}
             QFrame#statCard {{
-                border: 1px solid {card_border};
+                border: 1px solid {colors['border']};
                 border-radius: 12px;
-                background: {bg};
+                background: {colors['bg']};
             }}
             QFrame#statCard:hover {{
                 border: 2px solid #3498db;
@@ -342,63 +331,29 @@ class DatabaseSettingsView(BaseView):
             QLabel#cardTitle {{
                 font-size: 14px;
                 font-weight: 600;
-                color: {text};
+                color: {colors['text']};
             }}
             QLabel#cardValue {{
                 font-size: 32px;
                 font-weight: bold;
-                color: {text};
+                color: {colors['text']};
                 margin-top: 10px;
-            }}
-            QPushButton#actionBtn {{
-                background-color: #3498db;
-                color: white;
-                padding: 15px 25px;
-                border: none;
-                border-radius: 10px;
-                font-weight: bold;
-                font-size: 15px;
-                text-align: left;
-            }}
-            QPushButton#actionBtn:hover {{
-                background-color: #2980b9;
-            }}
-            QPushButton#actionBtn:pressed {{
-                background-color: #21618c;
             }}
             QFrame#infoBox {{
                 border-left: 4px solid #3498db;
                 border-radius: 8px;
-                background: {info_bg};
-                border: 1px solid {info_border};
+                background: {colors['bg']};
+                border: 1px solid {colors['border']};
                 border-left-width: 4px;
             }}
             QLabel#infoTitle {{
                 font-size: 16px;
                 font-weight: bold;
-                color: {text};
+                color: {colors['text']};
             }}
             QLabel#infoText {{
                 font-size: 13px;
-                color: {text};
-            }}
-            QScrollBar:vertical {{
-                border: none;
-                background: transparent;
-                width: 12px;
-                border-radius: 6px;
-            }}
-            QScrollBar::handle:vertical {{
-                background: #27ae60;
-                min-height: 20px;
-                border-radius: 6px;
-            }}
-            QScrollBar::handle:vertical:hover {{
-                background: #2ecc71;
-            }}
-            QScrollBar::add-line:vertical,
-            QScrollBar::sub-line:vertical {{
-                height: 0px;
+                color: {colors['text']};
             }}
         """)
 

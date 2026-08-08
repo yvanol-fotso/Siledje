@@ -1,13 +1,12 @@
 """
-Modèle de tableau pour l'administration des utilisateurs.
+Tableau utilisateurs admin — ThemedTable + AdminUserRow.
 """
 
-from PySide6.QtCore import QAbstractTableModel, Qt
+from PySide6.QtWidgets import QHeaderView
+from src.ui.widgets.themed_table import ThemedTable
 
 
 class AdminUserRow:
-    """Ligne d'affichage pour le tableau admin."""
-    
     def __init__(self, id, username, name, email, role, is_active, last_login):
         self.id = id
         self.username = username
@@ -30,66 +29,53 @@ class AdminUserRow:
         )
 
 
-class AdminTableModel(QAbstractTableModel):
-    """Modèle de table pour les utilisateurs."""
+class AdminUsersTable(ThemedTable):
+    COLUMNS = [
+        "ID", "Nom d'utilisateur", "Nom complet", "Email",
+        "Role", "Statut", "Derniere connexion",
+    ]
 
-    HEADERS = ["ID", "Nom d'utilisateur", "Nom complet", "Email",
-               "Rôle", "Statut", "Dernière connexion"]
+    def __init__(self, parent=None):
+        super().__init__(
+            self.COLUMNS,
+            parent=parent,
+            object_name="adminTable",
+            row_height=40,
+        )
+        self._users: list = []
+        self.set_column_resize_modes({
+            0: QHeaderView.ResizeToContents,
+            1: QHeaderView.Interactive,
+            2: QHeaderView.Stretch,
+            3: QHeaderView.Stretch,
+            4: QHeaderView.ResizeToContents,
+            5: QHeaderView.ResizeToContents,
+            6: QHeaderView.ResizeToContents,
+        })
 
-    def __init__(self, users: list = None):
-        super().__init__()
-        self._users = users or []
+    def set_users(self, users: list):
+        """users = liste d'AdminUserRow."""
+        self._users = list(users or [])
+        if not self._users:
+            self.set_empty_message("Aucun utilisateur")
+            return
+        rows = []
+        for u in self._users:
+            rows.append({
+                "ID": str(u.id),
+                "Nom d'utilisateur": u.username,
+                "Nom complet": u.name,
+                "Email": u.email,
+                "Role": u.role,
+                "Statut": "Actif" if u.is_active else "Inactif",
+                "Derniere connexion": u.last_login or "Jamais",
+            })
+        self.set_rows(rows)
 
-    def rowCount(self, parent=None):
-        return len(self._users)
-
-    def columnCount(self, parent=None):
-        return len(self.HEADERS)
-
-    def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid():
-            return None
-        
-        user = self._users[index.row()]
-        col = index.column()
-
-        if role == Qt.DisplayRole:
-            values = [
-                str(user.id),
-                user.username,
-                user.name,
-                user.email,
-                user.role,
-                "Actif" if user.is_active else "Inactif",
-                user.last_login or "Jamais",
-            ]
-            return values[col]
-        
-        if role == Qt.TextAlignmentRole:
-            return Qt.AlignCenter
-        
-        if role == Qt.UserRole:
-            return user
-
-        return None
-
-    def headerData(self, section, orientation, role):
-        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self.HEADERS[section]
-        return None
-
-    def get_user(self, row) -> AdminUserRow:
+    def get_user(self, row: int) -> AdminUserRow | None:
         if 0 <= row < len(self._users):
             return self._users[row]
         return None
 
-    def set_users(self, users: list):
-        """Remplace toutes les données et rafraîchit le tableau."""
-        self.beginResetModel()
-        self._users = users
-        self.endResetModel()
-
-    def refresh(self):
-        """Rafraîchit le modèle."""
-        self.beginResetModel()
-        self.endResetModel()
+    def get_selected_user(self) -> AdminUserRow | None:
+        return self.get_user(self.currentRow())

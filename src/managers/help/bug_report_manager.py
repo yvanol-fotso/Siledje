@@ -7,13 +7,14 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Slot
-from PySide6.QtWidgets import QMessageBox
+
+from src.ui.widgets.InfoDialog import InfoDialog
 
 
 class BugReportManager(QObject):
     """Gere la soumission et la sauvegarde locale des rapports de bugs."""
 
-    version = "1.0.0"
+    version = "1.1.0"
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -52,7 +53,7 @@ class BugReportManager(QObject):
             if self.view:
                 self.view.reset_form()
 
-            QMessageBox.information(
+            InfoDialog.success(
                 self.parent_window,
                 "Rapport envoye",
                 f"Merci pour votre signalement.\n\n"
@@ -62,7 +63,7 @@ class BugReportManager(QObject):
 
         except Exception as e:
             print(f"[BugReportManager] ERREUR: {e}")
-            QMessageBox.critical(
+            InfoDialog.error(
                 self.parent_window, "Erreur",
                 f"Impossible de sauvegarder le rapport:\n{e}"
             )

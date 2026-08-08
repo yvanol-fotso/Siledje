@@ -1,39 +1,22 @@
 """
-Vue des rapports et statistiques - Interface utilisateur uniquement.
-Herite de BaseView pour une structure coherente.
-Support complet Dark/Light avec design moderne.
+Vue des rapports et statistiques — unifiée.
+CustomButton + ThemedTable + Palette (pas de styles locaux hardcodés).
 """
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QLabel, QTableWidget, QTableWidgetItem, QComboBox,
-    QDateEdit, QGroupBox, QHeaderView, QSpacerItem, QSizePolicy
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QComboBox, QDateEdit, QGroupBox, QSizePolicy,
 )
-from PySide6.QtCore import Qt, QDate, Signal, QSize
-from PySide6.QtGui import QFont, QIcon, QPixmap
+from PySide6.QtCore import Qt, QDate, Signal
+from PySide6.QtGui import QColor
 
-from src.ui.views.base.base_view import BaseView, Palette
-from src.utils.helpers import get_asset_path
-
-
-def load_svg_icon(icon_name: str, size: int = 24) -> QPixmap:
-    try:
-        icon_path = get_asset_path("icons", f"{icon_name}.svg")
-        if not icon_path.exists():
-            return QPixmap()
-        icon = QIcon(str(icon_path))
-        if icon.isNull():
-            return QPixmap()
-        pixmap = icon.pixmap(size, size)
-        return pixmap if not pixmap.isNull() else QPixmap()
-    except Exception as e:
-        print(f"Erreur icone {icon_name}: {e}")
-        return QPixmap()
+from src.ui.views.base.base_view import BaseView
+from src.ui.views.base.palette import Palette
+from src.ui.widgets.custom_button import success_btn, primary_btn, CustomButton
+from src.ui.views.report.report_table import ReportResultsTable
 
 
 class ReportView(BaseView):
-    """Vue des rapports et statistiques. Herite de BaseView."""
-
     period_changed = Signal(str)
     date_range_changed = Signal(QDate, QDate)
     export_csv_requested = Signal()
@@ -43,7 +26,7 @@ class ReportView(BaseView):
         super().__init__(
             parent=parent,
             title="Rapports et Statistiques",
-            icon_name="bar-chart"
+            icon_name="bar-chart",
         )
 
         self.period_combo = None
@@ -54,9 +37,9 @@ class ReportView(BaseView):
         self.avg_sale = None
         self.total_items = None
         self.top_product = None
+        self._stat_labels = []
         self._last_selected_row = -1
 
-        # Reconstruire le contenu
         self.main_layout.removeWidget(self.content_area)
         self.content_area.deleteLater()
         self.content_area = QWidget()
@@ -65,15 +48,18 @@ class ReportView(BaseView):
         self.content_area.setLayout(self.content_layout)
         self.main_layout.addWidget(self.content_area, 1)
 
-        # Initialiser les composants
         self._init_controls()
         self._init_table()
         self._init_stats()
         self._connect_signals()
+        self._restyle_all_buttons()
         self._apply_theme_styles()
 
+    # ──────────────────────────────────────────────
+    # UI
+    # ──────────────────────────────────────────────
+
     def _init_controls(self):
-        """Section des controles."""
         group = QGroupBox("Parametres du Rapport")
         group.setObjectName("controlsGroup")
 
@@ -81,26 +67,19 @@ class ReportView(BaseView):
         layout.setSpacing(12)
         layout.setContentsMargins(16, 12, 16, 12)
 
-        lbl_style = "font-size: 13px; font-weight: normal;"
-
-        # Periode
-        lbl_per = QLabel("Periode:")
-        lbl_per.setStyleSheet(lbl_style)
-        layout.addWidget(lbl_per)
+        layout.addWidget(QLabel("Periode:"))
 
         self.period_combo = QComboBox()
-        self.period_combo.addItems(["Journalier", "Hebdomadaire", "Mensuel", "Annuel", "Personnalise"])
+        self.period_combo.addItems([
+            "Journalier", "Hebdomadaire", "Mensuel", "Annuel", "Personnalise",
+        ])
         self.period_combo.setFixedWidth(150)
         self.period_combo.setMinimumHeight(36)
         self.period_combo.setObjectName("periodCombo")
         layout.addWidget(self.period_combo)
 
         layout.addSpacing(16)
-
-        # Du
-        lbl_du = QLabel("Du:")
-        lbl_du.setStyleSheet(lbl_style)
-        layout.addWidget(lbl_du)
+        layout.addWidget(QLabel("Du:"))
 
         self.start_date = QDateEdit(QDate.currentDate())
         self.start_date.setDisplayFormat("dd/MM/yyyy")
@@ -110,10 +89,7 @@ class ReportView(BaseView):
         self.start_date.setObjectName("dateEdit")
         layout.addWidget(self.start_date)
 
-        # Au
-        lbl_au = QLabel("au:")
-        lbl_au.setStyleSheet(lbl_style)
-        layout.addWidget(lbl_au)
+        layout.addWidget(QLabel("au:"))
 
         self.end_date = QDateEdit(QDate.currentDate())
         self.end_date.setDisplayFormat("dd/MM/yyyy")
@@ -125,115 +101,80 @@ class ReportView(BaseView):
 
         layout.addStretch()
 
-        export_btn = self._make_action_btn(
-            "Export CSV", "download", "#2ecc71", "#27ae60",
-            "#1e8449", w=120, slot=lambda: self.export_csv_requested.emit()
+        self.export_btn = success_btn(
+            "Export CSV", "download",
+            lambda: self.export_csv_requested.emit(),
         )
-        layout.addWidget(export_btn)
+        self.export_btn.setMinimumWidth(130)
+        self.export_btn.setMinimumHeight(36)
+        layout.addWidget(self.export_btn)
 
-        print_btn = self._make_action_btn(
-            "Imprimer", "printer", "#3498db", "#2980b9",
-            "#21618c", w=120, slot=lambda: self.print_report_requested.emit()
+        self.print_btn = primary_btn(
+            "Imprimer", "printer",
+            lambda: self.print_report_requested.emit(),
         )
-        layout.addWidget(print_btn)
+        self.print_btn.setMinimumWidth(120)
+        self.print_btn.setMinimumHeight(36)
+        layout.addWidget(self.print_btn)
 
         group.setLayout(layout)
         self.content_layout.addWidget(group)
 
     def _init_table(self):
-        """Tableau des resultats."""
-        self.results_table = QTableWidget()
-        self.results_table.setColumnCount(7)
-        self.results_table.setHorizontalHeaderLabels([
-            "N° Facture", "Date/Heure", "Client", "Produits",
-            "Quantite", "Total", "Paiement"
-        ])
-        self.results_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.results_table.setAlternatingRowColors(False)
-        self.results_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.results_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.results_table.setSelectionMode(QTableWidget.SingleSelection)
-        self.results_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.results_table.verticalHeader().setDefaultSectionSize(38)
-        self.results_table.setObjectName("reportTable")
+        self.results_table = ReportResultsTable()
+        self.results_table.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding
+        )
         self.results_table.clicked.connect(self._on_row_clicked)
-
         self.content_layout.addWidget(self.results_table, 1)
 
     def _init_stats(self):
-        """Section des statistiques."""
         group = QGroupBox("Statistiques")
         group.setObjectName("statsGroup")
 
         layout = QHBoxLayout()
-        layout.setSpacing(20)
+        layout.setSpacing(16)
         layout.setContentsMargins(16, 12, 16, 12)
 
-        self.total_sales = self._create_stat_label(
-            "Total Ventes: 0 FCFA",
-            "#2ecc71",
-            "rgba(46, 204, 113, 0.10)"
-        )
-        self.avg_sale = self._create_stat_label(
-            "Moyenne/vente: 0 FCFA",
-            "#567ba1",
-            "rgba(86, 123, 161, 0.10)"
-        )
-        self.total_items = self._create_stat_label(
-            "Articles vendus: 0",
-            "#f39c12",
-            "rgba(243, 156, 18, 0.10)"
-        )
-        self.top_product = self._create_stat_label(
-            "Produit top: -",
-            "#9b59b6",
-            "rgba(155, 89, 182, 0.10)"
-        )
+        self.total_sales = self._create_stat_label("Total Ventes: 0 FCFA")
+        self.avg_sale = self._create_stat_label("Moyenne/vente: 0 FCFA")
+        self.total_items = self._create_stat_label("Articles vendus: 0")
+        self.top_product = self._create_stat_label("Produit top: -")
 
-        for w in [self.total_sales, self.avg_sale, self.total_items, self.top_product]:
+        self._stat_labels = [
+            self.total_sales, self.avg_sale,
+            self.total_items, self.top_product,
+        ]
+        for w in self._stat_labels:
             layout.addWidget(w)
 
         layout.addStretch()
         group.setLayout(layout)
         self.content_layout.addWidget(group)
+        self._refresh_stat_styles()
 
-    def _create_stat_label(self, text: str, color: str, bg: str) -> QLabel:
+    def _create_stat_label(self, text: str) -> QLabel:
         lbl = QLabel(text)
-        lbl.setStyleSheet(f"""
-            font-size: 13px;
-            font-weight: bold;
-            color: {color};
-            padding: 10px 16px;
-            background-color: {bg};
-            border-radius: 6px;
-        """)
+        lbl.setObjectName("statChip")
         return lbl
 
-    def _make_action_btn(self, label, icon_name, bg, hover, pressed, w=120, slot=None) -> QPushButton:
-        btn = QPushButton(label)
-        btn.setMinimumHeight(36)
-        btn.setMinimumWidth(w)
-        btn.setCursor(Qt.PointingHandCursor)
-        px = load_svg_icon(icon_name, size=16)
-        if not px.isNull():
-            btn.setIcon(QIcon(px))
-            btn.setIconSize(QSize(16, 16))
-        btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {bg};
-                color: white;
-                padding: 6px 14px;
-                border: none;
-                border-radius: 6px;
-                font-weight: bold;
-                font-size: 13px;
-            }}
-            QPushButton:hover   {{ background-color: {hover};   }}
-            QPushButton:pressed {{ background-color: {pressed}; }}
-        """)
-        if slot:
-            btn.clicked.connect(slot)
-        return btn
+    def _refresh_stat_styles(self):
+        """Couleurs des chips stats selon le thème (Palette uniquement)."""
+        is_dark = getattr(self, "_is_dark", False)
+        accent = Palette.TEAL if is_dark else Palette.ACCENT
+        chips = [
+            (self.total_sales, Palette.SUCCESS, "rgba(46, 204, 113, 0.12)"),
+            (self.avg_sale, accent, "rgba(86, 123, 161, 0.12)"),
+            (self.total_items, Palette.WARNING, "rgba(243, 156, 18, 0.12)"),
+            (self.top_product, Palette.INFO, "rgba(52, 152, 219, 0.12)"),
+        ]
+        for lbl, color, bg in chips:
+            if lbl is None:
+                continue
+            lbl.setStyleSheet(
+                f"font-size: 13px; font-weight: bold; color: {color};"
+                f"padding: 10px 16px; background-color: {bg}; border-radius: 6px;"
+            )
 
     def _connect_signals(self):
         self.period_combo.currentTextChanged.connect(self._on_period_changed)
@@ -242,12 +183,13 @@ class ReportView(BaseView):
 
     def _on_row_clicked(self, index):
         row = index.row()
-        if self.results_table.selectionModel().isRowSelected(row, index.parent()):
-            self.results_table.selectionModel().clearSelection()
-            self.results_table.selectionModel().clearCurrentIndex()
+        sm = self.results_table.selectionModel()
+        if sm.isRowSelected(row, index.parent()):
+            sm.clearSelection()
+            sm.clearCurrentIndex()
             self._last_selected_row = -1
         else:
-            self.results_table.selectionModel().clearSelection()
+            sm.clearSelection()
             self.results_table.selectRow(row)
             self._last_selected_row = row
 
@@ -255,215 +197,101 @@ class ReportView(BaseView):
         self.period_changed.emit(period)
 
     def _on_date_changed(self):
-        self.date_range_changed.emit(self.start_date.date(), self.end_date.date())
+        self.date_range_changed.emit(
+            self.start_date.date(), self.end_date.date()
+        )
 
-    # ========== SUPPORT THEME ==========
+    # ──────────────────────────────────────────────
+    # Thème
+    # ──────────────────────────────────────────────
 
     def set_theme(self, is_dark: bool):
-        super().set_theme(is_dark)
+        self._is_dark = is_dark
+        try:
+            self.results_table.apply_theme(is_dark)
+        except Exception as e:
+            print(f"[ReportView] theme table: {e}")
+        self._restyle_all_buttons()
+        self._refresh_stat_styles()
         self._apply_theme_styles()
 
+    def _restyle_all_buttons(self):
+        is_dark = getattr(self, "_is_dark", False)
+        for btn in self.findChildren(CustomButton):
+            btn.apply_theme(is_dark)
+            btn.setMinimumHeight(36)
+
     def _apply_theme_styles(self):
-        """Applique les styles selon le theme - avec couleurs en dur."""
-        if self._is_dark:
-            border = "#3d3d5c"
-            text = "#e0e0e0"
-            bg = "#2d2d44"
-            scroll_bg = "#1e1e2e"
-            scroll_handle = "#3d3d5c"
-            scroll_hover = "#4a4a6a"
-            selection = "#4a6a8a"
-            row_hover = "rgba(86, 123, 161, 0.20)"
-        else:
-            border = "#bdc3c7"
-            text = "#2c3e50"
-            bg = "#ffffff"
-            scroll_bg = "#d5d8dc"
-            scroll_handle = "#aab7b8"
-            scroll_hover = "#95a5a6"
-            selection = "#7895b4"
-            row_hover = "rgba(86, 123, 161, 0.10)"
+        super()._apply_theme_styles()
+        colors = Palette.get_theme_colors(getattr(self, "_is_dark", False))
+        accent = Palette.TEAL if self._is_dark else Palette.ACCENT
 
         self.setStyleSheet(self.styleSheet() + f"""
-            QGroupBox#controlsGroup {{
-                font-size: 14px;
-                font-weight: bold;
-                border: 2px solid {border};
-                border-radius: 8px;
-                margin-top: 14px;
-                padding-top: 18px;
-                color: {text};
-            }}
-            QGroupBox#controlsGroup::title {{
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 4px 12px;
-                color: #567ba1;
-            }}
+            QGroupBox#controlsGroup,
             QGroupBox#statsGroup {{
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: bold;
-                border: 2px solid {border};
+                border: 1px solid {colors['border']};
                 border-radius: 8px;
-                margin-top: 14px;
-                padding-top: 18px;
-                color: {text};
+                margin-top: 12px;
+                padding-top: 14px;
+                color: {colors['text']};
+                background: transparent;
             }}
+            QGroupBox#controlsGroup::title,
             QGroupBox#statsGroup::title {{
                 subcontrol-origin: margin;
                 subcontrol-position: top left;
-                padding: 4px 12px;
-                color: #567ba1;
+                padding: 2px 10px;
+                color: {accent};
             }}
-            QComboBox#periodCombo {{
-                font-size: 13px;
-                padding: 6px 8px;
-                border: 2px solid {border};
-                border-radius: 6px;
-                background: {bg};
-                color: {text};
-            }}
-            QComboBox#periodCombo:hover {{
-                border-color: #567ba1;
-            }}
-            QComboBox#periodCombo::drop-down {{
-                border: none;
-                padding-right: 8px;
-            }}
-            QComboBox#periodCombo QAbstractItemView {{
-                background: {bg};
-                color: {text};
-                selection-background-color: {selection};
-                selection-color: white;
-                border: 2px solid {border};
-                border-radius: 6px;
-            }}
+            QComboBox#periodCombo,
             QDateEdit#dateEdit {{
                 font-size: 13px;
                 padding: 6px 8px;
-                border: 2px solid {border};
+                border: 2px solid {colors['border']};
                 border-radius: 6px;
-                background: {bg};
-                color: {text};
+                background: {colors['bg']};
+                color: {colors['text']};
+                min-height: 36px;
             }}
+            QComboBox#periodCombo:hover,
             QDateEdit#dateEdit:hover {{
-                border-color: #567ba1;
+                border-color: {accent};
             }}
-            QDateEdit#dateEdit::drop-down {{
-                border: none;
-                padding-right: 8px;
-            }}
-            QDateEdit#dateEdit QAbstractItemView {{
-                background: {bg};
-                color: {text};
-                selection-background-color: {selection};
+            QComboBox#periodCombo QAbstractItemView {{
+                background: {colors['bg']};
+                color: {colors['text']};
+                selection-background-color: {Palette.SELECTION};
                 selection-color: white;
-                border: 2px solid {border};
-                border-radius: 6px;
-            }}
-            QTableWidget#reportTable {{
-                font-size: 13px;
-                font-weight: normal;
-                border: 2px solid {border};
-                border-radius: 8px;
-                gridline-color: transparent;
-                background: {bg};
-                color: {text};
-            }}
-            QTableWidget#reportTable::item {{
-                padding: 6px 8px;
-                border-bottom: 1px solid rgba(150, 150, 150, 0.18);
-                color: {text};
-            }}
-            QTableWidget#reportTable::item:selected {{
-                background-color: {selection};
-                color: white;
-            }}
-            QTableWidget#reportTable::item:selected:!active {{
-                background-color: {selection};
-                color: white;
-            }}
-            QTableWidget#reportTable::item:hover {{
-                background-color: {row_hover};
-            }}
-            QHeaderView::section {{
-                background-color: #567ba1;
-                color: white;
-                font-weight: bold;
-                font-size: 13px;
-                padding: 8px;
-                border: none;
-                border-right: 1px solid #46648a;
-            }}
-            QHeaderView::section:last {{
-                border-right: none;
-            }}
-            QScrollBar:vertical {{
-                border: none;
-                background: {scroll_bg};
-                width: 12px;
-                border-radius: 6px;
-                margin: 2px;
-            }}
-            QScrollBar::handle:vertical {{
-                background: {scroll_handle};
-                min-height: 20px;
-                border-radius: 6px;
-            }}
-            QScrollBar::handle:vertical:hover {{
-                background: {scroll_hover};
-            }}
-            QScrollBar::add-line:vertical,
-            QScrollBar::sub-line:vertical {{
-                height: 0px;
-            }}
-            QScrollBar:horizontal {{
-                border: none;
-                background: {scroll_bg};
-                height: 12px;
-                border-radius: 6px;
-                margin: 2px;
-            }}
-            QScrollBar::handle:horizontal {{
-                background: {scroll_handle};
-                min-width: 30px;
-                border-radius: 6px;
-            }}
-            QScrollBar::handle:horizontal:hover {{
-                background: {scroll_hover};
-            }}
-            QScrollBar::add-line:horizontal,
-            QScrollBar::sub-line:horizontal {{
-                width: 0px;
             }}
         """)
 
-    # ========== API PUBLIQUE ==========
+    # ──────────────────────────────────────────────
+    # API publique
+    # ──────────────────────────────────────────────
 
     def update_date_controls(self, start_date: QDate, end_date: QDate, enabled: bool):
+        self.start_date.blockSignals(True)
+        self.end_date.blockSignals(True)
         self.start_date.setDate(start_date)
         self.end_date.setDate(end_date)
         self.start_date.setEnabled(enabled)
         self.end_date.setEnabled(enabled)
+        self.start_date.blockSignals(False)
+        self.end_date.blockSignals(False)
 
     def update_results_table(self, sales: list):
-        self.results_table.setRowCount(len(sales))
-        for row, sale in enumerate(sales):
-            self.results_table.setItem(row, 0, QTableWidgetItem(sale.get("invoice_id", "")))
-            self.results_table.setItem(row, 1, QTableWidgetItem(sale.get("date_str", "")))
-            self.results_table.setItem(row, 2, QTableWidgetItem(sale.get("client", "")))
-            self.results_table.setItem(row, 3, QTableWidgetItem(sale.get("products_str", "")))
-            self.results_table.setItem(row, 4, QTableWidgetItem(str(sale.get("quantities", 0))))
-            total = sale.get("total", 0)
-            self.results_table.setItem(row, 5, QTableWidgetItem(f"{total:.0f} FCFA"))
-            self.results_table.setItem(row, 6, QTableWidgetItem(sale.get("payment_method", "")))
+        self.results_table.set_sales(sales)
 
     def update_statistics(self, total: float, avg: float, items_count: int, top_product: tuple):
         self.total_sales.setText(f"Total Ventes: {total:.0f} FCFA")
         self.avg_sale.setText(f"Moyenne/vente: {avg:.0f} FCFA")
         self.total_items.setText(f"Articles vendus: {items_count}")
         if top_product and top_product[0] != "-":
-            self.top_product.setText(f"Produit top: {top_product[0]} ({top_product[1]}x)")
+            self.top_product.setText(
+                f"Produit top: {top_product[0]} ({top_product[1]}x)"
+            )
         else:
             self.top_product.setText("Produit top: -")
 
@@ -487,8 +315,4 @@ class ReportView(BaseView):
         return data
 
     def get_table_headers(self) -> list:
-        headers = []
-        for col in range(self.results_table.columnCount()):
-            h = self.results_table.horizontalHeaderItem(col)
-            headers.append(h.text() if h else "")
-        return headers
+        return list(ReportResultsTable.COLUMNS)

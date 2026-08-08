@@ -1,18 +1,21 @@
 """
 Vue de gestion des notifications - Interface responsive.
 Herite de BaseView pour une structure coherente.
-Support complet Dark/Light avec design moderne.
+Le style generique (QGroupBox, QCheckBox, QLabel, QSpinBox) vient de BaseView.
+Seuls les elements propres a cette vue (scroll area, separateur) sont stylees ici.
 """
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QGroupBox, QCheckBox, QSpinBox,
+    QGroupBox, QCheckBox, QSpinBox,
     QFrame, QScrollArea, QSizePolicy
 )
-from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QIcon, QPixmap, QFont
 
-from src.ui.views.base.base_view import BaseView, Palette
+from src.ui.views.base.base_view import BaseView
+from src.ui.views.base.palette import Palette
+from src.ui.widgets.custom_button import primary_btn, outline_btn, CustomButton
 from src.utils.helpers import get_asset_path
 
 
@@ -68,7 +71,8 @@ class NotificationSettingsView(BaseView):
         # Initialiser les composants
         self._init_scroll_content()
         self._init_actions()
-        self._apply_theme_styles()
+        self._apply_local_styles()
+        self._restyle_all_buttons()
 
     def _init_scroll_content(self):
         """Contenu scrollable."""
@@ -101,16 +105,9 @@ class NotificationSettingsView(BaseView):
         layout.setContentsMargins(20, 20, 20, 20)
 
         self.enabled_check = QCheckBox("Activer les notifications")
-        self.enabled_check.setObjectName("notifCheck")
-
         self.desktop_check = QCheckBox("Afficher les notifications sur le bureau")
-        self.desktop_check.setObjectName("notifCheck")
-
         self.sound_check = QCheckBox("Jouer un son")
-        self.sound_check.setObjectName("notifCheck")
-
         self.tray_check = QCheckBox("Afficher dans la barre systeme")
-        self.tray_check.setObjectName("notifCheck")
 
         for cb in [self.enabled_check, self.desktop_check,
                    self.sound_check, self.tray_check]:
@@ -128,14 +125,13 @@ class NotificationSettingsView(BaseView):
         duration_row.setSpacing(16)
 
         lbl = QLabel("Duree d'affichage (secondes) :")
-        lbl.setObjectName("durationLabel")
+        lbl.setFont(QFont("Segoe UI", 10, QFont.Bold))
 
         self.duration_spin = QSpinBox()
         self.duration_spin.setRange(1, 30)
         self.duration_spin.setValue(5)
         self.duration_spin.setFixedWidth(100)
         self.duration_spin.setMinimumHeight(36)
-        self.duration_spin.setObjectName("durationSpin")
 
         duration_row.addWidget(lbl)
         duration_row.addWidget(self.duration_spin)
@@ -154,19 +150,10 @@ class NotificationSettingsView(BaseView):
         layout.setContentsMargins(20, 20, 20, 20)
 
         self.stock_low_check = QCheckBox("Alertes de stock faible")
-        self.stock_low_check.setObjectName("notifCheck")
-
         self.sales_check = QCheckBox("Confirmations de ventes")
-        self.sales_check.setObjectName("notifCheck")
-
         self.errors_check = QCheckBox("Erreurs")
-        self.errors_check.setObjectName("notifCheck")
-
         self.warnings_check = QCheckBox("Avertissements")
-        self.warnings_check.setObjectName("notifCheck")
-
         self.info_check = QCheckBox("Informations")
-        self.info_check.setObjectName("notifCheck")
 
         for cb in [self.stock_low_check, self.sales_check,
                    self.errors_check, self.warnings_check, self.info_check]:
@@ -179,53 +166,31 @@ class NotificationSettingsView(BaseView):
         layout = QHBoxLayout()
         layout.setSpacing(12)
 
-        save_btn = self._make_action_btn(
-            "Enregistrer", "save", "#3498db", "#2980b9", "#21618c",
-            slot=self._on_save
-        )
+        self.save_btn = primary_btn("Enregistrer", "save")
+        self.save_btn.clicked.connect(self._on_save)
 
-        test_btn = self._make_action_btn(
-            "Tester", "bell", "#2ecc71", "#27ae60", "#1e8449", w=130,
-            slot=lambda: self.test_requested.emit()
-        )
+        self.test_btn = outline_btn("Tester", "bell")
+        self.test_btn.clicked.connect(lambda: self.test_requested.emit())
 
-        reset_btn = self._make_action_btn(
-            "Reinitialiser", "refresh", "#e74c3c", "#c0392b", "#a93226", w=140,
-            slot=lambda: self.reset_requested.emit()
-        )
+        self.reset_btn = outline_btn("Reinitialiser", "refresh")
+        self.reset_btn.clicked.connect(lambda: self.reset_requested.emit())
 
-        layout.addWidget(save_btn)
-        layout.addWidget(test_btn)
+        for btn in (self.save_btn, self.test_btn, self.reset_btn):
+            btn.setMinimumHeight(44)
+            btn.setMinimumWidth(150)
+            btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        layout.addWidget(self.save_btn)
+        layout.addWidget(self.test_btn)
         layout.addStretch()
-        layout.addWidget(reset_btn)
+        layout.addWidget(self.reset_btn)
 
         self.content_layout.addLayout(layout)
 
-    def _make_action_btn(self, label, icon_name, bg, hover, pressed, w=160, slot=None) -> QPushButton:
-        btn = QPushButton(label)
-        btn.setMinimumHeight(44)
-        btn.setMinimumWidth(w)
-        btn.setCursor(Qt.PointingHandCursor)
-        px = load_svg_icon(icon_name, size=18)
-        if not px.isNull():
-            btn.setIcon(QIcon(px))
-            btn.setIconSize(QSize(18, 18))
-        btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {bg};
-                color: white;
-                padding: 8px 20px;
-                border: none;
-                border-radius: 8px;
-                font-weight: bold;
-                font-size: 14px;
-            }}
-            QPushButton:hover   {{ background-color: {hover};   }}
-            QPushButton:pressed {{ background-color: {pressed}; }}
-        """)
-        if slot:
-            btn.clicked.connect(slot)
-        return btn
+    def _restyle_all_buttons(self):
+        is_dark = getattr(self, "_is_dark", False)
+        for btn in self.findChildren(CustomButton):
+            btn.apply_theme(is_dark)
 
     def _on_save(self):
         config = {
@@ -245,26 +210,15 @@ class NotificationSettingsView(BaseView):
     # ========== SUPPORT THEME ==========
 
     def set_theme(self, is_dark: bool):
-        """Applique le theme."""
+        """Applique le theme (BaseView pose deja le style generique)."""
         super().set_theme(is_dark)
-        self._apply_theme_styles()
+        self._apply_local_styles()
+        self._restyle_all_buttons()
 
-    def _apply_theme_styles(self):
-        """Applique les styles selon le theme."""
-        if self._is_dark:
-            border = "#3d3d5c"
-            text = "#e0e0e0"
-            bg = "#2d2d44"
-            muted = "#8a9199"
-            scroll_bg = "#1e1e2e"
-            scroll_handle = "#3d3d5c"
-        else:
-            border = "#bdc3c7"
-            text = "#2c3e50"
-            bg = "#ffffff"
-            muted = "#8a9199"
-            scroll_bg = "#f0f0f0"
-            scroll_handle = "#aab7b8"
+    def _apply_local_styles(self):
+        """Styles propres a cette vue uniquement (scroll area + separateur) —
+        QGroupBox, QCheckBox, QSpinBox, QLabel sont deja geres par BaseView."""
+        colors = Palette.get_theme_colors(getattr(self, "_is_dark", False))
 
         self.setStyleSheet(self.styleSheet() + f"""
             QScrollArea#scrollArea {{
@@ -274,93 +228,9 @@ class NotificationSettingsView(BaseView):
             QWidget#scrollContent {{
                 background: transparent;
             }}
-            QGroupBox#generalGroup {{
-                font-size: 15px;
-                font-weight: bold;
-                border: 2px solid {border};
-                border-radius: 10px;
-                margin-top: 12px;
-                color: {text};
-            }}
-            QGroupBox#generalGroup::title {{
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 3px 12px;
-                color: {Palette.ACCENT};
-                font-weight: bold;
-            }}
-            QGroupBox#typesGroup {{
-                font-size: 15px;
-                font-weight: bold;
-                border: 2px solid {border};
-                border-radius: 10px;
-                margin-top: 12px;
-                color: {text};
-            }}
-            QGroupBox#typesGroup::title {{
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 3px 12px;
-                color: {Palette.ACCENT};
-                font-weight: bold;
-            }}
-            QCheckBox#notifCheck {{
-                font-size: 14px;
-                padding: 4px 0;
-                spacing: 10px;
-                color: {text};
-            }}
-            QCheckBox#notifCheck::indicator {{
-                width: 20px;
-                height: 20px;
-                border-radius: 4px;
-                border: 2px solid {border};
-                background: {bg};
-            }}
-            QCheckBox#notifCheck::indicator:hover {{
-                border-color: {Palette.ACCENT};
-            }}
-            QCheckBox#notifCheck::indicator:checked {{
-                background: {Palette.ACCENT};
-                border-color: {Palette.ACCENT};
-            }}
-            QLabel#durationLabel {{
-                font-size: 14px;
-                font-weight: bold;
-                color: {text};
-            }}
-            QSpinBox#durationSpin {{
-                font-size: 14px;
-                padding: 6px 10px;
-                border: 2px solid {border};
-                border-radius: 6px;
-                background: {bg};
-                color: {text};
-            }}
-            QSpinBox#durationSpin:focus {{
-                border-color: {Palette.ACCENT};
-            }}
             QFrame#separator {{
-                color: {border};
-                background: {border};
-            }}
-            QScrollBar:vertical {{
-                border: none;
-                background: transparent;
-                width: 12px;
-                border-radius: 6px;
-            }}
-            QScrollBar::handle:vertical {{
-                background: {scroll_handle};
-                min-height: 20px;
-                border-radius: 6px;
-            }}
-            QScrollBar::handle:vertical:hover {{
-                background: {Palette.ACCENT_HOVER};
-            }}
-            QScrollBar::add-line:vertical,
-            QScrollBar::sub-line:vertical {{
-                height: 0px;
+                color: {colors['border']};
+                background: {colors['border']};
             }}
         """)
 

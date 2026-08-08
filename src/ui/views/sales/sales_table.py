@@ -1,73 +1,75 @@
-"""
-Modele de tableau pour le point de vente.
-"""
+"""Tableaux point de vente — ThemedTable + viewport forcé."""
 
-from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
+from PySide6.QtWidgets import QHeaderView
+from PySide6.QtGui import QPalette, QColor
+
+from src.ui.widgets.themed_table import ThemedTable
+from src.ui.views.base.base_view import Palette
 
 
-class SalesTableModel(QAbstractTableModel):
-    """Modele de tableau pour les produits en vente"""
-    
-    HEADERS = ["SKU", "Code-barres", "Nom", "Type", "Prix", "Stock"]
-    
-    def __init__(self, products: list = None):
-        super().__init__()
-        self._products = products or []
-    
-    def rowCount(self, parent=None):
-        return len(self._products)
-    
-    def columnCount(self, parent=None):
-        return len(self.HEADERS)
-    
-    def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid():
-            return None
-        
-        product = self._products[index.row()]
-        col = index.column()
-        
-        if role == Qt.DisplayRole:
-            type_display = {
-                "unitaire": "UNT", "paquet": "PQT", "carton": "CRT",
-            }.get(product.get("packaging_type", ""), product.get("packaging_type", ""))
-            
-            values = [
-                product.get("sku", f"#{product['id']}"),
-                product.get("barcode_test", ""),
-                product["name"],
-                type_display,
-                f"{product['sell_price']:.0f} FCFA",
-                str(product["stock_quantity"]),
-            ]
-            return values[col]
-        
-        if role == Qt.TextAlignmentRole:
-            return Qt.AlignCenter
-        
-        if role == Qt.UserRole:
-            return product
-        
+class SalesProductsTable(ThemedTable):
+    COLUMNS = ["SKU", "Code-barres", "Nom", "Type", "Prix", "Stock"]
+    TYPE_LABELS = {"unitaire": "UNT", "paquet": "PQT", "carton": "CRT"}
+
+    def __init__(self, parent=None):
+        super().__init__(self.COLUMNS, parent=parent, object_name="salesProductsTable")
+        self._products_data = []
+        self.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+    def update_products(self, products: list):
+        self._products_data = products or []
+        if not self._products_data:
+            self.set_empty_message("Aucun produit trouve")
+            return
+        rows = [
+            {
+                "SKU": p.get("sku", ""),
+                "Code-barres": p.get("barcode_test", ""),
+                "Nom": p.get("name", ""),
+                "Type": self.TYPE_LABELS.get(p.get("type", ""), p.get("type", "")),
+                "Prix": f"{p.get('price', 0):.0f} FCFA",
+                "Stock": str(p.get("stock", 0)),
+            }
+            for p in self._products_data
+        ]
+        self.set_rows(rows)
+
+    def get_selected_product_id(self):
+        row = self.currentRow()
+        if 0 <= row < len(self._products_data):
+            return self._products_data[row].get("id")
         return None
-    
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
-        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self.HEADERS[section]
+
+
+class SalesCartTable(ThemedTable):
+    COLUMNS = ["SKU", "Code", "Nom", "Type", "Qte", "Sous-total"]
+
+    def __init__(self, parent=None):
+        super().__init__(self.COLUMNS, parent=parent, object_name="salesCartTable")
+        self._cart_data = []
+        self.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+    def update_cart(self, cart_items: list):
+        self._cart_data = cart_items or []
+        if not self._cart_data:
+            self.set_empty_message("Panier vide")
+            return
+        rows = []
+        for item in self._cart_data:
+            product = item["product"]
+            subtotal = product["price"] * item["quantity"]
+            rows.append({
+                "SKU": product.get("sku", ""),
+                "Code": product.get("barcode_test", ""),
+                "Nom": product.get("name", ""),
+                "Type": item.get("type_display", ""),
+                "Qte": str(item["quantity"]),
+                "Sous-total": f"{subtotal:.0f} FCFA",
+            })
+        self.set_rows(rows)
+
+    def get_selected_product_id(self):
+        row = self.currentRow()
+        if 0 <= row < len(self._cart_data):
+            return self._cart_data[row]["product"].get("id")
         return None
-    
-    def get_product(self, row: int) -> dict:
-        """Recupere le produit a la ligne donnee"""
-        if 0 <= row < len(self._products):
-            return self._products[row]
-        return None
-    
-    def set_products(self, products: list):
-        """Met a jour la liste des produits"""
-        self.beginResetModel()
-        self._products = products
-        self.endResetModel()
-    
-    def refresh(self):
-        """Rafraichit le modele"""
-        self.beginResetModel()
-        self.endResetModel()

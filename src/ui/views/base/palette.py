@@ -59,16 +59,17 @@ class Palette:
     LIGHT_SCROLLBAR_HOVER = "#95a5a6"
     
     # Mode Dark
-    DARK_BG = "#1e1e2e"
+    # DARK_BG = "#1e1e2e"
+    DARK_BG = "#2c3e50"
     DARK_TEXT = "#e0e0e0"
-    DARK_BORDER = "#3d3d5c"
+    DARK_BORDER = "#4a6a8a"
     DARK_HOVER = "rgba(86, 123, 161, 0.20)"
     DARK_ROW_HOVER = "rgba(86, 123, 161, 0.20)"
     DARK_SELECTION = "#4a6a8a"
-    DARK_HEADER = "#2d2d44"
-    DARK_SCROLLBAR_BG = "#2d2d44"
-    DARK_SCROLLBAR_HANDLE = "#4a4a6a"
-    DARK_SCROLLBAR_HOVER = "#5a5a7a"
+    DARK_HEADER = "#4a6a8a"
+    DARK_SCROLLBAR_BG = "#4a6a8a"
+    DARK_SCROLLBAR_HANDLE = "#4a6a8a"
+    DARK_SCROLLBAR_HOVER = "#4a6a8a"
     
     # Commun
     SCROLLBAR_BG = "#d5d8dc"
