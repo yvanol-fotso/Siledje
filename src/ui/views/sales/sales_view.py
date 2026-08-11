@@ -183,7 +183,7 @@ class SalesView(BaseView):
     # ========== THEME ==========
 
     def set_theme(self, is_dark: bool):
-        self._is_dark = is_dark
+        super().set_theme(is_dark)
         try:
             self.products_table.apply_theme(is_dark)
         except Exception as e:

@@ -209,7 +209,7 @@ class AccueilView(BaseView):
 
     def set_theme(self, is_dark: bool):
         print(f"[AccueilView] set_theme(is_dark={is_dark})")
-        self._is_dark = is_dark
+        super().set_theme(is_dark)
 
         if self.table_widget:
             try:

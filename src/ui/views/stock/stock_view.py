@@ -262,7 +262,7 @@ class StockView(BaseView):
     # ========== THEME ==========
 
     def set_theme(self, is_dark: bool):
-        self._is_dark = is_dark
+        super().set_theme(is_dark)
         if self.table:
             try:
                 self.table.apply_theme(is_dark)

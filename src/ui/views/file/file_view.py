@@ -403,11 +403,16 @@ class FileView(BaseView):
             ["Nom", "Date", "Taille"],
             object_name="backupTable",
         )
+
+        header = self.backup_table.horizontalHeader()
+        header.setStretchLastSection(False)
+
         self.backup_table.set_column_resize_modes({
-            0: QHeaderView.Stretch,
-            1: QHeaderView.ResizeToContents,
-            2: QHeaderView.ResizeToContents,
+            0: QHeaderView.Stretch,  # Nom    → 1/3
+            1: QHeaderView.Stretch,  # Date   → 1/3
+            2: QHeaderView.Stretch,  # Taille → 1/3
         })
+
         self.backup_table.setMinimumHeight(180)
         layout.addWidget(self.backup_table, 1)
 
@@ -577,7 +582,7 @@ class FileView(BaseView):
             self._backup_delete_btn.setEnabled(can_configure_system)
 
     def set_theme(self, is_dark: bool):
-        self._is_dark = is_dark
+        super().set_theme(is_dark)
         for strip in self._stats_strips.values():
             strip.set_theme(is_dark)
         for chart in self._charts.values():
