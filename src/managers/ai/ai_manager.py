@@ -1,14 +1,14 @@
 """
 Gestionnaire des parametres IA.
 Separation complete de la logique metier et de l'interface.
-Utilise ModalView generique pour tous les dialogues.
+Utilise ModalForm generique pour tous les dialogues.
 """
 
 from PySide6.QtCore import QObject, Slot, QSettings, QTimer
 
 from src.ui.views.ai.ai_config import AIConfig
 from src.ui.views.ai.ai_view import AIView
-from src.ui.widgets.ModalView import ModalView
+from src.ui.widgets.modal_form import ModalForm
 from src.ui.widgets.InfoDialog import InfoDialog
 
 
@@ -72,7 +72,7 @@ class AIManager(QObject):
             QLabel, QGroupBox
         )
 
-        modal = ModalView(
+        modal = ModalForm(
             title="Configuration des Parametres IA",
             parent=self.view,
             width=800,

@@ -6,7 +6,7 @@ from PySide6.QtCore import QObject, Slot
 
 from src.database.repositories.catalog_repository import CatalogRepository
 from src.ui.views.supplier.supplier_form import SupplierForm
-from src.ui.widgets.ModalView import ModalView
+from src.ui.widgets.modal_form import ModalForm
 from src.ui.widgets.InfoDialog import InfoDialog
 
 
@@ -59,7 +59,7 @@ class SupplierManager(QObject):
     def add_supplier(self):
         try:
             form = SupplierForm()
-            modal = ModalView(
+            modal = ModalForm(
                 title="Nouveau fournisseur",
                 parent=self.view,
                 width=680,
@@ -103,7 +103,7 @@ class SupplierManager(QObject):
         supplier = self.suppliers[row]
         try:
             form = SupplierForm(supplier)
-            modal = ModalView(
+            modal = ModalForm(
                 title="Modifier le fournisseur",
                 parent=self.view,
                 width=680,

@@ -4,7 +4,7 @@ Panier en mémoire, checkout réel avec sale_items/sale_payments et
 déduction de stock tracée dans stock_movements.
 
 v2.2 — ThemedTable (via SalesView) + InfoDialog (plus de QMessageBox),
-modals via ModalView + SalesPaymentForm / InvoiceViewer (sales_forms.py),
+modals via ModalForm + SalesPaymentForm / InvoiceViewer (sales_forms.py),
 meme pattern que StockManager.
 """
 
@@ -15,7 +15,7 @@ from src.database.repositories.sales_repository import SalesRepository
 
 from src.ui.views.sales.sales_view import SalesView
 from src.ui.views.sales.sales_form import SalesPaymentForm, InvoiceViewer, build_invoice_html
-from src.ui.widgets.ModalView import ModalView
+from src.ui.widgets.modal_form import ModalForm
 from src.ui.widgets.InfoDialog import InfoDialog
 
 
@@ -178,7 +178,7 @@ class SalesManager(QObject):
 
         form = SalesPaymentForm(total=total, payment_methods=payment_methods)
 
-        modal = ModalView(
+        modal = ModalForm(
             title="Finaliser le Paiement",
             parent=self.view,
             width=520, height=480,

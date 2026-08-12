@@ -10,8 +10,6 @@ from PySide6.QtWidgets import QPushButton, QSizePolicy
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QIcon
 
-from src.ui.views.base.base_view import Palette
-
 
 class CustomButton(QPushButton):
     """
@@ -38,6 +36,8 @@ class CustomButton(QPushButton):
         self._init_style()
 
     def _colors_for_type(self) -> dict:
+        from src.ui.views.base.base_view import Palette
+
         is_dark = self._is_dark
 
         # Accent principal : TEAL en dark, ACCENT en light
@@ -103,6 +103,8 @@ class CustomButton(QPushButton):
         return styles.get(self._type, styles["primary"])
 
     def _init_style(self):
+        from src.ui.views.base.base_view import Palette
+
         c = self._colors_for_type()
         disabled_bg = Palette.DARK_BORDER if self._is_dark else "#bdc3c7"
         disabled_text = "#7f8c8d"

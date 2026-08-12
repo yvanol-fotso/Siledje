@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QBrush, QPen, QColor
 
 from src.ui.views.base.palette import Palette
-from src.ui.widgets.ModalView import ModalView
+from src.ui.widgets.modal_form import ModalForm
 from src.ui.widgets.custom_button import outline_btn, CustomButton
 from src.ui.widgets.InfoDialog import InfoDialog
 
@@ -362,14 +362,15 @@ class BaseView(QWidget):
         cancel_text: str = "Annuler",
         width: int = 600,
         height: int = 400,
-    ) -> ModalView:
-        modal = ModalView(
+    ) -> ModalForm:
+        modal = ModalForm(
             title=title,
             parent=self,
             width=width,
             height=height,
             ok_text=ok_text,
             cancel_text=cancel_text,
+            is_dark=self._is_dark,
         )
         modal.set_content(content)
         return modal

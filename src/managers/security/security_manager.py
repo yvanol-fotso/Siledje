@@ -6,7 +6,7 @@ from PySide6.QtCore import QObject, Slot
 
 from src.database.repositories.user_repository import UserRepository
 from src.ui.views.security.security_form import SecurityRoleForm
-from src.ui.widgets.ModalView import ModalView
+from src.ui.widgets.modal_form import ModalForm
 from src.ui.widgets.InfoDialog import InfoDialog
 
 SYSTEM_ROLES = {"admin", "gerant", "employe"}
@@ -66,7 +66,7 @@ class SecurityManager(QObject):
                 r.get("name") for r in self.user_repo.get_all_roles()
             ]
             form = SecurityRoleForm()
-            modal = ModalView(
+            modal = ModalForm(
                 title="Nouveau role",
                 parent=self.view,
                 width=800,
@@ -119,7 +119,7 @@ class SecurityManager(QObject):
                 if r["id"] != role["id"]
             ]
             form = SecurityRoleForm(role)
-            modal = ModalView(
+            modal = ModalForm(
                 title="Modifier le role",
                 parent=self.view,
                 width=800,

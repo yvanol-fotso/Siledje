@@ -193,7 +193,7 @@ class StockView(BaseView):
             self.show_error("Veuillez selectionner un produit.", "Selection requise")
 
     def _on_import_csv(self):
-        from src.ui.widgets.ModalView import ModalView
+        from src.ui.widgets.modal_form import ModalForm
 
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Importer un fichier CSV", "",
@@ -231,7 +231,7 @@ class StockView(BaseView):
         update_stock = QCheckBox("Mettre a jour le stock si le produit existe deja")
         layout.addWidget(update_stock)
 
-        modal = ModalView(
+        modal = ModalForm(
             title="Options d'import CSV", parent=self,
             width=550, height=400, ok_text="Importer", cancel_text="Annuler",
         )

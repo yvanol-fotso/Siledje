@@ -329,7 +329,7 @@ class BarcodeView(BaseView):
     def set_theme(self, is_dark: bool):
         super().set_theme(is_dark)
         try:
-            self.table.apply_theme(is_dark)
+           self.products_table.apply_theme(is_dark)
         except Exception as e:
             print(f"[BarcodeView] theme {e}")
         self._restyle_all_buttons()

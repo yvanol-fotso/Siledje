@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QInputDialog, QLineEdit as QLE
 from src.database.repositories.user_repository import UserRepository
 from src.ui.views.admin.admin_table import AdminUserRow
 from src.ui.views.admin.admin_form import AdminUserForm
-from src.ui.widgets.ModalView import ModalView
+from src.ui.widgets.modal_form import ModalForm
 from src.ui.widgets.InfoDialog import InfoDialog
 
 
@@ -83,7 +83,7 @@ class AdminManager(QObject):
     def add_user(self):
         try:
             form = AdminUserForm(roles=self.roles)
-            modal = ModalView(
+            modal = ModalForm(
                 title="Nouvel utilisateur",
                 parent=self.view,
                 width=700,
@@ -148,7 +148,7 @@ class AdminManager(QObject):
         try:
             row = self.rows[row_index]
             form = AdminUserForm(user=row, roles=self.roles)
-            modal = ModalView(
+            modal = ModalForm(
                 title="Modifier l'utilisateur",
                 parent=self.view,
                 width=700,

@@ -1,5 +1,9 @@
 """
-Manager stock v9.1 — ThemedTable + InfoDialog (plus de QMessageBox).
+Manager stock v9.2 — ThemedTable + InfoDialog (plus de QMessageBox).
+La gestion du theme (dark/light) n'est plus dupliquee ici : elle est
+entierement deleguee a ModalForm / theme_manager, qui sont la seule
+source de verite. StockManager ne fait plus que construire les vues
+et les donnees.
 """
 
 from PySide6.QtCore import QObject, Slot, Signal
@@ -8,12 +12,12 @@ from src.database.repositories.catalog_repository import CatalogRepository
 from src.database.repositories.school_repository import SchoolRepository
 from src.ui.views.stock.stock_view import StockView
 from src.ui.views.stock.stock_form import ProductForm
-from src.ui.widgets.ModalView import ModalView
+from src.ui.widgets.modal_form import ModalForm
 from src.ui.widgets.InfoDialog import InfoDialog
 
 
 class StockManager(QObject):
-    version = "9.1"
+    version = "9.2"
 
     data_changed = Signal()
     error_occurred = Signal(str)
@@ -29,7 +33,6 @@ class StockManager(QObject):
         self._products = []
         self.current_search = ""
         self.current_filters = {}
-        self._is_dark = False
         print(f"[StockManager v{self.version}] Initialise")
 
     def get_ui(self) -> StockView:
@@ -62,13 +65,7 @@ class StockManager(QObject):
         )
         classes = self.school_repo.get_all_classes()
         self._view.update_classes(sorted({c["name"] for c in classes}))
-        self._view.set_theme(self._is_dark)
         print(f"[StockManager] Vue initialisee avec {len(products)} produits")
-
-    def set_theme(self, is_dark: bool):
-        self._is_dark = is_dark
-        if self._view is not None:
-            self._view.set_theme(is_dark)
 
     # ========== FILTRES ==========
 
@@ -127,7 +124,7 @@ class StockManager(QObject):
             self._populate_form_combos(form)
             self._populate_book_combos(form)
 
-            modal = ModalView(
+            modal = ModalForm(
                 title="Ajouter un produit",
                 parent=self._view,
                 width=650, height=750,
@@ -231,7 +228,7 @@ class StockManager(QObject):
                 self._populate_book_combos(form)
                 self._populate_book_data(form, product["id"])
 
-            modal = ModalView(
+            modal = ModalForm(
                 title="Modifier le produit" + (" (Livre)" if is_book else ""),
                 parent=self._view,
                 width=650, height=750 if is_book else 700,

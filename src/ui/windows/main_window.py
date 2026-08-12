@@ -628,10 +628,10 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def open_general_settings(self):
-        from src.ui.widgets.ModalView import ModalView
+        from src.ui.widgets.modal_form import ModalForm
         from PySide6.QtWidgets import QFormLayout, QLineEdit, QCheckBox, QComboBox, QLabel
 
-        modal = ModalView(title="Configuration générale", parent=self,
+        modal = ModalForm(title="Configuration générale", parent=self,
                           width=700, height=600,
                           ok_text="Enregistrer", cancel_text="Annuler")
         content = QWidget()

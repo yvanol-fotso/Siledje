@@ -13,8 +13,9 @@ from .custom_button import (
     secondary_btn,
 )
 from .themed_table import ThemedTable
-from .ModalView import ModalView
+from src.ui.widgets.modal_form import ModalForm
 from .InfoDialog import InfoDialog
+
 
 __all__ = [
     "CustomButton",
@@ -26,6 +27,6 @@ __all__ = [
     "outline_btn",
     "secondary_btn",
     "ThemedTable",
-    "ModalView",
+    "ModalForm",
     "InfoDialog",
 ]
