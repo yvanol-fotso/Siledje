@@ -13,7 +13,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 
-from src.ui.views.base.base_view import BaseView
+from src.ui.views.base.base_view import BaseView, Palette
+from src.ui.views.sync.sync_status import StatusLine
 from src.ui.widgets.custom_button import primary_btn, outline_btn, CustomButton
 from src.ui.widgets.InfoDialog import InfoDialog
 from src.utils.helpers import get_asset_path
@@ -51,6 +52,8 @@ class BugReportView(BaseView):
         self.severity_combo = None
         self.module_combo = None
         self.desc_input = None
+        self.status_line = None      # StatusLine — visible en permanence, pas seulement en popup
+        self.contact_hint = None     # coordonnees de secours (WhatsApp/email/tel), toujours affichees
 
         # Reconstruire le contenu
         self.main_layout.removeWidget(self.content_area)
@@ -63,6 +66,7 @@ class BugReportView(BaseView):
 
         # Initialiser les composants
         self._init_subtitle()
+        self._init_status()
         self._init_form()
         self._init_buttons()
         self._apply_local_styles()
@@ -74,6 +78,25 @@ class BugReportView(BaseView):
         subtitle.setObjectName("subtitleLabel")
         subtitle.setWordWrap(True)
         self.content_layout.addWidget(subtitle)
+
+    def _init_status(self):
+        """
+        Ligne d'etat de connexion (meme widget StatusLine que SyncView) +
+        coordonnees de secours. Affiche en PERMANENCE dans la vue, pas
+        seulement dans un dialog qui peut passer inaperçu : l'utilisateur
+        doit toujours savoir si son rapport partira tout de suite ou
+        restera en attente, et comment nous joindre autrement si besoin.
+        """
+        self.status_line = StatusLine()
+        self.content_layout.addWidget(self.status_line)
+
+        self.contact_hint = QLabel("")
+        self.contact_hint.setObjectName("contactHint")
+        self.contact_hint.setWordWrap(True)
+        self.contact_hint.setOpenExternalLinks(True)
+        self.contact_hint.setTextFormat(Qt.RichText)
+        self.content_layout.addWidget(self.contact_hint)
+        self.content_layout.addSpacing(4)
 
     def _init_form(self):
         """Formulaire."""
@@ -209,6 +232,41 @@ class BugReportView(BaseView):
         self.severity_combo.setCurrentIndex(0)
         self.module_combo.setCurrentIndex(0)
 
+    # ========== API PUBLIQUE (appelee par BugReportManager) ==========
+
+    def set_connection_status(self, online: bool, pending_count: int = 0):
+        """Met a jour la ligne d'etat visible en permanence en haut du
+        formulaire — jamais seulement dans un popup."""
+        if not self.status_line:
+            return
+        if online:
+            badge_text, badge_color = "EN LIGNE", Palette.SUCCESS
+            state_text = "Connecte"
+            if pending_count > 0:
+                detail_text = f"{pending_count} rapport(s) en attente d'envoi..."
+            else:
+                detail_text = "Vos rapports sont envoyes immediatement."
+        else:
+            badge_text, badge_color = "HORS LIGNE", Palette.DANGER
+            state_text = "Pas de connexion"
+            if pending_count > 0:
+                detail_text = (f"{pending_count} rapport(s) en attente — "
+                                "seront envoyes des le retour de la connexion.")
+            else:
+                detail_text = "Votre rapport sera envoye des le retour de la connexion."
+        self.status_line.set_status(badge_text, badge_color, state_text, detail_text)
+
+    def set_contact_info(self, whatsapp_url: str, email: str, phone: str):
+        """Coordonnees de secours toujours visibles, pas seulement quand
+        l'envoi echoue — au cas ou c'est urgent."""
+        if not self.contact_hint:
+            return
+        self.contact_hint.setText(
+            "Besoin d'une reponse rapide ou pas de connexion ? Ecrivez-nous directement : "
+            f"<a href='{whatsapp_url}' style='color:{Palette.ACCENT};'>WhatsApp</a>"
+            f" &nbsp;•&nbsp; {email} &nbsp;•&nbsp; {phone}"
+        )
+
     # ========== SUPPORT THEME ==========
 
     def set_theme(self, is_dark: bool):
@@ -226,6 +284,11 @@ class BugReportView(BaseView):
                 font-size: 13px;
                 color: #7f8c8d;
                 padding-bottom: 8px;
+            }
+            QLabel#contactHint {
+                font-size: 12px;
+                color: """ + Palette.MUTED_TEXT + """;
+                padding: 6px 2px 10px 2px;
             }
             QScrollArea#scrollArea {
                 background: transparent;
