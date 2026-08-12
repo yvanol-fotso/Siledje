@@ -16,8 +16,8 @@ from PySide6.QtCore import QObject, Slot, QTimer
 from src.ui.widgets.InfoDialog import InfoDialog
 from src.database.repositories.catalog_repository import CatalogRepository
 from src.database.repositories.user_repository import UserRepository
-from src.database.connection import get_db_connection
 from src.managers.license.license_manager import LicenseManager
+from src.utils.backup_service import get_backup_service
 
 
 def _norm(s: str) -> str:
@@ -43,7 +43,7 @@ def _fmt_money(n) -> str:
 class FileManager(QObject):
     """Gère toutes les opérations fichier (import/export/sauvegarde/licence)."""
 
-    version = "3.1.0"
+    version = "3.2.0"
 
     PRODUCT_COLUMNS_FR = [
         "Nom", "Description", "Catégorie", "Fournisseur", "SKU",
@@ -106,15 +106,13 @@ class FileManager(QObject):
         self.user_repo = UserRepository()
         self.license_manager = LicenseManager()
 
-        conn = get_db_connection()
-        self.db_path = Path(
-            getattr(conn, "db_path", None)
-            or getattr(conn, "db_name", None)
-            or "librairie.db"
-        )
+        # Backup : plus de logique locale, tout passe par le service partagé.
+        self.backup_service = get_backup_service()
 
-        self.backup_dir = Path("data/backups")
-        self.backup_dir.mkdir(parents=True, exist_ok=True)
+        # db_path emprunté au service (une seule résolution du chemin
+        # de la BDD dans toute l'app, voir backup_service.py) plutôt que
+        # recalculé séparément ici.
+        self.db_path = self.backup_service.db_path
 
         print(f"[FileManager v{self.version}] Initialisé — BDD : {self.db_path}")
 
@@ -186,17 +184,8 @@ class FileManager(QObject):
             self.view.update_backups_list(self._get_backups_list())
 
     def _get_backups_list(self) -> list:
-        backups = []
-        for f in sorted(self.backup_dir.glob("*.db"), reverse=True):
-            size_kb = f.stat().st_size / 1024
-            mtime = datetime.fromtimestamp(f.stat().st_mtime)
-            backups.append({
-                "name": f.name,
-                "path": str(f),
-                "size": f"{size_kb:.1f} KB",
-                "date": mtime.strftime("%d/%m/%Y %H:%M:%S"),
-            })
-        return backups
+        # Déléguée entièrement au service : plus de scan manuel du dossier ici.
+        return self.backup_service.get_backups_info()
 
     def _map_headers(self, fieldnames, header_map):
         result = {}
@@ -811,19 +800,21 @@ class FileManager(QObject):
 
     # ────────────────────────────────────────────────────────────────
     # SAUVEGARDE / RESTAURATION
+    #
+    # IMPORTANT : ce bloc ne fait plus AUCUN shutil.copy2 pour créer un
+    # backup — c'est le rôle exclusif de self.backup_service. Ici, on ne
+    # fait que : (a) demander un backup au service, (b) gérer l'UI, et
+    # (c) pour la restauration, copier un backup EXISTANT vers la BDD
+    # active — ce qui est une opération différente (restaurer, pas
+    # sauvegarder), donc légitimement câblée ici avec shutil.
     # ────────────────────────────────────────────────────────────────
 
     @Slot()
     def create_backup(self):
         try:
-            if not self.db_path.exists():
-                InfoDialog.warning(
-                    self.view, "Base introuvable", str(self.db_path)
-                )
-                return
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = self.backup_dir / f"sauvegarde_{timestamp}.db"
-            shutil.copy2(str(self.db_path), str(backup_path))
+            backup_path = self.backup_service.create_backup(prefix="sauvegarde")
+            # Rétention : purge les vieux backups (>7 jours), en garde toujours 3 minimum.
+            self.backup_service.cleanup_old_backups(retain_days=7, keep_minimum=3)
             self._refresh_backups_list()
             size_kb = backup_path.stat().st_size / 1024
             InfoDialog.success(
@@ -857,12 +848,14 @@ class FileManager(QObject):
             if not ok:
                 return
 
-            auto_backup = (
-                self.backup_dir
-                / f"avant_restauration_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-            )
+            # Filet de sécurité avant restauration : on passe par le service,
+            # comme tout autre backup, pour rester dans le même dossier unique.
             if self.db_path.exists():
-                shutil.copy2(str(self.db_path), str(auto_backup))
+                self.backup_service.create_backup(prefix="avant_restauration")
+
+            # Ici, on restaure : on copie un backup EXISTANT par-dessus la BDD
+            # active. C'est l'opération inverse d'un backup, donc ce
+            # shutil.copy2 reste ici — ce n'est pas une logique dupliquée.
             shutil.copy2(str(path), str(self.db_path))
 
             if self.current_user:
@@ -895,7 +888,7 @@ class FileManager(QObject):
             )
             if not ok:
                 return
-            path.unlink()
+            self.backup_service.delete_backup(backup_path)
             self._refresh_backups_list()
             InfoDialog.success(
                 self.view, "Sauvegarde supprimee",

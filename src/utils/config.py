@@ -61,10 +61,15 @@ class AppConfig:
                 self.version = config_data.get('version', '1.0.0')
                 
                 # Configuration de la base de données
+                # IMPORTANT : "siledje.db" tout court, à la racine du projet
+                # (self.base_dir), PAS "data/siledje.db". Si ton config.json
+                # existant contient encore "data/siledje.db" ici, ce .get()
+                # ne changera rien — le JSON prime toujours sur ce défaut.
+                # Il faut éditer le fichier config.json lui-même (voir plus bas).
                 db_config = config_data.get('database', {})
-                self.db_name = db_config.get('name', 'data/siledje.db')
+                self.db_name = db_config.get('name', 'siledje.db')
                 self.auto_backup = db_config.get('auto_backup', True)
-                self.backup_path = db_config.get('backup_path', 'data/backups/')
+                self.backup_path = db_config.get('backup_path', 'backups/')
                 
                 # Configuration de l'interface
                 ui_config = config_data.get('ui', {})
@@ -96,10 +101,10 @@ class AppConfig:
         self.app_name = "Siledje"
         self.version = "2.0.0"
         
-        # Base de données
-        self.db_name = "data/siledje.db"
+        # Base de données — à la racine du projet, pas dans un sous-dossier.
+        self.db_name = "siledje.db"
         self.auto_backup = True
-        self.backup_path = "data/backups/"
+        self.backup_path = "backups/"
         
         # Interface
         self.theme = "dark_style.qss"
@@ -120,10 +125,12 @@ class AppConfig:
         self.icons_dir = self.assets_dir / "icons"
         self.data_dir = self.base_dir / "data"
         
-        # Chemin de la base de données
+        # Chemin de la base de données — self.db_name n'a plus de "data/"
+        # devant, donc self.db_path pointe directement sous base_dir :
+        # C:\...\Siledje\siledje.db
         self.db_path = self.base_dir / self.db_name
         
-        # Chemin des backups
+        # Chemin des backups — idem, à la racine : C:\...\Siledje\backups\
         self.backup_dir = self.base_dir / self.backup_path
         
         # Paramètres d'interface

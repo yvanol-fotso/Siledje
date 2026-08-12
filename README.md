@@ -62,7 +62,7 @@ SILEDJE/
 ├── requirements.txt                # Dépendances Python
 ├── .env                            # Secrets locaux (NON versionné)
 ├── .env.example                    # Modèle de .env (versionné, sans valeurs)
-├── librairie.db                    # Base SQLite (générée au 1er lancement)
+├── siledje.db                    # Base SQLite (générée au 1er lancement)
 ├── README.md
 │
 ├── scripts/                        # Outils réservés au vendeur/support
@@ -220,13 +220,14 @@ SILEDJE/
 │   │   │       └── ai_config.py
 │   │   └── widgets/
 │   │       ├── __init__.py
-│   │       ├── ModalView.py
+│   │       ├── modal_form.py
 │   │       ├── InfoDialog.py
 │   │       ├── custom_button.py
 │   │       └── theme_table.py
 │   │
 │   └── utils/
 │       ├── __init__.py
+|       |── backup_service.py
 │       ├── config.py
 │       ├── notifications.py
 │       ├── theme_manager.py

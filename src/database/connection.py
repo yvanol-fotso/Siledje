@@ -29,11 +29,26 @@ et faire évoluer son propre schéma via une méthode _ensure_schema() :
 Chaque repository appelle get_db_connection() pour récupérer cette même
 connexion singleton, puis crée ses tables avec CREATE TABLE IF NOT EXISTS.
 Cela permet d'ajouter un domaine sans jamais toucher à ce fichier.
+
+CORRECTIF IMPORTANT (voir historique) : avant, __new__ utilisait par
+défaut "librairie.db" — un nom de fichier RELATIF, sans lien avec
+AppConfig. Résultat : SQLite créait/ouvrait ce fichier par rapport au
+dossier courant au moment du lancement de l'app, qui change selon
+comment on démarre l'app (raccourci, terminal, IDE...). Ça pouvait
+produire un fichier .db différent à chaque contexte de lancement — la
+cause des "plusieurs bases de données".
+Maintenant : par défaut, on utilise TOUJOURS le chemin ABSOLU calculé
+par AppConfig (config.db_path), qui lui-même dérive de base_dir
+(l'emplacement réel du projet sur le disque, calculé via __file__).
+Un seul chemin, peu importe d'où l'app est lancée.
 """
 
 import sqlite3
 import os
+from pathlib import Path
 from typing import Optional
+
+from src.utils.config import get_config
 
 
 class DatabaseConnection:
@@ -45,29 +60,51 @@ class DatabaseConnection:
     _instance: Optional['DatabaseConnection'] = None
     _connection: Optional[sqlite3.Connection] = None
 
-    def __new__(cls, db_name: str = "librairie.db"):
+    def __new__(cls, db_name: Optional[str] = None):
         """
         Crée une instance unique de DatabaseConnection (pattern Singleton).
 
         Args:
-            db_name: Nom du fichier de base de données
+            db_name: Chemin explicite vers la BDD (rare — surtout utile
+                     pour les tests). Si omis (cas normal), on utilise
+                     TOUJOURS le chemin absolu défini par AppConfig, pour
+                     garantir un seul fichier .db dans toute l'app.
 
         Returns:
             Instance unique de DatabaseConnection
         """
         if cls._instance is None:
             cls._instance = super(DatabaseConnection, cls).__new__(cls)
-            cls._instance.db_name = db_name
+
+            resolved_path = db_name or str(get_config().db_path)
+            cls._instance.db_name = resolved_path
+            # Alias explicite : certains managers lisent db_path plutôt
+            # que db_name (ex: backup_service.py). On expose les deux
+            # pour éviter toute ambiguïté, même valeur, un seul chemin.
+            cls._instance.db_path = resolved_path
+
             cls._instance._initialize_connection()
+        elif db_name and str(db_name) != cls._instance.db_name:
+            # Le singleton est déjà créé : on n'ouvre pas une deuxième
+            # connexion / un deuxième fichier. On avertit plutôt que
+            # d'échouer silencieusement, pour repérer vite ce genre de
+            # bug si ça se reproduit ailleurs dans le code.
+            print(
+                f"⚠️ [DatabaseConnection] Connexion déjà initialisée sur "
+                f"« {cls._instance.db_name} » — l'appel avec "
+                f"db_name=« {db_name} » est ignoré (singleton actif)."
+            )
         return cls._instance
 
     def _initialize_connection(self):
         """Initialise la connexion physique à la base de données."""
         try:
-            # Créer le dossier contenant le fichier .db s'il n'existe pas
-            db_dir = os.path.dirname(self.db_name)
-            if db_dir and not os.path.exists(db_dir):
-                os.makedirs(db_dir)
+            # Créer le dossier contenant le fichier .db s'il n'existe pas.
+            # Path gère aussi bien un chemin absolu (cas normal, venant
+            # d'AppConfig) qu'un chemin relatif (cas de test explicite).
+            db_dir = Path(self.db_name).parent
+            if db_dir and not db_dir.exists():
+                db_dir.mkdir(parents=True, exist_ok=True)
 
             self._connection = sqlite3.connect(
                 self.db_name,

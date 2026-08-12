@@ -11,7 +11,17 @@ RÈGLES DE FUSION :
 
   - stock_movements : JAMAIS de LWW. Journal d'événements (append-only) :
     chaque mouvement créé sur un appareil est rejoué sur l'autre, en
-    s'AJOUTANT au stock existant — jamais en l'écrasant.
+    s'AJOUTANT au stock existant — jamais en l'écrasant. Bidirectionnel.
+
+  - sales / sale_items / sale_payments (historique des ventes) : JAMAIS de
+    LWW non plus, et JAMAIS de pull. C'est un journal de CONSULTATION :
+    le propriétaire doit pouvoir suivre ses ventes depuis le mobile, mais
+    le mobile ne doit jamais pouvoir créer/modifier une vente à distance.
+    Poussé une seule fois vers Supabase, jamais retouché ensuite (comme
+    stock_movements côté push, mais SANS le pull).
+    Pas de bouton dédié : ce push est intégré au flux existant de
+    "Synchroniser les données" (sync_now), exactement comme pour le
+    reste — le vendeur n'a aucun moyen de le désactiver spécifiquement.
 
 IMPORTANT — colonnes envoyées à Supabase :
   Seules les colonnes qui existent réellement côté Supabase sont envoyées.
@@ -19,11 +29,46 @@ IMPORTANT — colonnes envoyées à Supabase :
   (user_id, quantity_before, quantity_after, reference_id, reference_type
   sur stock_movements) ne partent JAMAIS vers le cloud.
 
+  Schéma confirmé via sales_repository.py :
+    - sales : a `created_at` (utilisé comme curseur de push) mais AUCUNE
+      colonne client_name / payment_method_name — ce sont des JOIN vers
+      clients / payment_methods. On les résout donc en SQL direct dans
+      _push_sales() (snapshot texte, pas de FK synchronisée).
+    - sale_items : AUCUNE colonne timestamp. Il faut en ajouter une par
+      migration (voir PRÉ-REQUIS) pour permettre le push incrémental.
+    - sale_payments : a `paid_at` (pas `created_at`) — utilisé tel quel
+      comme curseur de push. `payment_method_name` résolu par JOIN,
+      comme pour sales.
+
 PRÉ-REQUIS :
-  - Migration exécutée : src.database.migrations.cloud_sync_migration
-  - Tables miroir Supabase créées avec les mêmes noms de colonnes que ceux
-    utilisés ici (voir to_remote() de chaque adaptateur pour la liste exacte).
+  - Migration à ajouter dans src.database.migrations.cloud_sync_migration :
+      1. sales         : ALTER TABLE sales ADD COLUMN sync_uuid TEXT UNIQUE;
+      2. sale_items     : ALTER TABLE sale_items ADD COLUMN sync_uuid TEXT UNIQUE;
+                          ALTER TABLE sale_items ADD COLUMN created_at TIMESTAMP;
+                          -- backfill depuis la vente parente (append-only,
+                          -- donc la date de la vente est une approximation
+                          -- correcte pour un curseur de tri) :
+                          UPDATE sale_items
+                          SET created_at = (
+                              SELECT s.created_at FROM sales s WHERE s.id = sale_items.sale_id
+                          )
+                          WHERE created_at IS NULL;
+      3. sale_payments  : ALTER TABLE sale_payments ADD COLUMN sync_uuid TEXT UNIQUE;
+      (backfill_missing_uuids("sales"/"sale_items"/"sale_payments") s'occupe
+      ensuite de générer les sync_uuid manquants à chaque sync_now(), comme
+      pour les autres tables — rien à faire de plus après la migration.)
+  - Tables miroir Supabase créées : sales, sale_items, sale_payments,
+    avec une colonne sync_uuid UNIQUE (contrainte requise pour l'upsert
+    via on_conflict=sync_uuid, cf. SupabaseRestClient.upsert_rows).
   - Horloges des appareils synchronisées (NTP).
+
+  LIMITE CONNUE : sales.status peut changer après coup (ex: passage à
+  'refunded' suite à un retour). Ce module ne pousse une vente qu'UNE
+  SEULE FOIS (append-only) : un changement de statut ultérieur ne sera
+  PAS reflété côté mobile. Si ce cas doit être couvert, il faudra faire
+  de `sales` une table LWW (comme categories/suppliers/products) plutôt
+  qu'un simple push-once — hors du périmètre demandé ici (consultation
+  de l'historique uniquement).
 
 Pour ajouter barcodes / product_components, dupliquer le patron de
 ProductAdapter avec leurs propres champs et FK.
@@ -33,6 +78,7 @@ from datetime import timezone
 from dateutil import parser as date_parser
 from PySide6.QtCore import QObject, Signal, Slot
 
+from src.database.connection import get_db_connection
 from src.database.repositories.cloud_sync_repository import CloudSyncRepository
 from src.database.repositories.catalog_repository import CatalogRepository
 from src.managers.sync.supabase_rest_client import SupabaseRestClient
@@ -194,10 +240,11 @@ class ProductAdapter(_BaseLWWAdapter):
 # ────────────────────────────────────────────────────────────────────
 
 class CloudDataSyncManager(QObject):
-    """Synchronise categories/suppliers/products (LWW) et stock_movements
-    (fusion additive) entre cet appareil et Supabase."""
+    """Synchronise categories/suppliers/products (LWW), stock_movements
+    (fusion additive, bidirectionnel) et l'historique des ventes
+    (push-only, consultation mobile) entre cet appareil et Supabase."""
 
-    version = "1.1.0"
+    version = "1.2.0"
 
     sync_started = Signal()
     sync_finished = Signal(bool, str)  # succès, message
@@ -208,6 +255,26 @@ class CloudDataSyncManager(QObject):
     STOCK_MOVEMENT_REMOTE_FIELDS = [
         "sync_uuid", "product_id", "movement_type", "quantity",
         "reason", "unit_cost", "notes", "created_at",
+    ]
+
+    # ── Historique des ventes (push-only, journal de consultation) ──
+    # Champs confirmés contre sales_repository.py. "client_name" et
+    # "payment_method_name" sont des SNAPSHOTS texte obtenus par JOIN SQL
+    # direct dans _push_sales()/_push_sale_payments() (comme
+    # product_name_snap, déjà présent nativement dans sale_items) : on
+    # évite ainsi une dépendance FK sur clients/payment_methods, pas
+    # synchronisés dans ce lot.
+    SALE_REMOTE_FIELDS = [
+        "invoice_number", "sale_date", "subtotal", "tax_amount",
+        "discount_amount", "total_amount", "status", "notes",
+        "client_name", "payment_method_name", "created_at",
+    ]
+    SALE_ITEM_REMOTE_FIELDS = [
+        "quantity", "unit_price", "discount", "total_price",
+        "product_name_snap", "created_at",
+    ]
+    SALE_PAYMENT_REMOTE_FIELDS = [
+        "amount", "reference", "payment_method_name", "paid_at",
     ]
 
     def __init__(self, parent=None, current_user=None):
@@ -229,8 +296,12 @@ class CloudDataSyncManager(QObject):
         if not self.client.is_configured():
             return {"configured": False, "last_sync": None}
 
+        tables = (
+            list(self._adapters.keys())
+            + ["stock_movements", "sales", "sale_items", "sale_payments"]
+        )
         timestamps = []
-        for table in list(self._adapters.keys()) + ["stock_movements"]:
+        for table in tables:
             state = self.sync_repo.get_state(table)
             for key in ("last_pushed_at", "last_pulled_at"):
                 if state.get(key):
@@ -259,7 +330,11 @@ class CloudDataSyncManager(QObject):
         try:
             # Comble les sync_uuid manquants (lignes créées après la migration
             # initiale, ou via un chemin de code qui n'en génère pas encore).
-            for table in list(self._adapters.keys()) + ["stock_movements"]:
+            all_tables = (
+                list(self._adapters.keys())
+                + ["stock_movements", "sales", "sale_items", "sale_payments"]
+            )
+            for table in all_tables:
                 self.sync_repo.backfill_missing_uuids(table)
 
             for table in self._adapters:
@@ -283,6 +358,24 @@ class CloudDataSyncManager(QObject):
                 self._pull_stock_movements()
             except Exception as e:
                 errors.append(f"pull stock_movements : {e}")
+
+            # ── Historique des ventes : PUSH uniquement, aucun pull. ──
+            # Ordre important : sales d'abord (pour que sale_items/
+            # sale_payments puissent résoudre sale_id -> sync_uuid).
+            try:
+                self._push_sales()
+            except Exception as e:
+                errors.append(f"push sales : {e}")
+
+            try:
+                self._push_sale_items()
+            except Exception as e:
+                errors.append(f"push sale_items : {e}")
+
+            try:
+                self._push_sale_payments()
+            except Exception as e:
+                errors.append(f"push sale_payments : {e}")
 
             if errors:
                 self.sync_finished.emit(False, " | ".join(errors))
@@ -329,7 +422,7 @@ class CloudDataSyncManager(QObject):
 
         self.sync_repo.set_pulled(table, remote_rows[-1]["updated_at"])
 
-    # ── Mouvements de stock (append-only, fusion additive) ─────────
+    # ── Mouvements de stock (append-only, fusion additive, bidirectionnel) ──
 
     def _push_stock_movements(self):
         table = "stock_movements"
@@ -383,3 +476,77 @@ class CloudDataSyncManager(QObject):
                 self.sync_repo.stamp_sync_uuid(table, new_id, remote_uuid)
 
         self.sync_repo.set_pulled(table, remote_rows[-1]["created_at"])
+
+    # ── Historique des ventes (append-only, PUSH UNIQUEMENT) ────────
+    # Aucun pull : le mobile consulte, il ne crée jamais de vente à
+    # distance. Pas de bouton dédié — intégré au sync_now() existant,
+    # exactement comme le reste : le vendeur n'a pas de levier pour
+    # désactiver spécifiquement l'envoi de son historique de ventes.
+
+    def _push_sales(self):
+        table = "sales"
+        state = self.sync_repo.get_state(table)
+        rows = self.sync_repo.fetch_local_new_since(table, state.get("last_pushed_at"))
+        if not rows:
+            return
+
+        remote_rows = []
+        for r in rows:
+            row = {"sync_uuid": r["sync_uuid"]}
+            for field in self.SALE_REMOTE_FIELDS:
+                row[field] = r.get(field)
+            remote_rows.append(row)
+
+        self.client.upsert_rows(table, remote_rows)
+        self.sync_repo.set_pushed(table, rows[-1]["created_at"])
+
+    def _push_sale_items(self):
+        table = "sale_items"
+        state = self.sync_repo.get_state(table)
+        rows = self.sync_repo.fetch_local_new_since(table, state.get("last_pushed_at"))
+        if not rows:
+            return
+
+        remote_rows = []
+        for r in rows:
+            sale_uuid = self.sync_repo.find_uuid_by_local_id("sales", r.get("sale_id"))
+            if not sale_uuid:
+                # La vente parente n'est pas encore synchronisée (rattrapee
+                # au prochain cycle, une fois _push_sales() repassee).
+                continue
+            row = {"sync_uuid": r["sync_uuid"], "sale_id": sale_uuid}
+            product_id = r.get("product_id")
+            row["product_id"] = self.sync_repo.find_uuid_by_local_id("products", product_id) \
+                if product_id else None
+            for field in self.SALE_ITEM_REMOTE_FIELDS:
+                row[field] = r.get(field)
+            remote_rows.append(row)
+
+        if not remote_rows:
+            return
+
+        self.client.upsert_rows(table, remote_rows)
+        self.sync_repo.set_pushed(table, rows[-1]["created_at"])
+
+    def _push_sale_payments(self):
+        table = "sale_payments"
+        state = self.sync_repo.get_state(table)
+        rows = self.sync_repo.fetch_local_new_since(table, state.get("last_pushed_at"))
+        if not rows:
+            return
+
+        remote_rows = []
+        for r in rows:
+            sale_uuid = self.sync_repo.find_uuid_by_local_id("sales", r.get("sale_id"))
+            if not sale_uuid:
+                continue
+            row = {"sync_uuid": r["sync_uuid"], "sale_id": sale_uuid}
+            for field in self.SALE_PAYMENT_REMOTE_FIELDS:
+                row[field] = r.get(field)
+            remote_rows.append(row)
+
+        if not remote_rows:
+            return
+
+        self.client.upsert_rows(table, remote_rows)
+        self.sync_repo.set_pushed(table, rows[-1]["created_at"])

@@ -3,26 +3,36 @@ Gestionnaire des parametres de base de donnees.
 """
 
 import os
-import shutil
 from datetime import datetime
-from pathlib import Path
 
 from PySide6.QtCore import QObject, Slot
 
 from src.database.connection import get_db_connection
 from src.ui.widgets.InfoDialog import InfoDialog
+from src.utils.backup_service import get_backup_service
 
 
 class DatabaseSettingsManager(QObject):
 
-    version = "2.1"
+    version = "2.2"
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
         self.view = None
         self.db = get_db_connection()
-        self.db_path = self.db.db_name
+
+        # Backup : avant, ce manager créait ses propres backups dans
+        # Path("backups") — un dossier DIFFÉRENT de celui utilisé par
+        # FileManager/SyncManager (Path("data/backups")). C'était le bug :
+        # ces backups étaient invisibles ailleurs dans l'app. Maintenant,
+        # tout le monde utilise le même service, donc le même dossier.
+        self.backup_service = get_backup_service()
+
+        # db_path emprunté au service (lui-même résolu depuis
+        # get_db_connection()) plutôt que recalculé ici séparément —
+        # une seule résolution du chemin de la BDD dans toute l'app.
+        self.db_path = self.backup_service.db_path
 
         print(f"[DatabaseSettingsManager v{self.version}] Initialise - BDD: {self.db_path}")
 
@@ -78,12 +88,14 @@ class DatabaseSettingsManager(QObject):
 
     @Slot()
     def create_backup(self):
+        """
+        Ne fait plus de shutil.copy2 ici : délégué entièrement au
+        BackupService partagé (même dossier "backups/" à la racine,
+        même politique de rétention que FileManager et SyncManager).
+        """
         try:
-            backup_dir = Path("backups")
-            backup_dir.mkdir(exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = backup_dir / f"librairie_backup_{timestamp}.db"
-            shutil.copy2(self.db_path, backup_path)
+            backup_path = self.backup_service.create_backup(prefix="siledje_backup")
+            self.backup_service.cleanup_old_backups(retain_days=7, keep_minimum=3)
             size_mb = backup_path.stat().st_size / (1024 * 1024)
             InfoDialog.success(
                 self.view, "Sauvegarde creee",

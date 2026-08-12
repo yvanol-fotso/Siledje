@@ -7,10 +7,16 @@ Composé de deux volets, exposés dans la même vue (SyncView) :
   2. Synchronisation des données (délégué à CloudDataSyncManager) —
      bidirectionnelle, catégories/fournisseurs/produits/stock, pensée pour
      la cohabitation avec le futur mobile.
+
+NOTE BACKUP : ce fichier ne crée plus jamais un backup lui-même. La copie
+physique du fichier .db passe systématiquement par BackupService
+(src/utils/backup_service.py) — seul endroit du projet qui fait un
+shutil.copy2 pour ça. Ici, on ne fait qu'orchestrer : demander un backup
+au service, l'empiler dans la file d'attente d'upload, gérer les
+tentatives et les échecs.
 """
 
 import os
-import shutil
 import socket
 import urllib.request
 import urllib.error
@@ -21,15 +27,16 @@ from PySide6.QtCore import QObject, QTimer, QSettings, Signal, Slot
 from dotenv import load_dotenv
 
 from src.database.repositories.sync_repository import SyncRepository
-from src.database.connection import get_db_connection
 from src.managers.sync.network_utils import has_internet_connection
 from src.managers.sync.cloud_data_sync_manager import CloudDataSyncManager
 from src.ui.widgets.InfoDialog import InfoDialog
+from src.utils.backup_service import get_backup_service
 
 load_dotenv()
 
 MAX_ATTEMPTS = 5
 TIMER_TICK_MS = 60_000
+BACKUP_CLEANUP_INTERVAL_HOURS = 24
 
 
 class CloudSyncClient:
@@ -73,7 +80,7 @@ class SyncManager(QObject):
     """Orchestre la sauvegarde cloud complète ET porte le manager de
     synchronisation de données (délégation, pas de logique dupliquée)."""
 
-    version = "2.1.0"
+    version = "2.2.0"
 
     status_changed = Signal()
     history_changed = Signal()
@@ -90,14 +97,13 @@ class SyncManager(QObject):
 
         self.data_sync_manager = CloudDataSyncManager(parent, current_user)
 
-        conn = get_db_connection()
-        self.db_path = Path(
-            getattr(conn, "db_path", None)
-            or getattr(conn, "db_name", None)
-            or "librairie.db"
-        )
-        self.backup_dir = Path("data/backups")
-        self.backup_dir.mkdir(parents=True, exist_ok=True)
+        # Backup : plus de dossier ni de copie gérés ici, tout passe par le service partagé.
+        self.backup_service = get_backup_service()
+
+        # db_path emprunté au service (une seule résolution du chemin
+        # de la BDD dans toute l'app, voir backup_service.py) plutôt que
+        # recalculé séparément ici.
+        self.db_path = self.backup_service.db_path
 
         self._is_syncing = False
         self._is_online_cached = True
@@ -235,11 +241,30 @@ class SyncManager(QObject):
 
     def _on_timer_tick(self):
         self._refresh_connectivity_cache()
+        self._maybe_cleanup_backups()
         if not self.auto_sync_enabled or self._is_syncing:
             return
         due_since = self._last_attempt_at() + timedelta(minutes=self.interval_minutes)
         if datetime.now() >= due_since:
             self._run_sync(manual=False)
+
+    def _maybe_cleanup_backups(self):
+        """
+        Purge les vieux backups (>7 jours, en garde toujours 3 minimum),
+        au plus une fois par 24h — pas besoin de le faire à chaque tick
+        d'une minute, c'est juste un ménage périodique peu coûteux.
+        """
+        last = self.settings.value("backups/last_cleanup_at", "")
+        now = datetime.now()
+        if last:
+            try:
+                if now - datetime.fromisoformat(last) < timedelta(hours=BACKUP_CLEANUP_INTERVAL_HOURS):
+                    return
+            except ValueError:
+                pass
+        self.backup_service.cleanup_old_backups(retain_days=7, keep_minimum=3)
+        self.settings.setValue("backups/last_cleanup_at", now.isoformat())
+        self.settings.sync()
 
     def _refresh_connectivity_cache(self):
         """Seul endroit où le vrai test réseau (bloquant, jusqu'à ~2.5s) est
@@ -316,8 +341,13 @@ class SyncManager(QObject):
                 self.repo.mark_attempt(op_id, success=False, error=str(e))
 
     def _create_and_enqueue_backup(self):
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_path = self.backup_dir / f"cloud_sync_{timestamp}.db"
-        shutil.copy2(str(self.db_path), str(backup_path))
+        """
+        Crée le fichier de backup via le service partagé (même dossier
+        "backups/" que tous les autres backups, préfixé "cloud_sync" pour
+        qu'on sache d'où il vient), puis l'empile dans la file d'upload.
+        La copie physique n'est jamais refaite ici — seule la file
+        d'attente/tentatives est spécifique à ce manager.
+        """
+        backup_path = self.backup_service.create_backup(prefix="cloud_sync")
         op_id = self.repo.enqueue(str(backup_path))
         return op_id, str(backup_path)
