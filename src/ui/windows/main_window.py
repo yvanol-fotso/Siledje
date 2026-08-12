@@ -1,5 +1,8 @@
 """
-Fenêtre principale — VERSION FINALE COMPLÈTE (corrigée : propagation du thème).
+Fenêtre principale — VERSION FINALE COMPLÈTE (corrigée : propagation du thème
++ correction de l'incohérence de couleurs dans les contenus personnalisés
+des InfoDialog.rich() : Documentation, Guide de démarrage, Contact support,
+À propos, Licences).
 Utilise la nouvelle architecture : managers/stock/ + ui/views/stock/
 """
 
@@ -206,6 +209,36 @@ class MainWindow(QMainWindow):
                 widget.update()
         except Exception as e:
             print(f"[MainWindow] Erreur propagation thème sur {widget}: {e}")
+
+    # ── COULEURS POUR CONTENUS PERSONNALISÉS DES INFODIALOG ─────────────
+    # InfoDialog.rich() thème uniquement son propre chrome (header/footer/
+    # frame) — il ne touche jamais au `content_widget` qu'on lui injecte.
+    # Les méthodes open_docs / open_quick_start / contact_support /
+    # show_about / show_licenses construisent leur propre QWidget avec des
+    # QLabel : ces couleurs doivent donc être résolues ICI, selon le thème
+    # courant, sinon elles restent figées en clair (ex: texte #2c3e50 sur
+    # fond sombre #1e2a38 → quasi invisible).
+
+    def _dialog_text_colors(self) -> dict:
+        """Couleurs de texte adaptées au thème courant, à utiliser dans tout
+        contenu personnalisé passé à InfoDialog.rich()."""
+        is_dark = self.theme_manager.get_current_theme() == 'dark'
+        if is_dark:
+            return {
+                "primary":   "#ecf0f1",  # texte principal
+                "secondary": "#b0bfcc",  # texte secondaire / description
+                "muted":     "#8a99a8",  # texte tertiaire / auteurs, dates
+                "accent":    "#1abc9c",  # titres / accents
+            }
+        return {
+            "primary":   "#2c3e50",
+            "secondary": "#555555",
+            "muted":     "#7f8c8d",
+            "accent":    "#3498db",
+        }
+
+    def _is_dark_theme(self) -> bool:
+        return self.theme_manager.get_current_theme() == 'dark'
 
     # ── MENUS ─────────────────────────────────────────────────────────
 
@@ -631,47 +664,41 @@ class MainWindow(QMainWindow):
         from src.ui.widgets.modal_form import ModalForm
         from PySide6.QtWidgets import QFormLayout, QLineEdit, QCheckBox, QComboBox, QLabel
 
+        # ✅ CORRECTIF : plus aucune couleur codée en dur ici. ModalForm applique
+        # déjà un QSS thémé (dark/light) à tous les descendants de
+        # #modalContent — QLineEdit, QComboBox, QCheckBox, QLabel compris.
+        # Un style local (fond blanc fixe, texte sombre fixe) écrasait ce QSS
+        # et laissait les champs blancs même en thème sombre. On suit ici la
+        # même logique que ProductForm : on ne fixe que ce que le QSS parent
+        # ne définit pas (ex: font-weight), jamais les couleurs.
         modal = ModalForm(title="Configuration générale", parent=self,
                           width=700, height=600,
-                          ok_text="Enregistrer", cancel_text="Annuler")
+                          ok_text="Enregistrer", cancel_text="Annuler",
+                          is_dark=self._is_dark_theme())
         content = QWidget()
         form = QFormLayout()
         form.setSpacing(20)
         form.setContentsMargins(20, 20, 20, 20)
 
-        lbl_s = "font-weight:bold; font-size:14px; color:#2c3e50; padding:5px;"
-        inp_s = """
-            QLineEdit, QComboBox { font-size:14px; padding:12px;
-                border:2px solid #bdc3c7; border-radius:8px;
-                background:#ffffff; color:#2c3e50; min-height:45px; }
-            QLineEdit:focus, QComboBox:focus { border:2px solid #3498db; }
-        """
         def lbl(t):
-            l = QLabel(t); l.setStyleSheet(lbl_s); return l
+            l = QLabel(t)
+            l.setStyleSheet("font-weight:bold; font-size:14px; padding:5px;")
+            return l
 
-        company = QLineEdit("SILEDJE"); company.setStyleSheet(inp_s)
+        company = QLineEdit("SILEDJE")
         form.addRow(lbl("Nom de l'entreprise:"), company)
 
         lang = QComboBox()
         lang.addItems(["Français", "English", "Español"])
-        lang.setStyleSheet(inp_s)
         form.addRow(lbl("Langue:"), lang)
 
         currency = QComboBox()
         currency.addItems(["FCFA", "EUR", "USD"])
-        currency.setStyleSheet(inp_s)
         form.addRow(lbl("Devise:"), currency)
 
         settings = QSettings("Siledje", "Siledje")
         confirm_chk = QCheckBox("Demander confirmation avant de quitter")
         confirm_chk.setChecked(settings.value("confirm_exit", False, type=bool))
-        confirm_chk.setStyleSheet("""
-            QCheckBox { font-size:14px; color:#2c3e50; font-weight:bold;
-                padding:10px; spacing:10px; }
-            QCheckBox::indicator { width:20px; height:20px;
-                border:2px solid #bdc3c7; border-radius:4px; background:#ffffff; }
-            QCheckBox::indicator:checked { background:#3498db; border-color:#3498db; }
-        """)
         form.addRow(QLabel(""), confirm_chk)
         content.setLayout(form)
         modal.set_content(content)
@@ -723,9 +750,14 @@ class MainWindow(QMainWindow):
             self.fullscreen_action.setChecked(True)
 
     # ── SLOTS AIDE ────────────────────────────────────────────────────
+    # ✅ CORRECTIF : chaque contenu personnalisé utilise désormais
+    # self._dialog_text_colors() au lieu de couleurs codées en dur pour
+    # le thème clair, et is_dark est transmis explicitement à
+    # InfoDialog.rich().
 
     @Slot()
     def open_docs(self):
+        c = self._dialog_text_colors()
         content = QWidget()
         lay = QVBoxLayout(); lay.setSpacing(14); lay.setContentsMargins(0, 0, 0, 0)
         for title, desc in [
@@ -737,13 +769,15 @@ class MainWindow(QMainWindow):
                                  "Ctrl+R Rapports | Ctrl+U Utilisateurs | F11 Plein écran\n"
                                  "Ctrl+F Fichiers | Ctrl+= Zoom+ | Ctrl+- Zoom- | Ctrl+0 Reset"),
         ]:
-            t = QLabel(title); t.setStyleSheet("font-size:14px; font-weight:bold; color:#3498db; margin-top:4px;"); lay.addWidget(t)
-            d = QLabel(desc);  d.setWordWrap(True); d.setStyleSheet("font-size:13px; color:#2c3e50; padding-left:12px;"); lay.addWidget(d)
+            t = QLabel(title); t.setStyleSheet(f"font-size:14px; font-weight:bold; color:{c['accent']}; margin-top:4px;"); lay.addWidget(t)
+            d = QLabel(desc);  d.setWordWrap(True); d.setStyleSheet(f"font-size:13px; color:{c['primary']}; padding-left:12px;"); lay.addWidget(d)
         lay.addStretch(); content.setLayout(lay)
-        InfoDialog.rich(self, "Documentation – Siledje", content, dialog_type=DialogType.INFO, width=680, height=520)
+        InfoDialog.rich(self, "Documentation – Siledje", content, dialog_type=DialogType.INFO,
+                         width=680, height=520, is_dark=self._is_dark_theme())
 
     @Slot()
     def open_quick_start(self):
+        c = self._dialog_text_colors()
         content = QWidget()
         lay = QVBoxLayout(); lay.setSpacing(10); lay.setContentsMargins(0, 0, 0, 0)
         for num, title, desc in [
@@ -758,13 +792,14 @@ class MainWindow(QMainWindow):
             badge = QLabel(num); badge.setFixedSize(30, 30); badge.setAlignment(Qt.AlignCenter)
             badge.setStyleSheet("background:#2ecc71; color:white; border-radius:15px; font-weight:bold; font-size:14px;")
             texts = QVBoxLayout(); texts.setSpacing(2)
-            t = QLabel(title); t.setStyleSheet("font-size:13px; font-weight:bold; color:#2c3e50;")
-            d = QLabel(desc);  d.setWordWrap(True); d.setStyleSheet("font-size:12px; color:#555;")
+            t = QLabel(title); t.setStyleSheet(f"font-size:13px; font-weight:bold; color:{c['primary']};")
+            d = QLabel(desc);  d.setWordWrap(True); d.setStyleSheet(f"font-size:12px; color:{c['secondary']};")
             texts.addWidget(t); texts.addWidget(d)
             row.addWidget(badge); row.addLayout(texts); row.addStretch()
-            c = QWidget(); c.setLayout(row); lay.addWidget(c)
+            cw = QWidget(); cw.setLayout(row); lay.addWidget(cw)
         lay.addStretch(); content.setLayout(lay)
-        InfoDialog.rich(self, "Guide de démarrage rapide", content, dialog_type=DialogType.SUCCESS, width=640, height=520)
+        InfoDialog.rich(self, "Guide de démarrage rapide", content, dialog_type=DialogType.SUCCESS,
+                         width=640, height=520, is_dark=self._is_dark_theme())
 
     @Slot()
     def open_video_tutorials(self):
@@ -772,13 +807,14 @@ class MainWindow(QMainWindow):
             "Les tutoriels vidéo seront disponibles prochainement.\n\n"
             "En attendant:\n  • Aide > Documentation\n"
             "  • Aide > Guide de démarrage rapide\n  • Aide > Contacter le support",
-            width=500, height=280)
+            width=500, height=280, is_dark=self._is_dark_theme())
 
     @Slot()
     def check_updates(self):
         InfoDialog.success(self, "Vérification des mises à jour",
             f"Version actuelle : {self.config.version}\n\n"
-            "Vous utilisez la dernière version disponible.", width=480, height=240)
+            "Vous utilisez la dernière version disponible.", width=480, height=240,
+            is_dark=self._is_dark_theme())
 
     @Slot()
     def report_bug(self):
@@ -786,30 +822,35 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def contact_support(self):
+        c = self._dialog_text_colors()
         content = QWidget()
         lay = QVBoxLayout(); lay.setSpacing(8); lay.setContentsMargins(0, 0, 0, 0)
         def row(lbl_text, val_text):
             r = QHBoxLayout()
-            l = QLabel(lbl_text); l.setFixedWidth(110); l.setStyleSheet("font-size:13px; font-weight:bold; color:#3498db;")
-            v = QLabel(val_text); v.setStyleSheet("font-size:13px; color:#2c3e50;")
+            l = QLabel(lbl_text); l.setFixedWidth(110); l.setStyleSheet(f"font-size:13px; font-weight:bold; color:{c['accent']};")
+            v = QLabel(val_text); v.setStyleSheet(f"font-size:13px; color:{c['primary']};")
             r.addWidget(l); r.addWidget(v); r.addStretch()
             w = QWidget(); w.setLayout(r); return w
         hdr = QLabel("Support technique Siledje")
-        hdr.setStyleSheet("font-size:16px; font-weight:bold; color:#2c3e50; margin-bottom:8px;")
-        lay.addWidget(hdr); lay.addWidget(QLabel("Disponibles pour vous aider.")); lay.addSpacing(10)
+        hdr.setStyleSheet(f"font-size:16px; font-weight:bold; color:{c['primary']}; margin-bottom:8px;")
+        info_lbl = QLabel("Disponibles pour vous aider.")
+        info_lbl.setStyleSheet(f"color:{c['secondary']};")
+        lay.addWidget(hdr); lay.addWidget(info_lbl); lay.addSpacing(10)
         lay.addWidget(row("Email :",     "support@siledje.cm"))
         lay.addWidget(row("Téléphone :", "+237 694 122 436"))
         lay.addWidget(row("Lun–Ven :",   "08h00 – 18h00"))
         lay.addWidget(row("Samedi :",    "09h00 – 13h00"))
         lay.addStretch(); content.setLayout(lay)
-        InfoDialog.rich(self, "Contacter le support", content, dialog_type=DialogType.INFO, width=500, height=360)
+        InfoDialog.rich(self, "Contacter le support", content, dialog_type=DialogType.INFO,
+                         width=500, height=360, is_dark=self._is_dark_theme())
 
     @Slot()
     def show_licenses(self):
+        c = self._dialog_text_colors()
         content = QWidget()
         lay = QVBoxLayout(); lay.setSpacing(6); lay.setContentsMargins(0, 0, 0, 0)
         hdr = QLabel("Licences des composants utilisés")
-        hdr.setStyleSheet("font-size:14px; font-weight:bold; color:#2c3e50; margin-bottom:6px;")
+        hdr.setStyleSheet(f"font-size:14px; font-weight:bold; color:{c['primary']}; margin-bottom:6px;")
         lay.addWidget(hdr)
         for name, lic, author in [
             ("PySide6","LGPL v3.0","Qt Company"), ("Python","PSF License","Python Software Foundation"),
@@ -817,26 +858,31 @@ class MainWindow(QMainWindow):
             ("reportlab","BSD License","ReportLab Inc."),
         ]:
             rw = QWidget(); rl = QHBoxLayout(); rl.setContentsMargins(0, 2, 0, 2)
-            n = QLabel(name); n.setFixedWidth(180); n.setStyleSheet("font-size:12px; font-weight:bold; color:#2c3e50;")
-            l = QLabel(lic);  l.setFixedWidth(130); l.setStyleSheet("font-size:12px; color:#e74c3c;")
-            a = QLabel(author); a.setStyleSheet("font-size:12px; color:#7f8c8d;")
+            n = QLabel(name); n.setFixedWidth(180); n.setStyleSheet(f"font-size:12px; font-weight:bold; color:{c['primary']};")
+            l = QLabel(lic);  l.setFixedWidth(130); l.setStyleSheet("font-size:12px; color:#e74c3c;")  # rouge intentionnel, lisible sur les deux thèmes
+            a = QLabel(author); a.setStyleSheet(f"font-size:12px; color:{c['muted']};")
             rl.addWidget(n); rl.addWidget(l); rl.addWidget(a); rl.addStretch()
             rw.setLayout(rl); lay.addWidget(rw)
         lay.addStretch(); content.setLayout(lay)
-        InfoDialog.rich(self, "Licences", content, dialog_type=DialogType.INFO, width=600, height=380)
+        InfoDialog.rich(self, "Licences", content, dialog_type=DialogType.INFO,
+                         width=600, height=380, is_dark=self._is_dark_theme())
 
     @Slot()
     def show_about(self):
+        c = self._dialog_text_colors()
         content = QWidget()
         lay = QVBoxLayout(); lay.setSpacing(6); lay.setContentsMargins(0, 0, 0, 0)
-        def c(text, color="#2c3e50", size=13, bold=False):
+        def make_label(text, color=None, size=13, bold=False):
+            color = color or c['primary']
             l = QLabel(text); l.setAlignment(Qt.AlignCenter); l.setWordWrap(True)
             l.setStyleSheet(f"font-size:{size}px; font-weight:{'bold' if bold else 'normal'}; color:{color};"); return l
-        lay.addWidget(c("SILEDJE", "#3498db", 28, True))
-        lay.addWidget(c(f"Siledje  v{self.config.version}", "#7f8c8d", 13))
-        lay.addSpacing(6); lay.addWidget(c("Application complète de gestion pour Siledje.")); lay.addSpacing(8)
+        lay.addWidget(make_label("SILEDJE", c['accent'], 28, True))
+        lay.addWidget(make_label(f"Siledje  v{self.config.version}", c['muted'], 13))
+        lay.addSpacing(6)
+        lay.addWidget(make_label("Application complète de gestion pour Siledje."))
+        lay.addSpacing(8)
         mods_lbl = QLabel("Modules actifs:"); mods_lbl.setAlignment(Qt.AlignCenter)
-        mods_lbl.setStyleSheet("font-size:13px; font-weight:bold; color:#2c3e50;"); lay.addWidget(mods_lbl)
+        mods_lbl.setStyleSheet(f"font-size:13px; font-weight:bold; color:{c['primary']};"); lay.addWidget(mods_lbl)
         mods = [
             ("Accueil", self.modules['accueil'].version), ("Stock", self.modules['stock'].version),
             ("Ventes", self.modules['sales'].version), ("Admin", self.modules['admin'].version),
@@ -849,14 +895,15 @@ class MainWindow(QMainWindow):
         grid = QWidget(); gl = QHBoxLayout(); gl.setContentsMargins(0, 0, 0, 0)
         col1, col2 = QVBoxLayout(), QVBoxLayout()
         for i, (name, ver) in enumerate(mods):
-            lb = QLabel(f"• {name}: v{ver}"); lb.setStyleSheet("font-size:12px; color:#555;")
+            lb = QLabel(f"• {name}: v{ver}"); lb.setStyleSheet(f"font-size:12px; color:{c['secondary']};")
             (col1 if i < 6 else col2).addWidget(lb)
         gl.addLayout(col1); gl.addLayout(col2); grid.setLayout(gl); lay.addWidget(grid)
         lay.addSpacing(8)
-        lay.addWidget(c("Développé par : Mr FOTSO TATCHUM Yvanol Rosly", "#2c3e50", 13, True))
-        lay.addWidget(c("© 2025 Siledje – Tous droits réservés", "#7f8c8d", 12))
+        lay.addWidget(make_label("Développé par : Mr FOTSO TATCHUM Yvanol Rosly", c['primary'], 13, True))
+        lay.addWidget(make_label("© 2025 Siledje – Tous droits réservés", c['muted'], 12))
         lay.addStretch(); content.setLayout(lay)
-        InfoDialog.rich(self, "À propos de Siledje", content, dialog_type=DialogType.INFO, width=600, height=520)
+        InfoDialog.rich(self, "À propos de Siledje", content, dialog_type=DialogType.INFO,
+                         width=600, height=520, is_dark=self._is_dark_theme())
 
     # ── SYSTÈME ───────────────────────────────────────────────────────
 

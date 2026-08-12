@@ -36,13 +36,13 @@ class ProductForm(QWidget):
 
         def lbl(text):
             # Pas de couleur ici : elle vient de "QWidget#modalContent QLabel"
-            # dans ModalView. On ne fixe QUE le poids de la police, une
+            # dans ModalForm. On ne fixe QUE le poids de la police, une
             # propriete que l'ancetre ne definit pas -> pas de conflit.
             l = QLabel(text)
             l.setStyleSheet("font-weight: bold; font-size: 14px;")
             return l
 
-        # ── Case a cocher livre : aucun style -> QSS de ModalView ──
+        # ── Case a cocher livre : aucun style -> QSS de ModalForm ──
         self.is_book_check = QCheckBox("Ceci est un livre (manuel scolaire)")
         self.is_book_check.setChecked(self._is_book)
         self.is_book_check.toggled.connect(self._update_book_fields_visibility)
@@ -123,7 +123,7 @@ class ProductForm(QWidget):
             self.location_input.setText(self.product.get("location", "") or "")
         layout.addRow(lbl("Emplacement:"), self.location_input)
 
-        # ── Groupe livre : aucun style -> QSS de ModalView (QGroupBox) ──
+        # ── Groupe livre : aucun style -> QSS de ModalForm (QGroupBox) ──
         self.book_group = QGroupBox("Informations du livre")
         book_layout = QFormLayout(self.book_group)
         book_layout.setSpacing(12)
@@ -155,7 +155,7 @@ class ProductForm(QWidget):
 
         layout.addRow(self.book_group)
 
-        # ── Actif : aucun style -> QSS de ModalView ──
+        # ── Actif : aucun style -> QSS de ModalForm ──
         self.active_chk = QCheckBox("Produit actif")
         self.active_chk.setChecked(
             bool(self.product.get("is_active", 1)) if self.product else True
