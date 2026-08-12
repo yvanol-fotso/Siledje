@@ -99,7 +99,8 @@ SILEDJE/
 │   │   └── repositories/
 │   │       ├── user_repository.py
 │   │       ├── license_repository.py
-│   │       ├── catalog_repository.py
+│   │       ├── bug_report_repository.py
+|   |       ├── catalog_repository.py
 │   │       ├── sales_repository.py
 │   │       ├── supplier_order_repository.py
 │   │       ├── surveillance_repository.py
