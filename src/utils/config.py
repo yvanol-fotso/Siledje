@@ -123,7 +123,6 @@ class AppConfig:
         self.styles_dir = self.assets_dir / "styles"
         self.images_dir = self.assets_dir / "images"
         self.icons_dir = self.assets_dir / "icons"
-        self.data_dir = self.base_dir / "data"
         
         # Chemin de la base de données — self.db_name n'a plus de "data/"
         # devant, donc self.db_path pointe directement sous base_dir :
@@ -191,7 +190,6 @@ class AppConfig:
             self.styles_dir,
             self.images_dir,
             self.icons_dir,
-            self.data_dir,
         ]
         
         all_valid = True
