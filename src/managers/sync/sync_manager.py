@@ -247,6 +247,7 @@ class SyncManager(QObject):
         due_since = self._last_attempt_at() + timedelta(minutes=self.interval_minutes)
         if datetime.now() >= due_since:
             self._run_sync(manual=False)
+            self.data_sync_manager.sync_now()
 
     def _maybe_cleanup_backups(self):
         """

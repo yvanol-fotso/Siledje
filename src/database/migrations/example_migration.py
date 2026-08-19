@@ -26,12 +26,12 @@ def upgrade(connection):
                 ADD COLUMN description TEXT
             """)
             connection.commit()
-            print("✅ Migration appliquée : colonne 'description' ajoutée")
+            print(" Migration appliquée : colonne 'description' ajoutée")
         else:
-            print("⚠️ Migration déjà appliquée : colonne 'description' existe")
+            print(" Migration déjà appliquée : colonne 'description' existe")
     
     except Exception as e:
-        print(f"❌ Erreur lors de la migration : {e}")
+        print(f" Erreur lors de la migration : {e}")
         connection.rollback()
         raise
 
@@ -46,7 +46,7 @@ def downgrade(connection):
     Args:
         connection: Connexion SQLite active
     """
-    print("⚠️ Downgrade non supporté pour cette migration (SQLite limitation)")
+    print(" Downgrade non supporté pour cette migration (SQLite limitation)")
     # Pour SQLite, il faudrait :
     # 1. Créer une nouvelle table sans la colonne
     # 2. Copier les données
