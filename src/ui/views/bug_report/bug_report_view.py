@@ -289,7 +289,6 @@ class BugReportView(BaseView):
         self._apply_local_styles()
         self._restyle_all_buttons()
 
-    def _apply_local_styles(self):
         """Styles propres a cette vue uniquement : sous-titre + transparence
         de la scroll area. Groupes/inputs/scrollbar deja geres par BaseView."""
         self.setStyleSheet(self.styleSheet() + """
