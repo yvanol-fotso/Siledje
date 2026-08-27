@@ -103,7 +103,12 @@ class ReportManager(QObject):
             except (ValueError, TypeError):
                 date_str = str(sale_date_str)
 
-            products_str = "\n".join(
+            # Separateur virgule au lieu de retour a la ligne par produit :
+            # avec setWordWrap sur la table, le texte ne retourne a la ligne
+            # que quand la largeur de la colonne est vraiment depassee, ce
+            # qui evite de gaspiller la hauteur de ligne (9 produits = 9
+            # lignes avant, contre 1-2 lignes maintenant).
+            products_str = ", ".join(
                 f"{item.get('product_name_snap', '?')} x{item['quantity']}"
                 for item in sale.get("items", [])
             )
@@ -148,7 +153,7 @@ class ReportManager(QObject):
               f"Articles={total_items}, Top={top_product[0]}")
 
     # ========== EXPORT / IMPRESSION ==========
-    
+
     @Slot()
     def export_csv(self):
         if not self.filtered_sales:
@@ -233,7 +238,7 @@ class ReportManager(QObject):
         </body></html>
         """
         return html
-    
+
     # ========== METHODES PUBLIQUES ==========
 
     def get_sales_count(self) -> int:

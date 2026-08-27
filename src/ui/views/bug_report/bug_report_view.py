@@ -38,7 +38,7 @@ class BugReportView(BaseView):
     """Formulaire de signalement de bug. Herite de BaseView."""
 
     submit_requested = Signal(dict)
-    version = "1.2.0"
+    version = "1.2.1"
 
     def __init__(self, parent=None):
         super().__init__(
@@ -137,7 +137,13 @@ class BugReportView(BaseView):
         # ── GROUPE : Details ──────────────────────────────────────────
         grp_bug = QGroupBox("Details du probleme")
         grp_bug.setObjectName("bugGroup")
-        grp_bug.setMinimumHeight(340)
+        # NOTE FIX: on ne fixe plus de minimumHeight() arbitraire ici.
+        # L'ancienne valeur (340px) etait souvent trop petite par rapport
+        # a la somme reelle des 3 lignes (severite + module + description
+        # avec ses 180px min), ce qui faisait "flotter" le calcul de
+        # hauteur du QScrollArea et empechait de scroller jusqu'au bas
+        # reel du champ Description. On laisse le layout calculer la
+        # hauteur naturelle a partir de ses enfants.
         bug_form = QFormLayout(grp_bug)
         bug_form.setSpacing(10)
         bug_form.setContentsMargins(16, 18, 16, 14)
@@ -171,7 +177,14 @@ class BugReportView(BaseView):
             "• Comment reproduire le probleme ?"
         )
         self.desc_input.setMinimumHeight(180)
-        self.desc_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # FIX: Expanding en hauteur A L'INTERIEUR d'un QScrollArea
+        # (widgetResizable=True) pousse Qt a caler la hauteur du champ sur
+        # celle du viewport visible plutot que sur sa taille reelle
+        # necessaire -> le scroll s'arrete avant d'atteindre le bas du
+        # texte. MinimumExpanding force le calcul a se baser sur la
+        # minimumHeight (180px) tout en restant capable de grandir, ce qui
+        # permet au QScrollArea de calculer une vraie plage de scroll.
+        self.desc_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
         self.desc_input.setObjectName("descInput")
 
         bug_form.addRow("Severite :", self.severity_combo)

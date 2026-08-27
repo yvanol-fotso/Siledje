@@ -5,6 +5,9 @@ from src.ui.widgets.themed_table import ThemedTable
 
 
 class StockProductsTable(ThemedTable):
+    # La colonne ID reste dans les donnees (COLUMNS) mais elle est masquee
+    # a l'affichage juste apres l'init (voir __init__ ci-dessous) : elle
+    # ne sert a rien pour l'utilisateur, la selection se fait deja par ligne.
     COLUMNS = [
         "ID", "Nom", "Categorie", "Fournisseur",
         "Prix Achat", "Prix Vente", "Stock",
@@ -18,6 +21,9 @@ class StockProductsTable(ThemedTable):
         header.setSectionResizeMode(QHeaderView.Stretch)
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+
+        # Colonne ID masquee : non utilisee pour le moment.
+        self.setColumnHidden(0, True)
 
     def set_products(self, products: list):
         self._products = products or []

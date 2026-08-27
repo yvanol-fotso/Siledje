@@ -3,11 +3,21 @@ Tableau utilisateurs admin — ThemedTable + AdminUserRow.
 """
 
 from PySide6.QtWidgets import QHeaderView
+
 from src.ui.widgets.themed_table import ThemedTable
 
 
 class AdminUserRow:
-    def __init__(self, id, username, name, email, role, is_active, last_login):
+    def __init__(
+        self,
+        id,
+        username,
+        name,
+        email,
+        role,
+        is_active,
+        last_login,
+    ):
         self.id = id
         self.username = username
         self.name = name
@@ -30,9 +40,16 @@ class AdminUserRow:
 
 
 class AdminUsersTable(ThemedTable):
+
+    # ID conservé dans les données mais masqué à l'affichage.
     COLUMNS = [
-        "ID", "Nom d'utilisateur", "Nom complet", "Email",
-        "Role", "Statut", "Derniere connexion",
+        "ID",
+        "Nom d'utilisateur",
+        "Nom complet",
+        "Email",
+        "Role",
+        "Statut",
+        "Derniere connexion",
     ]
 
     def __init__(self, parent=None):
@@ -42,24 +59,29 @@ class AdminUsersTable(ThemedTable):
             object_name="adminTable",
             row_height=40,
         )
-        self._users: list = []
-        self.set_column_resize_modes({
-            0: QHeaderView.ResizeToContents,
-            1: QHeaderView.Interactive,
-            2: QHeaderView.Stretch,
-            3: QHeaderView.Stretch,
-            4: QHeaderView.ResizeToContents,
-            5: QHeaderView.ResizeToContents,
-            6: QHeaderView.ResizeToContents,
-        })
+
+        self._users = []
+
+        # Même comportement que les tables Sales :
+        # toutes les colonnes visibles occupent l'espace disponible.
+        self.horizontalHeader().setSectionResizeMode(
+            QHeaderView.Stretch
+        )
+
+        # ID caché car inutile à afficher.
+        self.setColumnHidden(0, True)
 
     def set_users(self, users: list):
         """users = liste d'AdminUserRow."""
+
         self._users = list(users or [])
+
         if not self._users:
             self.set_empty_message("Aucun utilisateur")
             return
+
         rows = []
+
         for u in self._users:
             rows.append({
                 "ID": str(u.id),
@@ -70,11 +92,13 @@ class AdminUsersTable(ThemedTable):
                 "Statut": "Actif" if u.is_active else "Inactif",
                 "Derniere connexion": u.last_login or "Jamais",
             })
+
         self.set_rows(rows)
 
     def get_user(self, row: int) -> AdminUserRow | None:
         if 0 <= row < len(self._users):
             return self._users[row]
+
         return None
 
     def get_selected_user(self) -> AdminUserRow | None:

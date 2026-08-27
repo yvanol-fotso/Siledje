@@ -163,7 +163,7 @@ class MiniBarChart(QWidget):
 
 
 class FileView(BaseView):
-    version = "3.7.0"
+    version = "3.8.0"
 
     import_products_requested = Signal(str)
     export_products_requested = Signal(str)
@@ -174,7 +174,9 @@ class FileView(BaseView):
     import_categories_requested = Signal(str)
     export_categories_requested = Signal(str)
     template_categories_requested = Signal(str)
+    import_users_requested = Signal(str)
     export_users_requested = Signal(str)
+    template_users_requested = Signal(str)
     activate_license_requested = Signal(str)
     create_backup_requested = Signal()
     restore_backup_requested = Signal(str)
@@ -192,7 +194,9 @@ class FileView(BaseView):
         self._export_btns = []
         self._template_btns = []
         self._outline_btns = []
+        self._users_import_btn = None
         self._users_export_btn = None
+        self._users_template_btn = None
         self._license_activate_btn = None
         self._backup_restore_btn = None
         self._backup_delete_btn = None
@@ -343,6 +347,46 @@ class FileView(BaseView):
         layout.setSpacing(12)
         layout.setContentsMargins(8, 8, 8, 8)
 
+        # ── Import ─────────────────────────────────────────────
+        # Meme schema que les onglets Produits/Fournisseurs/Categories :
+        # champ fichier + Parcourir, puis Importer / Telecharger le modele.
+        # La permission (can_manage_users) est appliquee dans apply_permissions.
+        imp_group = QGroupBox("Importer Utilisateurs")
+        imp_layout = QVBoxLayout(imp_group)
+        imp_layout.setSpacing(8)
+
+        imp_row = QHBoxLayout()
+        self._users_import_input = QLineEdit()
+        self._users_import_input.setPlaceholderText("Selectionner un fichier CSV...")
+        self._users_import_input.setReadOnly(True)
+        imp_row.addWidget(self._users_import_input, 1)
+        imp_browse = outline_btn("Parcourir")
+        imp_browse.setMinimumWidth(100)
+        imp_browse.clicked.connect(lambda: self._browse_import(self._users_import_input))
+        imp_row.addWidget(imp_browse)
+        imp_layout.addLayout(imp_row)
+        self._outline_btns.append(imp_browse)
+
+        imp_btn_row = QHBoxLayout()
+        imp_btn_row.setSpacing(10)
+        self._users_import_btn = primary_btn("Importer", "upload")
+        self._users_import_btn.clicked.connect(
+            lambda: self.import_users_requested.emit(self._users_import_input.text())
+        )
+        self._users_template_btn = outline_btn("Telecharger le modele", "download")
+        self._users_template_btn.setMinimumWidth(180)
+        self._users_template_btn.clicked.connect(
+            lambda: self._request_template(
+                self.template_users_requested, "modele_utilisateurs.csv"
+            )
+        )
+        imp_btn_row.addWidget(self._users_import_btn)
+        imp_btn_row.addWidget(self._users_template_btn)
+        imp_btn_row.addStretch()
+        imp_layout.addLayout(imp_btn_row)
+        layout.addWidget(imp_group)
+
+        # ── Export ─────────────────────────────────────────────
         exp_group = QGroupBox("Exporter Utilisateurs")
         exp_layout = QVBoxLayout(exp_group)
         exp_layout.setSpacing(8)
@@ -568,6 +612,10 @@ class FileView(BaseView):
             btn.setEnabled(can_manage_stock)
         for btn in self._template_btns:
             btn.setEnabled(can_manage_stock)
+        if self._users_import_btn:
+            self._users_import_btn.setEnabled(can_manage_users)
+        if self._users_template_btn:
+            self._users_template_btn.setEnabled(can_manage_users)
         if self._users_export_btn:
             self._users_export_btn.setEnabled(can_manage_users)
         if self._users_tab_index >= 0:

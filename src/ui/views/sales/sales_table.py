@@ -8,6 +8,9 @@ from src.ui.views.base.base_view import Palette
 
 
 class SalesProductsTable(ThemedTable):
+    # La colonne Code-barres reste dans les donnees (COLUMNS) mais elle est
+    # masquee a l'affichage juste apres l'init (voir __init__ ci-dessous) :
+    # le code-barres n'est pas encore utilise, la selection se fait par ligne.
     COLUMNS = ["SKU", "Code-barres", "Nom", "Type", "Prix", "Stock"]
     TYPE_LABELS = {"unitaire": "UNT", "paquet": "PQT", "carton": "CRT"}
 
@@ -15,6 +18,9 @@ class SalesProductsTable(ThemedTable):
         super().__init__(self.COLUMNS, parent=parent, object_name="salesProductsTable")
         self._products_data = []
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+        # Colonne Code-barres masquee : non utilisee pour le moment.
+        self.setColumnHidden(1, True)
 
     def update_products(self, products: list):
         self._products_data = products or []
@@ -42,12 +48,16 @@ class SalesProductsTable(ThemedTable):
 
 
 class SalesCartTable(ThemedTable):
+    # Meme principe : colonne Code gardee en donnees, masquee a l'affichage.
     COLUMNS = ["SKU", "Code", "Nom", "Type", "Qte", "Sous-total"]
 
     def __init__(self, parent=None):
         super().__init__(self.COLUMNS, parent=parent, object_name="salesCartTable")
         self._cart_data = []
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+        # Colonne Code masquee : non utilisee pour le moment.
+        self.setColumnHidden(1, True)
 
     def update_cart(self, cart_items: list):
         self._cart_data = cart_items or []

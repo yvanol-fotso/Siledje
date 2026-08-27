@@ -43,7 +43,7 @@ def _fmt_money(n) -> str:
 class FileManager(QObject):
     """Gère toutes les opérations fichier (import/export/sauvegarde/licence)."""
 
-    version = "3.2.0"
+    version = "3.3.0"
 
     PRODUCT_COLUMNS_FR = [
         "Nom", "Description", "Catégorie", "Fournisseur", "SKU",
@@ -96,11 +96,35 @@ class FileManager(QObject):
         "ordre": "sort_order",
     }
 
-    def __init__(self, parent=None, current_user=None):
+    # Colonne "Mot de passe" volontairement en dernier avant "Actif" :
+    # optionnelle a la modification (on ne change pas un mot de passe
+    # existant si la cellule est vide), obligatoire a la creation.
+    USER_COLUMNS_FR = [
+        "Nom d'utilisateur", "Nom complet", "Email", "Telephone",
+        "Role", "Mot de passe", "Actif",
+    ]
+    USER_HEADER_MAP = {
+        "nomdutilisateur": "username", "utilisateur": "username",
+        "username": "username",
+        "nomcomplet": "full_name", "nom": "full_name",
+        "email": "email",
+        "telephone": "phone", "tel": "phone",
+        "role": "role",
+        "motdepasse": "password", "password": "password",
+        "actif": "is_active",
+    }
+
+    def __init__(self, parent=None, current_user=None, auth_manager=None):
         super().__init__(parent)
         self.parent_window = parent
         self.view = None
         self.current_user = current_user
+        # Nécessaire pour hacher les mots de passe lors de l'import
+        # d'utilisateurs (création ou changement de mot de passe).
+        # Optionnel : si absent, l'import de nouveaux comptes ou de
+        # changements de mot de passe est bloqué proprement (voir
+        # import_users_csv), le reste du module continue de fonctionner.
+        self.auth_manager = auth_manager
 
         self.catalog_repo = CatalogRepository()
         self.user_repo = UserRepository()
@@ -171,7 +195,10 @@ class FileManager(QObject):
         v.export_categories_requested.connect(self.export_categories_csv)
         v.template_categories_requested.connect(self.generate_categories_template)
 
+        v.import_users_requested.connect(self.import_users_csv)
         v.export_users_requested.connect(self.export_users_csv)
+        v.template_users_requested.connect(self.generate_users_template)
+
         v.activate_license_requested.connect(self.activate_license)
 
         v.create_backup_requested.connect(self.create_backup)
@@ -757,7 +784,160 @@ class FileManager(QObject):
 
     # ────────────────────────────────────────────────────────────────
     # UTILISATEURS
+    #
+    # IMPORTANT : reservé à can_manage_users (rôle admin/gérant), comme
+    # l'export existant. La création d'un compte exige un mot de passe
+    # et un self.auth_manager valide pour le hacher — si ce dernier est
+    # absent, l'import échoue proprement ligne par ligne plutôt que de
+    # stocker un mot de passe en clair ou planter.
     # ────────────────────────────────────────────────────────────────
+
+    @Slot(str)
+    def import_users_csv(self, file_path: str):
+        if not self._require_permission(
+            "can_manage_users", "importer des utilisateurs"
+        ):
+            return
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                InfoDialog.warning(self.view, "Fichier introuvable", str(file_path))
+                return
+
+            imported, errors = 0, []
+            with open(path, "r", encoding="utf-8-sig", newline="") as f:
+                reader = csv.DictReader(f, delimiter=";")
+                if not reader.fieldnames:
+                    InfoDialog.warning(
+                        self.view, "CSV vide",
+                        "Le fichier est vide ou mal formate.",
+                    )
+                    return
+
+                cols = self._map_headers(reader.fieldnames, self.USER_HEADER_MAP)
+                if "username" not in cols:
+                    InfoDialog.warning(
+                        self.view, "Colonne manquante",
+                        f"La colonne 'Nom d'utilisateur' est obligatoire.\n\n"
+                        f"Colonnes trouvees :\n{', '.join(reader.fieldnames)}",
+                    )
+                    return
+
+                existing_users = {
+                    u["username"].lower(): u for u in self.user_repo.get_all_users()
+                }
+                roles_by_name = {
+                    r["name"].lower(): r for r in self.user_repo.get_all_roles()
+                }
+
+                for row_num, row in enumerate(reader, start=2):
+                    try:
+                        username = row.get(cols.get("username", ""), "").strip()
+                        if not username:
+                            errors.append(f"Ligne {row_num} : nom d'utilisateur manquant")
+                            continue
+
+                        full_name = row.get(cols.get("full_name", ""), "").strip()
+                        email = row.get(cols.get("email", ""), "").strip()
+                        phone = row.get(cols.get("phone", ""), "").strip()
+                        password = row.get(cols.get("password", ""), "").strip()
+
+                        role_name = row.get(cols.get("role", ""), "").strip()
+                        role = roles_by_name.get(role_name.lower()) if role_name else None
+                        if role_name and not role:
+                            errors.append(
+                                f"Ligne {row_num} : role '{role_name}' inconnu"
+                            )
+                            continue
+
+                        active_raw = row.get(
+                            cols.get("is_active", ""), ""
+                        ).strip().lower()
+                        # Cellule vide -> actif par defaut (comportement le
+                        # moins surprenant pour un import en masse).
+                        is_active = active_raw in (
+                            "1", "oui", "true", "vrai", "yes", ""
+                        )
+
+                        existing = existing_users.get(username.lower())
+
+                        if existing:
+                            if self.user_repo.username_exists(
+                                username, exclude_id=existing["id"]
+                            ):
+                                errors.append(
+                                    f"Ligne {row_num} : nom d'utilisateur "
+                                    f"'{username}' en conflit"
+                                )
+                                continue
+
+                            fields = {
+                                "full_name": full_name,
+                                "email": email,
+                                "is_active": 1 if is_active else 0,
+                            }
+                            if role:
+                                fields["role_id"] = role["id"]
+                            if password:
+                                if not self.auth_manager:
+                                    errors.append(
+                                        f"Ligne {row_num} : mot de passe fourni "
+                                        f"pour '{username}' mais aucun "
+                                        f"gestionnaire d'authentification "
+                                        f"disponible — mot de passe ignore"
+                                    )
+                                else:
+                                    fields["password_hash"] = (
+                                        self.auth_manager.hash_password(password)
+                                    )
+                            self.user_repo.update_user(existing["id"], **fields)
+                        else:
+                            if not password:
+                                errors.append(
+                                    f"Ligne {row_num} : mot de passe obligatoire "
+                                    f"pour creer '{username}'"
+                                )
+                                continue
+                            if not self.auth_manager:
+                                errors.append(
+                                    f"Ligne {row_num} : gestionnaire "
+                                    f"d'authentification indisponible, "
+                                    f"impossible de creer '{username}'"
+                                )
+                                continue
+                            if self.user_repo.username_exists(username):
+                                errors.append(
+                                    f"Ligne {row_num} : '{username}' existe deja"
+                                )
+                                continue
+
+                            password_hash = self.auth_manager.hash_password(password)
+                            new_id = self.user_repo.create_user(
+                                username=username,
+                                password_hash=password_hash,
+                                role_id=role["id"] if role else None,
+                                full_name=full_name,
+                                email=email,
+                            )
+                            if not is_active:
+                                self.user_repo.set_active(new_id, False)
+                            existing_users[username.lower()] = {"id": new_id}
+
+                        imported += 1
+                    except Exception as e:
+                        errors.append(f"Ligne {row_num} : {e}")
+
+            self._report_result("utilisateur(s)", imported, errors)
+            self._refresh_all_panels()
+
+            if self.current_user:
+                self.user_repo.log_audit(
+                    self.current_user.id, "IMPORT_USERS", "user", None,
+                    description=f"Import CSV : {imported} utilisateur(s), "
+                                f"{len(errors)} erreur(s) — fichier {path.name}",
+                )
+        except Exception as e:
+            InfoDialog.error(self.view, "Erreur d'import", str(e))
 
     @Slot(str)
     def export_users_csv(self, file_path: str):
@@ -797,6 +977,27 @@ class FileManager(QObject):
             )
         except Exception as e:
             InfoDialog.error(self.view, "Erreur d'export", str(e))
+
+    def generate_users_template(self, file_path: str):
+        if not self._require_permission(
+            "can_manage_users", "telecharger un modele d'import"
+        ):
+            return
+        path = Path(file_path)
+        with open(path, "w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.writer(f, delimiter=";")
+            writer.writerow(self.USER_COLUMNS_FR)
+            writer.writerow([
+                "jdupont", "Jean Dupont", "jdupont@example.cm", "699000000",
+                "employe", "MotDePasse123", "Oui",
+            ])
+        InfoDialog.success(
+            self.view, "Modele cree",
+            f"Modele utilisateurs cree :\n{path.absolute()}\n\n"
+            "Rappel : le mot de passe n'est requis que pour creer un "
+            "nouveau compte ; laissez-le vide pour ne pas modifier le "
+            "mot de passe d'un utilisateur existant.",
+        )
 
     # ────────────────────────────────────────────────────────────────
     # SAUVEGARDE / RESTAURATION

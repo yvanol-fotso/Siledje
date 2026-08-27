@@ -2,6 +2,13 @@
 Interface de connexion moderne et professionnelle.
 Version finale - Fenêtre agrandie pour plus de confort.
 Sans emojis.
+
+CORRECTIF : les popups d'erreur d'authentification et de compte bloqué
+utilisaient un QMessageBox brut (non stylé selon le theme_manager), ce qui
+donnait un rendu incohérent avec le reste de l'application (ex: le
+"Confirmation" de la fenêtre principale, qui lui passe par InfoDialog).
+On utilise maintenant InfoDialog partout, avec is_dark explicitement
+transmis depuis self.theme_manager, pour un rendu 100% cohérent.
 """
 
 from src.Beans.User import User
@@ -15,6 +22,7 @@ from src.utils.helpers import (
     create_circular_avatar_label,
     get_asset_path
 )
+from src.ui.widgets.InfoDialog import InfoDialog, DialogType
 
 
 def load_svg_icon(icon_name: str, size: int = 24, debug: bool = False) -> QPixmap:
@@ -387,20 +395,50 @@ class LoginDialog(QDialog):
                 self.txt_password.clear()
                 self.txt_password.setFocus()
             else:
-                QMessageBox.critical(
+                # ✅ CORRECTIF : InfoDialog (thémé) au lieu de QMessageBox.critical
+                # (brut, non cohérent visuellement avec le reste de l'app).
+                is_dark = self.theme_manager.get_current_theme() == 'dark'
+                InfoDialog.rich(
                     self, "Compte bloque",
-                    "Trop de tentatives echouees.\nVeuillez contacter l'administrateur."
+                    self._build_blocked_account_content(is_dark),
+                    dialog_type=DialogType.WARNING,
+                    width=460, height=260, is_dark=is_dark,
                 )
                 self.reject()
-    
+
+    def _build_blocked_account_content(self, is_dark: bool) -> QWidget:
+        """Contenu du popup 'Compte bloque', couleurs adaptees au theme."""
+        primary = "#ecf0f1" if is_dark else "#2c3e50"
+        secondary = "#b0bfcc" if is_dark else "#555555"
+        content = QWidget()
+        lay = QVBoxLayout()
+        lay.setSpacing(8)
+        lay.setContentsMargins(0, 0, 0, 0)
+        msg1 = QLabel("Trop de tentatives echouees.")
+        msg1.setWordWrap(True)
+        msg1.setStyleSheet(f"font-size:14px; font-weight:bold; color:{primary};")
+        msg2 = QLabel("Veuillez contacter l'administrateur.")
+        msg2.setWordWrap(True)
+        msg2.setStyleSheet(f"font-size:13px; color:{secondary};")
+        lay.addWidget(msg1)
+        lay.addWidget(msg2)
+        lay.addStretch()
+        content.setLayout(lay)
+        return content
+
     def _show_error(self, message: str):
-        """Affiche un message d'erreur."""
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Warning)
-        msg.setWindowTitle("Erreur d'authentification")
-        msg.setText(message)
-        msg.setStandardButtons(QMessageBox.Ok)
-        msg.exec()
+        """Affiche un message d'erreur.
+
+        ✅ CORRECTIF : utilise InfoDialog (le meme widget utilise partout
+        ailleurs dans l'application, ex: BugReportView, MainWindow) au lieu
+        d'un QMessageBox brut, pour un rendu visuel cohérent avec le theme
+        courant (dark/light) au lieu du chrome par defaut de l'OS.
+        """
+        is_dark = self.theme_manager.get_current_theme() == 'dark'
+        InfoDialog.warning(
+            self, "Erreur d'authentification", message,
+            width=440, height=260, is_dark=is_dark,
+        )
     
     def _toggle_password_visibility(self):
         """Bascule la visibilite du mot de passe."""
@@ -417,16 +455,14 @@ class LoginDialog(QDialog):
     
     def _forgot_password(self):
         """Explique la procedure de reinitialisation - Message clair et centre."""
-        msg_box = QMessageBox(self)
-        msg_box.setIcon(QMessageBox.Information)
-        msg_box.setWindowTitle("Reinitialisation du mot de passe")
-        msg_box.setText(
+        is_dark = self.theme_manager.get_current_theme() == 'dark'
+        InfoDialog.info(
+            self, "Reinitialisation du mot de passe",
             "Pour reinitialiser votre mot de passe, veuillez contacter un administrateur.\n\n"
             "L'administrateur peut reinitialiser votre mot de passe depuis :\n"
-            "Administration → Gestion des Utilisateurs → Reinitialiser le mot de passe"
+            "Administration -> Gestion des Utilisateurs -> Reinitialiser le mot de passe",
+            width=480, height=260, is_dark=is_dark,
         )
-        msg_box.setStandardButtons(QMessageBox.Ok)
-        msg_box.exec()
     
     def get_authenticated_user(self):
         """Retourne l'utilisateur authentifie."""
