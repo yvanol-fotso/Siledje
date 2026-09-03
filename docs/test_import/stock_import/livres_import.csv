@@ -1,0 +1,11 @@
+﻿Nom;Description;Catégorie;Fournisseur;SKU;Prix Achat;Prix Vente;Stock;Seuil Min;Emplacement;Conditionnement;Unités par Paquet;Taux TVA;Livre;Classe;Matiere;Editeur;ISBN;Notes
+Manuel de Lecture CP;Methode de lecture syllabique;Manuels Primaire;Éditions Scolaires du Littoral SARL;LEC-CP;1800;3000;40;10;Rayon B1;unitaire;1;0;Oui;CP;Francais;Éditions du Littoral;978-2-1111-0001-1;
+Manuel de Calcul CE1;Programme officiel camerounais;Manuels Primaire;Éditions Scolaires du Littoral SARL;CAL-CE1;2000;3300;35;10;Rayon B1;unitaire;1;0;Oui;CE1;Mathematiques;Éditions du Littoral;978-2-1111-0002-8;
+Manuel de Sciences CE2;Sciences d'observation;Manuels Primaire;Éditions Scolaires du Littoral SARL;SCI-CE2;2100;3500;30;10;Rayon B1;unitaire;1;0;Oui;CE2;Sciences;Éditions du Littoral;978-2-1111-0003-5;
+Manuel d'Histoire-Geo CM1;Histoire et geographie du Cameroun;Manuels Primaire;Grand Nord Scolaire;HG-CM1;2200;3600;28;8;Rayon B1;unitaire;1;0;Oui;CM1;Histoire-Geographie;Grand Nord Scolaire;978-2-1111-0004-2;
+Manuel de Sciences CM2;Programme officiel camerounais;Manuels Primaire;Éditions Scolaires du Littoral SARL;SCI-CM2;2200;3800;38;10;Rayon B1;unitaire;1;0;Oui;CM2;Sciences;Éditions du Littoral;978-2-1111-0005-9;
+Manuel de Mathematiques 6e;Programme officiel camerounais;Manuels Secondaire;Librairie Académique du Mfoundi;MAT-6E;2500;4200;45;10;Rayon B2;unitaire;1;0;Oui;6e;Mathematiques;Librairie Académique;978-2-1111-0006-6;
+Manuel de Francais 5e;Grammaire et litterature;Manuels Secondaire;Librairie Académique du Mfoundi;FRA-5E;2600;4300;40;10;Rayon B2;unitaire;1;0;Oui;5e;Francais;Librairie Académique;978-2-1111-0007-3;
+Manuel de Physique-Chimie 4e;Programme officiel;Manuels Secondaire;Savoirs et Livres Cameroun;PC-4E;2800;4600;25;8;Rayon B2;unitaire;1;0;Oui;4e;Physique-Chimie;Savoirs et Livres;978-2-1111-0008-0;
+Manuel de SVT 3e;Sciences de la Vie et de la Terre;Manuels Secondaire;Savoirs et Livres Cameroun;SVT-3E;2700;4500;22;8;Rayon B2;unitaire;1;0;Oui;3e;SVT;Savoirs et Livres;978-2-1111-0009-7;
+Dictionnaire Larousse;Edition 2024, francais;Manuels Secondaire;Grand Nord Scolaire;DIC-LAR24;3000;5000;25;5;Rayon B1;unitaire;1;0;Oui;6e;Francais;Larousse;978-2-03-590000-1;

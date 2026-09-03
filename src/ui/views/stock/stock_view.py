@@ -1,5 +1,13 @@
 """
 Vue gestion du stock — unifiée (ThemedTable + CustomButton).
+
+CHANGELOG :
+- Ajout d'un bouton dedie "Importer Livres" a cote de "Importer CSV" :
+  ouvre la meme boite de dialogue d'options, mais avec le type
+  pre-selectionne et verrouille sur "Livres / Manuels scolaires" pour
+  eviter d'oublier de changer le combo (source frequente d'erreurs).
+  Le format CSV attendu pour les livres est documente dans
+  StockManager.import_csv (colonnes Classe/Matiere en plus).
 """
 
 from PySide6.QtWidgets import (
@@ -24,7 +32,8 @@ class StockView(BaseView):
     add_product_requested = Signal()
     edit_product_requested = Signal(int)
     delete_product_requested = Signal(int)
-    import_csv_requested = Signal(str, dict)
+    import_products_csv_requested = Signal(str, dict)
+    import_books_csv_requested = Signal(str, dict)
     export_csv_requested = Signal(str)
     refresh_requested = Signal()
 
@@ -81,13 +90,26 @@ class StockView(BaseView):
             lambda: self.add_product_requested.emit(),
         )
         add_btn.setMinimumWidth(180)
-        import_btn = warning_btn("Importer CSV", "file-import", self._on_import_csv)
+        # Les deux boutons d'import sont volontairement identiques en style
+        # (vert, comme "Ajouter" et "Exporter") pour ne pas laisser croire
+        # que l'un est secondaire — seul le libelle les distingue.
+        import_products_btn = success_btn(
+            "Importer Produit", "file-import",
+            lambda: self._on_import_csv(book_mode=False),
+        )
+        import_products_btn.setMinimumWidth(160)
+        import_books_btn = success_btn(
+            "Importer Livres", "book",
+            lambda: self._on_import_csv(book_mode=True),
+        )
+        import_books_btn.setMinimumWidth(150)
 
         layout.addWidget(self.search_input, 2)
         layout.addWidget(search_btn)
         layout.addWidget(clear_btn)
         layout.addWidget(add_btn)
-        layout.addWidget(import_btn)
+        layout.addWidget(import_products_btn)
+        layout.addWidget(import_books_btn)
         self.content_layout.addLayout(layout)
 
     def _init_filters_section(self):
@@ -192,7 +214,7 @@ class StockView(BaseView):
         else:
             self.show_error("Veuillez selectionner un produit.", "Selection requise")
 
-    def _on_import_csv(self):
+    def _on_import_csv(self, book_mode: bool = False):
         from src.ui.widgets.modal_form import ModalForm
 
         file_path, _ = QFileDialog.getOpenFileName(
@@ -206,11 +228,34 @@ class StockView(BaseView):
         layout = QVBoxLayout(content)
         layout.setSpacing(14)
 
+        # Combo purement informatif, verrouille sur le mode du bouton
+        # cliqué : on garde ce repère visuel (c'est le bouton, plus le
+        # combo, qui determine reellement le comportement cote manager).
         type_combo = QComboBox()
         type_combo.addItems(["Produits standards", "Livres / Manuels scolaires"])
         type_combo.setMinimumHeight(36)
+        type_combo.setCurrentText(
+            "Livres / Manuels scolaires" if book_mode else "Produits standards"
+        )
+        type_combo.setEnabled(False)
         layout.addWidget(QLabel("Type d'import :"))
         layout.addWidget(type_combo)
+
+        hint = QLabel(
+            (
+                "Colonnes attendues : Nom;Prix Achat;Prix Vente;Stock;"
+                "Categorie;Fournisseur;SKU;Seuil Min;Classe;Matiere;"
+                "Editeur;ISBN\n\"Classe\" doit correspondre exactement a "
+                "une classe deja creee (Parametres > Classes)."
+                if book_mode else
+                "Colonnes attendues : Nom;Prix Achat;Prix Vente;Stock;"
+                "Categorie;Fournisseur;SKU;Seuil Min (seul \"Nom\" est "
+                "obligatoire)."
+            )
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("font-size: 12px; font-style: italic;")
+        layout.addWidget(hint)
 
         reason_combo = QComboBox()
         reason_combo.addItems([
@@ -224,32 +269,35 @@ class StockView(BaseView):
         layout.addWidget(QLabel("Raison de l'import :"))
         layout.addWidget(reason_combo)
 
-        skip_header = QCheckBox("Ignorer la premiere ligne (en-tetes)")
-        skip_header.setChecked(True)
-        layout.addWidget(skip_header)
-
-        update_stock = QCheckBox("Mettre a jour le stock si le produit existe deja")
+        update_stock = QCheckBox(
+            "Mettre a jour le produit s'il existe deja "
+            "(recherche par SKU, sinon par nom)"
+        )
+        update_stock.setChecked(True)
         layout.addWidget(update_stock)
 
         modal = ModalForm(
-            title="Options d'import CSV", parent=self,
-            width=550, height=400, ok_text="Importer", cancel_text="Annuler",
+            title="Options d'import Livres" if book_mode else "Options d'import Produits",
+            parent=self,
+            width=550, height=420,
+            ok_text="Importer", cancel_text="Annuler",
         )
         modal.set_content(content)
         result = {}
 
         def on_ok():
             result.update({
-                "type": type_combo.currentText(),
                 "reason": reason_combo.currentText(),
-                "skip_header": skip_header.isChecked(),
                 "update_stock": update_stock.isChecked(),
             })
             modal.accept()
 
         modal.ok_clicked.connect(on_ok)
         if modal.exec():
-            self.import_csv_requested.emit(file_path, result)
+            if book_mode:
+                self.import_books_csv_requested.emit(file_path, result)
+            else:
+                self.import_products_csv_requested.emit(file_path, result)
 
     def _on_export_csv(self):
         file_path, _ = QFileDialog.getSaveFileName(

@@ -1,0 +1,21 @@
+﻿Nom;Description;Catégorie;Fournisseur;SKU;Prix Achat;Prix Vente;Stock;Seuil Min;Emplacement;Conditionnement;Unités par Paquet;Taux TVA;Livre;Notes
+Cahier 100 pages simple;Cahier grand format ligne;Cahiers;Éditions de l'Ouest;CAH-100S;300;500;250;30;Rayon A1;unitaire;1;19,25;Non;
+Cahier 200 pages double;Cahier grand format grands carreaux;Cahiers;Éditions de l'Ouest;CAH-200D;500;800;180;20;Rayon A1;unitaire;1;19,25;Non;
+Cahier de brouillon;Petit cahier pour brouillons;Cahiers;Savoirs et Livres Cameroun;CAH-BRO;150;250;300;40;Rayon A2;unitaire;1;19,25;Non;
+Stylo Bic bleu;Stylo a bille pointe moyenne;Stylos et Crayons;Fournisseur ABC;STY-BLE;100;175;400;50;Rayon A3;paquet;12;19,25;Non;Vendu a l'unite ou au paquet
+Stylo Bic noir;Stylo a bille pointe moyenne;Stylos et Crayons;Fournisseur ABC;STY-NOI;100;175;350;50;Rayon A3;paquet;12;19,25;Non;
+Crayon a papier HB;Crayon graphite HB;Stylos et Crayons;Fournisseur ABC;CRA-HB;75;150;500;60;Rayon A3;paquet;12;19,25;Non;
+Gomme blanche;Gomme a effacer standard;Stylos et Crayons;Fournisseur ABC;GOM-BLA;50;100;300;40;Rayon A3;unitaire;1;19,25;Non;
+Regle 30 cm;Regle plastique graduee;Fournitures Scolaires;Centre du Livre Éducatif;REG-30;150;300;200;20;Rayon A4;unitaire;1;19,25;Non;
+Calculatrice scientifique;Calculatrice scientifique niveau lycee;Calculatrices;North West School Books;CALC-SCI;3500;5500;60;10;Rayon B3;unitaire;1;19,25;Non;Modele compatible programme officiel
+Calculatrice basique;Calculatrice de poche 8 chiffres;Calculatrices;North West School Books;CALC-BAS;1200;2000;80;15;Rayon B3;unitaire;1;19,25;Non;
+Cartable primaire;Cartable renforce pour ecolier;Sacs et Cartables;Buea Educational Supplies;CAR-PRIM;4000;6500;40;10;Rayon C1;unitaire;1;19,25;Non;
+Sac a dos college;Sac a dos avec plusieurs compartiments;Sacs et Cartables;Buea Educational Supplies;SAC-COL;5000;8000;35;10;Rayon C1;unitaire;1;19,25;Non;
+Trousse scolaire;Trousse en tissu avec fermeture eclair;Sacs et Cartables;Adamaoua Livres et Éducation;TRO-SCO;800;1500;150;20;Rayon C2;unitaire;1;19,25;Non;
+Boite de peinture;Boite de 12 couleurs a l'eau;Beaux-Arts;Éditions Mont Cameroun;PEI-12C;1500;2500;70;15;Rayon D1;unitaire;1;19,25;Non;
+Boite de crayons de couleur;Boite de 24 crayons de couleur;Beaux-Arts;Éditions Mont Cameroun;CRA-24C;1000;1800;90;15;Rayon D1;unitaire;1;19,25;Non;
+Dictionnaire Larousse;Edition 2024, francais;Manuels Secondaire;Grand Nord Scolaire;DIC-LAR24;3000;5000;25;5;Rayon B1;unitaire;1;0;Oui;
+Manuel de Mathematiques 6e;Programme officiel camerounais;Manuels Secondaire;Librairie Académique du Mfoundi;MAT-6E;2500;4200;45;10;Rayon B2;unitaire;1;0;Oui;
+Manuel de Francais CP;Methode de lecture CP;Manuels Primaire;Éditions Scolaires du Littoral SARL;FRA-CP;1800;3000;60;10;Rayon B1;unitaire;1;0;Oui;
+Manuel de Sciences CM2;Programme officiel camerounais;Manuels Primaire;Éditions Scolaires du Littoral SARL;SCI-CM2;2200;3800;38;10;Rayon B1;unitaire;1;0;Oui;
+Atlas geographique;Atlas du Cameroun et du monde;Manuels Secondaire;Savoirs et Livres Cameroun;ATL-GEO;3200;5200;20;5;Rayon B2;unitaire;1;0;Oui;

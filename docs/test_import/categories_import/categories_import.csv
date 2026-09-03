@@ -1,0 +1,11 @@
+﻿Nom;Catégorie Parent;Description;Icône;Couleur;Ordre
+Manuels Scolaires;;Livres et manuels du programme officiel;book;#2E86AB;1
+Manuels Primaire;Manuels Scolaires;Manuels du CP au CM2;book-open;#2E86AB;2
+Manuels Secondaire;Manuels Scolaires;Manuels de la 6e a la Terminale;book-open;#2E86AB;3
+Papeterie;;Articles de papeterie generale;pencil;#E9724C;4
+Cahiers;Papeterie;Cahiers simples, doubles et de brouillon;notebook;#E9724C;5
+Stylos et Crayons;Papeterie;Stylos, crayons, gommes, taille-crayons;edit;#E9724C;6
+Beaux-Arts;;Materiel de dessin et de peinture;palette;#7A28CB;7
+Fournitures Scolaires;;Accessoires et equipements scolaires divers;box;#218380;8
+Sacs et Cartables;Fournitures Scolaires;Cartables, sacs a dos et trousses;briefcase;#218380;9
+Calculatrices;Fournitures Scolaires;Calculatrices scientifiques et basiques;calculator;#218380;10

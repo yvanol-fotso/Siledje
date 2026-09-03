@@ -1,0 +1,11 @@
+﻿Nom;Description;Catégorie;Fournisseur;SKU;Prix Achat;Prix Vente;Stock;Seuil Min;Emplacement;Conditionnement;Unités par Paquet;Taux TVA;Livre;Classe;Matiere;Editeur;ISBN;Notes
+Stylo Bic bleu (paquet);Stylo a bille pointe moyenne;Stylos et Crayons;Fournisseur ABC;STY-BLE2;100;175;400;50;Rayon A3;paquet;12;19,25;Non;;;;;
+Cahier 100 pages simple;Cahier grand format ligne;Cahiers;Éditions de l'Ouest;CAH-100S2;300;500;250;30;Rayon A1;unitaire;1;19,25;Non;;;;;
+Gomme blanche;Gomme a effacer standard;Stylos et Crayons;Fournisseur ABC;GOM-BLA2;50;100;300;40;Rayon A3;unitaire;1;19,25;Non;;;;;
+Regle 30 cm;Regle plastique graduee;Fournitures Scolaires;Centre du Livre Éducatif;REG-30-2;150;300;200;20;Rayon A4;unitaire;1;19,25;Non;;;;;
+Calculatrice scientifique;Calculatrice scientifique niveau lycee;Calculatrices;North West School Books;CALC-SCI2;3500;5500;60;10;Rayon B3;unitaire;1;19,25;Non;;;;;Modele compatible programme officiel
+Cartable primaire;Cartable renforce pour ecolier;Sacs et Cartables;Buea Educational Supplies;CAR-PRIM2;4000;6500;40;10;Rayon C1;unitaire;1;19,25;Non;;;;;
+Trousse scolaire;Trousse en tissu avec fermeture eclair;Sacs et Cartables;Adamaoua Livres et Éducation;TRO-SCO2;800;1500;150;20;Rayon C2;unitaire;1;19,25;Non;;;;;
+Boite de peinture;Boite de 12 couleurs a l'eau;Beaux-Arts;Éditions Mont Cameroun;PEI-12C2;1500;2500;70;15;Rayon D1;unitaire;1;19,25;Non;;;;;
+Taille-crayon;Taille-crayon simple avec reservoir;Stylos et Crayons;Fournisseur ABC;TAI-CRA;80;150;220;30;Rayon A3;unitaire;1;19,25;Non;;;;;
+Classeur A4;Classeur a levier, dos 5cm;Fournitures Scolaires;Centre du Livre Éducatif;CLA-A4;1200;2000;50;10;Rayon A4;unitaire;1;19,25;Non;;;;;

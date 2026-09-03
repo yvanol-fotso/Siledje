@@ -3,18 +3,66 @@ Accès aux données des manuels scolaires — conforme au schéma SILEDJE.
 Couvre : school_levels, school_systems, school_classes, books.
 Seed conforme aux données déjà utilisées par AccueilManager
 (Maternelle/Primaire/Secondaire, Anglophone/Francophone).
+
+CENTRALISATION DE LA RESOLUTION DE NOM DE CLASSE
+=================================================
+Avant, chaque manager qui important des livres (StockManager, FileManager)
+avait sa PROPRE logique de tolérance (normalisation accents/casse, cache
+local) pour retrouver une classe à partir d'un nom saisi dans un CSV. Deux
+copies du même problème = deux endroits à corriger si une règle change.
+
+Toute la logique vit maintenant ICI, et nulle part ailleurs :
+
+  - resolve_class_name(name)  : point d'entrée UNIQUE pour retrouver une
+    classe à partir d'un texte libre (CSV, formulaire...). Essaie dans
+    l'ordre : correspondance exacte -> alias connu -> nom normalisé
+    (accents/casse/espaces ignorés).
+  - known_class_names()       : liste triée des noms de classes existants,
+    pour construire des messages d'erreur utiles ("classe inconnue, voici
+    les noms valides : ...") sans dupliquer de requête ailleurs.
+  - CLASS_NAME_ALIASES        : LE seul endroit à modifier si vous voulez
+    accepter une nouvelle abréviation (ex: "6eme" est déjà couvert par la
+    normalisation, mais "6e" ne l'est pas — il faut un alias explicite
+    car ce n'est pas qu'une histoire d'accent, voir plus bas).
+
+Tout le reste de l'application (StockManager, FileManager, futurs
+imports) doit appeler self.school_repo.resolve_class_name(...) plutôt que
+de réimplémenter sa propre tolérance.
 """
 
+import re
 import sqlite3
+import unicodedata
 from typing import Optional, List, Dict, Any
 from src.database.connection import get_db_connection
 
 
 class SchoolRepository:
 
+    # ────────────────────────────────────────────────────────────────
+    # ALIAS DE NOMS DE CLASSE — SEUL ENDROIT A MODIFIER
+    #
+    # Clé   : forme abrégée/alternative normalisée (voir _normalize_name)
+    # Valeur: nom EXACT tel qu'il existe dans school_classes.name
+    #
+    # "6e" -> "6ème" n'est PAS une histoire d'accent : "6e" normalisé
+    # donne "6e" (2 caractères) alors que "6ème" normalisé donne "6eme"
+    # (4 caractères) — ce sont deux écritures différentes du même
+    # niveau, donc la normalisation seule ne peut jamais les rapprocher.
+    # Si vous voulez accepter une autre abréviation plus tard (ex: "T"
+    # pour "Terminale", "2de" pour "2nde"), ajoutez UNE ligne ici — rien
+    # à toucher dans StockManager ni FileManager.
+    # ────────────────────────────────────────────────────────────────
+    CLASS_NAME_ALIASES = {
+        "6e": "6ème", "5e": "5ème", "4e": "4ème", "3e": "3ème",
+        "2de": "2nde", "1re": "1ère",
+        "tle": "Terminale", "term": "Terminale",
+    }
+
     def __init__(self):
         self.db = get_db_connection()
         self._ensure_schema()
+        self._class_cache = None  # invalidé à chaque écriture sur school_classes
 
     def _ensure_schema(self):
         cursor = self.db.get_cursor()
@@ -171,6 +219,10 @@ class SchoolRepository:
         return {row["product_id"] for row in cursor.fetchall()}
 
     def get_class_by_name(self, class_name: str) -> Optional[Dict[str, Any]]:
+        """Correspondance EXACTE uniquement (comportement historique,
+        conservé pour compatibilité). Pour un texte saisi/importé qui
+        peut varier en casse/accents/abréviation, utilisez plutôt
+        resolve_class_name()."""
         cursor = self.db.get_cursor()
         cursor.execute("SELECT * FROM school_classes WHERE name = ?", (class_name,))
         row = cursor.fetchone()
@@ -181,6 +233,69 @@ class SchoolRepository:
         cursor.execute("SELECT * FROM school_classes WHERE id = ?", (class_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
+
+    # ── RESOLUTION TOLERANTE (point d'entrée central) ────────────────
+
+    @staticmethod
+    def _normalize_name(s: str) -> str:
+        """Ignore accents, casse et espaces/ponctuation. Ne rapproche
+        PAS les abreviations differentes (ex: "6e" reste distinct de
+        "6eme") — c'est le role de CLASS_NAME_ALIASES."""
+        s = (s or "").strip().lower()
+        s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
+        return re.sub(r"[^a-z0-9]", "", s)
+
+    def _classes_by_normalized_name(self) -> Dict[str, Dict[str, Any]]:
+        """Cache interne (invalide au prochain get_all_classes() si vous
+        appelez invalidate_class_cache() apres une creation/modification
+        de classe). Une seule requete SQL par cycle d'import au lieu
+        d'une par ligne de CSV."""
+        if self._class_cache is None:
+            self._class_cache = {
+                self._normalize_name(c["name"]): c
+                for c in self.get_all_classes()
+            }
+        return self._class_cache
+
+    def invalidate_class_cache(self):
+        """A appeler apres toute creation/renommage de classe, pour que
+        resolve_class_name() voie immediatement le changement."""
+        self._class_cache = None
+
+    def resolve_class_name(self, class_name: str) -> Optional[Dict[str, Any]]:
+        """Point d'entree UNIQUE pour retrouver une classe a partir d'un
+        texte libre (CSV importe, saisie utilisateur...). Essaie dans
+        l'ordre :
+          1. Correspondance exacte (le cas normal, le plus rapide)
+          2. Alias connu (CLASS_NAME_ALIASES — "6e" -> "6ème")
+          3. Nom normalise (accents/casse/espaces ignores)
+        Retourne None si rien ne correspond — a l'appelant de decider
+        quoi faire (erreur, message a l'utilisateur, etc.), cette
+        methode ne devine jamais au-dela des regles explicites ci-dessus.
+        """
+        class_name = (class_name or "").strip()
+        if not class_name:
+            return None
+
+        exact = self.get_class_by_name(class_name)
+        if exact:
+            return exact
+
+        normalized = self._normalize_name(class_name)
+
+        alias_target = self.CLASS_NAME_ALIASES.get(normalized)
+        if alias_target:
+            aliased = self.get_class_by_name(alias_target)
+            if aliased:
+                return aliased
+
+        return self._classes_by_normalized_name().get(normalized)
+
+    def known_class_names(self) -> List[str]:
+        """Liste triee des noms de classes existants — utile pour
+        construire un message d'erreur explicite quand
+        resolve_class_name() ne trouve rien."""
+        return sorted({c["name"] for c in self.get_all_classes()})
 
     # ── BOOKS ────────────────────────────────────────────────────────
 

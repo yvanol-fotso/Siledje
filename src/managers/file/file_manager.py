@@ -16,6 +16,7 @@ from PySide6.QtCore import QObject, Slot, QTimer
 from src.ui.widgets.InfoDialog import InfoDialog
 from src.database.repositories.catalog_repository import CatalogRepository
 from src.database.repositories.user_repository import UserRepository
+from src.database.repositories.school_repository import SchoolRepository
 from src.managers.license.license_manager import LicenseManager
 from src.utils.backup_service import get_backup_service
 
@@ -45,10 +46,15 @@ class FileManager(QObject):
 
     version = "3.3.0"
 
+    # Colonnes Classe/Matiere/Editeur/ISBN : utilisees seulement quand
+    # "Livre" = Oui sur la ligne. "Classe" doit correspondre EXACTEMENT
+    # au nom d'une classe deja creee dans Parametres > Classes (le meme
+    # nom que school_repo.get_class_by_name() sait retrouver).
     PRODUCT_COLUMNS_FR = [
         "Nom", "Description", "Catégorie", "Fournisseur", "SKU",
         "Prix Achat", "Prix Vente", "Stock", "Seuil Min", "Emplacement",
-        "Conditionnement", "Unités par Paquet", "Taux TVA", "Livre", "Notes",
+        "Conditionnement", "Unités par Paquet", "Taux TVA", "Livre",
+        "Classe", "Matiere", "Editeur", "ISBN", "Notes",
     ]
     PRODUCT_HEADER_MAP = {
         "nom": "name", "designation": "name",
@@ -65,6 +71,10 @@ class FileManager(QObject):
         "unitesparpaquet": "units_per_pack", "unitespaquet": "units_per_pack",
         "tauxtva": "tax_rate", "tva": "tax_rate",
         "livre": "is_book",
+        "classe": "school_class_name",
+        "matiere": "subject", "matieres": "subject",
+        "editeur": "publisher",
+        "isbn": "isbn",
         "notes": "notes", "remarques": "notes",
     }
 
@@ -128,6 +138,7 @@ class FileManager(QObject):
 
         self.catalog_repo = CatalogRepository()
         self.user_repo = UserRepository()
+        self.school_repo = SchoolRepository()
         self.license_manager = LicenseManager()
 
         # Backup : plus de logique locale, tout passe par le service partagé.
@@ -321,7 +332,30 @@ class FileManager(QObject):
 
     # ────────────────────────────────────────────────────────────────
     # PRODUITS
+    #
+    # IMPORTANT : un produit marque "Livre" = Oui exige une classe
+    # existante (colonne "Classe" du CSV) pour creer/mettre a jour son
+    # entree dans la table books, exactement comme le fait le formulaire
+    # d'ajout produit (ProductForm) via StockManager. Sans classe valide,
+    # la ligne est refusee (le produit catalogue reste cree, mais sans
+    # fiche livre) plutot que d'ecrire une classe au hasard.
     # ────────────────────────────────────────────────────────────────
+
+    def _book_exists(self, product_id: int) -> bool:
+        cursor = self.catalog_repo.db.get_cursor()
+        cursor.execute("SELECT 1 FROM books WHERE product_id = ?", (product_id,))
+        return cursor.fetchone() is not None
+
+    def _get_book_info(self, product_id: int) -> dict:
+        cursor = self.catalog_repo.db.get_cursor()
+        cursor.execute("""
+            SELECT b.subject, b.publisher, b.isbn, sc.name as class_name
+            FROM books b
+            JOIN school_classes sc ON b.school_class_id = sc.id
+            WHERE b.product_id = ?
+        """, (product_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else {}
 
     @Slot(str)
     def import_products_csv(self, file_path: str):
@@ -416,8 +450,9 @@ class FileManager(QObject):
                         sku = row.get(cols.get("sku", ""), "").strip() or None
                         if sku and self.catalog_repo.sku_exists(sku):
                             existing_product = self.catalog_repo.get_product_by_sku(sku)
+                            product_id = existing_product["id"]
                             self.catalog_repo.update_product(
-                                existing_product["id"],
+                                product_id,
                                 name=name,
                                 description=row.get(
                                     cols.get("description", ""), ""
@@ -440,7 +475,11 @@ class FileManager(QObject):
                                 notes=row.get(cols.get("notes", ""), "").strip(),
                             )
                         else:
-                            self.catalog_repo.create_product(
+                            # BUG CORRIGE : la valeur de retour n'etait
+                            # jamais recuperee avant, donc impossible de
+                            # relier un livre nouvellement cree a sa
+                            # fiche books (classe/matiere/editeur/isbn).
+                            product_id = self.catalog_repo.create_product(
                                 name=name,
                                 description=row.get(
                                     cols.get("description", ""), ""
@@ -463,11 +502,64 @@ class FileManager(QObject):
                                 is_book=is_book,
                                 notes=row.get(cols.get("notes", ""), "").strip(),
                             )
+
+                        if is_book:
+                            class_name = row.get(
+                                cols.get("school_class_name", ""), ""
+                            ).strip()
+                            if not class_name:
+                                errors.append(
+                                    f"Ligne {row_num} : classe obligatoire pour "
+                                    f"le livre '{name}' (produit cree/mis a jour "
+                                    f"mais sans fiche livre)"
+                                )
+                            else:
+                                # Resolution deleguee a SchoolRepository :
+                                # seul endroit de l'app qui connait la logique
+                                # de tolerance (exact -> alias -> normalise).
+                                school_class = self.school_repo.resolve_class_name(
+                                    class_name
+                                )
+                                if not school_class:
+                                    known = self.school_repo.known_class_names()
+                                    available = (
+                                        ", ".join(known) if known
+                                        else "aucune classe creee pour l'instant"
+                                    )
+                                    errors.append(
+                                        f"Ligne {row_num} : classe '{class_name}' "
+                                        f"inconnue pour '{name}' (creez-la d'abord "
+                                        f"dans Parametres > Classes). Classes "
+                                        f"disponibles : {available}"
+                                    )
+                                else:
+                                    subject = row.get(
+                                        cols.get("subject", ""), ""
+                                    ).strip() or "General"
+                                    publisher = row.get(
+                                        cols.get("publisher", ""), ""
+                                    ).strip() or None
+                                    isbn = row.get(
+                                        cols.get("isbn", ""), ""
+                                    ).strip() or None
+                                    book_kwargs = dict(
+                                        product_id=product_id,
+                                        school_class_id=school_class["id"],
+                                        title=name,
+                                        subject=subject,
+                                        publisher=publisher,
+                                        isbn=isbn,
+                                    )
+                                    if self._book_exists(product_id):
+                                        self.school_repo.update_book(**book_kwargs)
+                                    else:
+                                        self.school_repo.create_book(**book_kwargs)
+
                         imported += 1
                     except Exception as e:
                         errors.append(f"Ligne {row_num} : {e}")
 
-            self._report_result("produit(s)", imported, errors)
+            self._report_result("produit(s) / livre(s)", imported, errors)
             self._refresh_all_panels()
 
         except Exception as e:
@@ -826,8 +918,12 @@ class FileManager(QObject):
                 existing_users = {
                     u["username"].lower(): u for u in self.user_repo.get_all_users()
                 }
+                # _norm() (deja utilise pour les en-tetes) ignore accents,
+                # casse et espaces : "Employe"/"employé"/"EMPLOYE" trouvent
+                # tous le meme role, quelle que soit la graphie exacte
+                # utilisee en base (ex: "Gérant" vs "gerant" dans le CSV).
                 roles_by_name = {
-                    r["name"].lower(): r for r in self.user_repo.get_all_roles()
+                    _norm(r["name"]): r for r in self.user_repo.get_all_roles()
                 }
 
                 for row_num, row in enumerate(reader, start=2):
@@ -843,7 +939,7 @@ class FileManager(QObject):
                         password = row.get(cols.get("password", ""), "").strip()
 
                         role_name = row.get(cols.get("role", ""), "").strip()
-                        role = roles_by_name.get(role_name.lower()) if role_name else None
+                        role = roles_by_name.get(_norm(role_name)) if role_name else None
                         if role_name and not role:
                             errors.append(
                                 f"Ligne {row_num} : role '{role_name}' inconnu"

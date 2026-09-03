@@ -1,10 +1,34 @@
 """
-Manager stock v9.2 — ThemedTable + InfoDialog (plus de QMessageBox).
+Manager stock v9.4 — ThemedTable + InfoDialog (plus de QMessageBox).
 La gestion du theme (dark/light) n'est plus dupliquee ici : elle est
 entierement deleguee a ModalForm / theme_manager, qui sont la seule
 source de verite. StockManager ne fait plus que construire les vues
 et les donnees.
+
+CHANGELOG v9.4 :
+- BUG CORRIGE (import "0 produits") : l'ancien import_csv() lisait le
+  fichier avec une virgule comme separateur et un format positionnel a
+  6 colonnes fixes, alors que TOUS les CSV de l'application (modele
+  telecharge, export du module Fichier, etc.) sont en point-virgule
+  avec des colonnes nommees. Une ligne mal separee ne fait qu'un seul
+  "champ" -> `len(row) < 6` -> ignoree silencieusement -> 0 import,
+  aucune erreur affichee.
+- Le format d'import Stock est desormais UNIFIE avec celui du module
+  Fichier (FileManager) : meme separateur (;), memes noms de colonnes.
+  Un CSV genere pour l'un fonctionne pour l'autre, plus de confusion
+  possible entre "Importer Produit" et "Importer Livres".
+- import_csv() est scinde en deux methodes explicites et independantes :
+  import_products_csv() et import_books_csv(). Chacune a son propre
+  bouton dans StockView (tous deux verts, cote a cote), pour qu'il n'y
+  ait plus d'ambiguite sur "lequel utiliser".
+- export_csv() ecrit desormais aussi en point-virgule (coherence avec
+  le reste de l'app, notamment pour la reimportation immediate du
+  fichier exporte).
 """
+
+import csv
+import re
+import unicodedata
 
 from PySide6.QtCore import QObject, Slot, Signal
 
@@ -16,8 +40,49 @@ from src.ui.widgets.modal_form import ModalForm
 from src.ui.widgets.InfoDialog import InfoDialog
 
 
+def _norm(s: str) -> str:
+    """Normalise un texte pour un matching insensible aux accents/casse/
+    espaces (ex: en-tetes de colonnes, noms de roles). Identique a la
+    fonction du meme nom dans FileManager, pour un comportement coherent
+    partout dans l'application."""
+    s = s.strip().lower()
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]", "", s)
+
+
+def _map_headers(fieldnames, header_map):
+    result = {}
+    for h in fieldnames or []:
+        key = header_map.get(_norm(h))
+        if key:
+            result[key] = h
+    return result
+
+
+# Sous-ensemble des colonnes FileManager pertinentes pour un import stock.
+# Mêmes libellés que PRODUCT_COLUMNS_FR côté FileManager : un fichier
+# généré/exporté pour l'un fonctionne directement pour l'autre.
+PRODUCT_HEADER_MAP = {
+    "nom": "name", "designation": "name",
+    "description": "description",
+    "categorie": "category", "categorie(s)": "category",
+    "fournisseur": "supplier",
+    "sku": "sku", "reference": "sku",
+    "prixachat": "buy_price", "prixdachat": "buy_price",
+    "prixvente": "sell_price",
+    "stock": "stock_quantity", "quantite": "stock_quantity",
+    "seuilmin": "min_stock_threshold", "seuil": "min_stock_threshold",
+}
+BOOK_HEADER_MAP = dict(PRODUCT_HEADER_MAP, **{
+    "classe": "school_class_name",
+    "matiere": "subject", "matieres": "subject",
+    "editeur": "publisher",
+    "isbn": "isbn",
+})
+
+
 class StockManager(QObject):
-    version = "9.2"
+    version = "9.4"
 
     data_changed = Signal()
     error_occurred = Signal(str)
@@ -49,7 +114,8 @@ class StockManager(QObject):
         self._view.add_product_requested.connect(self.add_product)
         self._view.edit_product_requested.connect(self.edit_product)
         self._view.delete_product_requested.connect(self.delete_product)
-        self._view.import_csv_requested.connect(self.import_csv)
+        self._view.import_products_csv_requested.connect(self.import_products_csv)
+        self._view.import_books_csv_requested.connect(self.import_books_csv)
         self._view.export_csv_requested.connect(self.export_csv)
         self._view.refresh_requested.connect(self.refresh)
 
@@ -335,65 +401,114 @@ class StockManager(QObject):
             )
 
     # ========== IMPORT / EXPORT ==========
+    #
+    # Format CSV attendu : IDENTIQUE a celui du module Fichier (point-
+    # virgule, colonnes nommees — voir FileManager.PRODUCT_COLUMNS_FR).
+    # Un fichier genere/exporte par le module Fichier fonctionne donc
+    # directement ici, et inversement. Colonnes utilisees :
+    #
+    #   Import Produit : Nom;Prix Achat;Prix Vente;Stock;Categorie;
+    #                     Fournisseur;SKU;Seuil Min  (SKU et Seuil Min
+    #                     optionnels)
+    #   Import Livres  : les memes + Classe;Matiere;Editeur;ISBN
+    #                     ("Classe" est OBLIGATOIRE et doit correspondre
+    #                     exactement au nom d'une classe deja creee dans
+    #                     Parametres > Classes)
+    #
+    # Seule la colonne "Nom" est obligatoire pour les produits standards.
+    # Une ligne livre sans classe valide n'est jamais silencieusement
+    # rattachee a la mauvaise classe : le produit catalogue est quand
+    # meme cree (rien n'est perdu), mais signale en erreur et laisse
+    # sans fiche livre tant que la classe n'est pas corrigee — un
+    # reimport ulterieur avec la bonne classe complete alors la fiche
+    # (le produit existant est retrouve par son nom).
+
+    def _read_csv_rows(self, file_path: str):
+        """Ouvre un CSV point-virgule et retourne (fieldnames, rows).
+        Leve une exception explicite si le fichier est vide/mal forme."""
+        with open(file_path, "r", encoding="utf-8-sig", newline="") as f:
+            reader = csv.DictReader(f, delimiter=";")
+            if not reader.fieldnames:
+                raise ValueError("Le fichier est vide ou mal formate.")
+            rows = list(reader)
+        return reader.fieldnames, rows
+
+    def _resolve_category(self, category_name: str):
+        if not category_name:
+            return None
+        cat = self.catalog.get_category_by_name(category_name)
+        return cat["id"] if cat else self.catalog.create_category(category_name)
+
+    def _resolve_supplier(self, supplier_name: str):
+        if not supplier_name:
+            return None
+        sup = self.catalog.get_supplier_by_name(supplier_name)
+        return sup["id"] if sup else self.catalog.create_supplier(supplier_name)
+
+    def _find_existing_product(self, name: str, sku: str):
+        """Priorite au SKU (identifiant fiable) ; a defaut, on retombe
+        sur le nom (insensible a la casse) pour rester compatible avec
+        des CSV sans colonne SKU."""
+        if sku and self.catalog.sku_exists(sku):
+            return self.catalog.get_product_by_sku(sku)
+        for p in self.catalog.get_all_products():
+            if p["name"].lower() == name.lower():
+                return p
+        return None
 
     @Slot(str, dict)
-    def import_csv(self, file_path: str, options: dict):
+    def import_products_csv(self, file_path: str, options: dict):
         try:
-            import csv
-
-            is_book = options.get("type") == "Livres / Manuels scolaires"
-            skip_header = options.get("skip_header", True)
-            update_stock = options.get("update_stock", False)
+            update_existing = options.get("update_stock", True)
             reason = options.get("reason", "Import CSV")
 
-            with open(file_path, "r", encoding="utf-8") as f:
-                rows = list(csv.reader(f))
-            if skip_header and rows:
-                rows = rows[1:]
+            fieldnames, rows = self._read_csv_rows(file_path)
+            cols = _map_headers(fieldnames, PRODUCT_HEADER_MAP)
+            if "name" not in cols:
+                InfoDialog.warning(
+                    self._view, "Colonne manquante",
+                    f"La colonne 'Nom' est obligatoire.\n\n"
+                    f"Colonnes trouvees :\n{', '.join(fieldnames)}",
+                )
+                return
 
             count, errors = 0, []
-            for idx, row in enumerate(rows):
-                if len(row) < 6:
-                    continue
-                name = row[0].strip()
-                if not name:
-                    continue
+            for row_num, row in enumerate(rows, start=2):
                 try:
-                    buy_price = float(row[1]) if row[1] else 0
-                    sell_price = float(row[2]) if row[2] else 0
-                    stock = int(row[3]) if row[3] else 0
-                    category_name = row[4].strip() if len(row) > 4 else None
-                    supplier_name = row[5].strip() if len(row) > 5 else None
+                    name = row.get(cols.get("name", ""), "").strip()
+                    if not name:
+                        errors.append(f"Ligne {row_num} : nom manquant")
+                        continue
 
-                    category_id = None
-                    if category_name:
-                        cat = self.catalog.get_category_by_name(category_name)
-                        category_id = (
-                            cat["id"] if cat
-                            else self.catalog.create_category(category_name)
-                        )
+                    def num(key, default=0.0):
+                        raw = (row.get(cols.get(key, ""), "") or "").strip()
+                        raw = raw.replace(",", ".")
+                        return float(raw) if raw else default
 
-                    supplier_id = None
-                    if supplier_name:
-                        sup = self.catalog.get_supplier_by_name(supplier_name)
-                        supplier_id = (
-                            sup["id"] if sup
-                            else self.catalog.create_supplier(supplier_name)
-                        )
+                    def integer(key, default=0):
+                        raw = (row.get(cols.get(key, ""), "") or "").strip()
+                        return int(raw) if raw else default
 
-                    existing = None
-                    if update_stock:
-                        for p in self.catalog.get_all_products():
-                            if p["name"].lower() == name.lower():
-                                existing = p
-                                break
+                    buy_price = num("buy_price")
+                    sell_price = num("sell_price")
+                    stock = integer("stock_quantity")
+                    category_name = row.get(cols.get("category", ""), "").strip()
+                    supplier_name = row.get(cols.get("supplier", ""), "").strip()
+                    sku = row.get(cols.get("sku", ""), "").strip() or None
+
+                    category_id = self._resolve_category(category_name)
+                    supplier_id = self._resolve_supplier(supplier_name)
+
+                    existing = (
+                        self._find_existing_product(name, sku)
+                        if update_existing else None
+                    )
 
                     if existing:
                         self.catalog.adjust_stock(
                             existing["id"], stock, "entry",
                             reason=f"{reason} - Mise a jour stock",
                         )
-                        count += 1
                     else:
                         product_id = self.catalog.create_product(
                             name=name,
@@ -402,68 +517,214 @@ class StockManager(QObject):
                             buy_price=buy_price,
                             sell_price=sell_price,
                             stock_quantity=0,
-                            min_stock_threshold=10,
+                            min_stock_threshold=integer("min_stock_threshold", 10),
                             packaging_type="unitaire",
-                            is_book=is_book,
+                            sku=sku,
+                            is_book=False,
                             is_active=True,
                         )
                         if stock > 0:
                             self.catalog.adjust_stock(
                                 product_id, stock, "entry", reason=reason
                             )
-                        sku = self.catalog.generate_sku(
-                            product_id, category_name or "GEN"
-                        )
-                        self.catalog.update_product(product_id, sku=sku)
-                        if is_book:
-                            self.school_repo.create_book(
-                                product_id=product_id,
-                                school_class_id=1,
-                                title=name,
-                                subject="General",
-                                publisher=None,
-                                isbn=None,
+                        if not sku:
+                            generated = self.catalog.generate_sku(
+                                product_id, category_name or "GEN"
                             )
-                        count += 1
+                            self.catalog.update_product(product_id, sku=generated)
+                    count += 1
                 except Exception as e:
-                    errors.append(f"Ligne {idx + 1}: {e}")
+                    errors.append(f"Ligne {row_num} : {e}")
 
             self.refresh()
-            if errors:
-                msg = (
-                    f"Import termine: {count} produits.\n\nErreurs:\n"
-                    + "\n".join(errors[:5])
-                )
-                if len(errors) > 5:
-                    msg += f"\n... et {len(errors) - 5} autres"
-                InfoDialog.warning(self._view, "Import termine", msg)
-            else:
-                self.success_occurred.emit(f"Import: {count} produits.")
-                InfoDialog.success(
-                    self._view, "Succes",
-                    f"Import termine: {count} produits.\nRaison: {reason}",
-                )
+            self._report_import_result(count, errors, reason, "produit(s)")
         except Exception as e:
             self.error_occurred.emit(str(e))
             InfoDialog.error(self._view, "Erreur", f"Erreur lors de l'import:\n{e}")
 
+    @Slot(str, dict)
+    def import_books_csv(self, file_path: str, options: dict):
+        try:
+            update_existing = options.get("update_stock", True)
+            reason = options.get("reason", "Import CSV")
+
+            fieldnames, rows = self._read_csv_rows(file_path)
+            cols = _map_headers(fieldnames, BOOK_HEADER_MAP)
+            if "name" not in cols:
+                InfoDialog.warning(
+                    self._view, "Colonne manquante",
+                    f"La colonne 'Nom' est obligatoire.\n\n"
+                    f"Colonnes trouvees :\n{', '.join(fieldnames)}",
+                )
+                return
+
+            count, errors = 0, []
+            # La resolution du nom de classe (exact -> alias -> normalise)
+            # est ENTIEREMENT deleguee a SchoolRepository.resolve_class_name() :
+            # c'est le seul endroit de l'application qui connait cette
+            # logique. Idem pour known_class_names(), utilisee ci-dessous
+            # pour un message d'erreur explicite.
+            known_class_names = self.school_repo.known_class_names()
+
+            for row_num, row in enumerate(rows, start=2):
+                try:
+                    name = row.get(cols.get("name", ""), "").strip()
+                    if not name:
+                        errors.append(f"Ligne {row_num} : nom manquant")
+                        continue
+
+                    class_name = row.get(
+                        cols.get("school_class_name", ""), ""
+                    ).strip()
+                    if not class_name:
+                        errors.append(
+                            f"Ligne {row_num} : classe obligatoire pour le "
+                            f"livre '{name}'"
+                        )
+                        continue
+                    school_class = self.school_repo.resolve_class_name(class_name)
+                    if not school_class:
+                        available = (
+                            ", ".join(known_class_names)
+                            if known_class_names
+                            else "aucune classe creee pour l'instant"
+                        )
+                        errors.append(
+                            f"Ligne {row_num} : classe '{class_name}' "
+                            f"inconnue pour '{name}'. Classes disponibles : "
+                            f"{available}"
+                        )
+                        continue
+
+                    def num(key, default=0.0):
+                        raw = (row.get(cols.get(key, ""), "") or "").strip()
+                        raw = raw.replace(",", ".")
+                        return float(raw) if raw else default
+
+                    def integer(key, default=0):
+                        raw = (row.get(cols.get(key, ""), "") or "").strip()
+                        return int(raw) if raw else default
+
+                    buy_price = num("buy_price")
+                    sell_price = num("sell_price")
+                    stock = integer("stock_quantity")
+                    category_name = row.get(cols.get("category", ""), "").strip()
+                    supplier_name = row.get(cols.get("supplier", ""), "").strip()
+                    sku = row.get(cols.get("sku", ""), "").strip() or None
+                    subject = row.get(
+                        cols.get("subject", ""), ""
+                    ).strip() or "General"
+                    publisher = row.get(
+                        cols.get("publisher", ""), ""
+                    ).strip() or None
+                    isbn = row.get(cols.get("isbn", ""), "").strip() or None
+
+                    category_id = self._resolve_category(category_name)
+                    supplier_id = self._resolve_supplier(supplier_name)
+
+                    existing = (
+                        self._find_existing_product(name, sku)
+                        if update_existing else None
+                    )
+
+                    if existing:
+                        product_id = existing["id"]
+                        self.catalog.adjust_stock(
+                            product_id, stock, "entry",
+                            reason=f"{reason} - Mise a jour stock",
+                        )
+                    else:
+                        product_id = self.catalog.create_product(
+                            name=name,
+                            category_id=category_id,
+                            supplier_id=supplier_id,
+                            buy_price=buy_price,
+                            sell_price=sell_price,
+                            stock_quantity=0,
+                            min_stock_threshold=integer("min_stock_threshold", 10),
+                            packaging_type="unitaire",
+                            sku=sku,
+                            is_book=True,
+                            is_active=True,
+                        )
+                        if stock > 0:
+                            self.catalog.adjust_stock(
+                                product_id, stock, "entry", reason=reason
+                            )
+                        if not sku:
+                            generated = self.catalog.generate_sku(
+                                product_id, category_name or "GEN"
+                            )
+                            self.catalog.update_product(product_id, sku=generated)
+
+                    self._upsert_book(
+                        product_id, school_class["id"], name, subject,
+                        publisher, isbn,
+                    )
+                    count += 1
+                except Exception as e:
+                    errors.append(f"Ligne {row_num} : {e}")
+
+            self.refresh()
+            self._report_import_result(count, errors, reason, "livre(s)")
+        except Exception as e:
+            self.error_occurred.emit(str(e))
+            InfoDialog.error(self._view, "Erreur", f"Erreur lors de l'import:\n{e}")
+
+    def _report_import_result(self, count, errors, reason, label):
+        if errors:
+            msg = f"Import termine : {count} {label}.\n\nErreurs :\n" + "\n".join(
+                errors[:5]
+            )
+            if len(errors) > 5:
+                msg += f"\n... et {len(errors) - 5} autre(s)"
+            InfoDialog.warning(self._view, "Import partiel", msg)
+        else:
+            self.success_occurred.emit(f"Import : {count} {label}.")
+            InfoDialog.success(
+                self._view, "Succes",
+                f"Import termine : {count} {label}.\nRaison : {reason}",
+            )
+
+    def _upsert_book(self, product_id: int, school_class_id: int,
+                      title: str, subject: str, publisher: str = None,
+                      isbn: str = None):
+        """Cree la fiche books si elle n'existe pas encore, sinon la
+        met a jour (ex: reimport avec une classe corrigee)."""
+        cursor = self.catalog.db.get_cursor()
+        cursor.execute("SELECT 1 FROM books WHERE product_id = ?", (product_id,))
+        book_kwargs = dict(
+            product_id=product_id,
+            school_class_id=school_class_id,
+            title=title,
+            subject=subject,
+            publisher=publisher,
+            isbn=isbn,
+        )
+        if cursor.fetchone():
+            self.school_repo.update_book(**book_kwargs)
+        else:
+            self.school_repo.create_book(**book_kwargs)
+
     @Slot(str)
     def export_csv(self, file_path: str):
         try:
-            import csv
-
             products = self._products
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
+            with open(file_path, "w", newline="", encoding="utf-8-sig") as f:
+                writer = csv.writer(f, delimiter=";")
                 writer.writerow(
-                    ["Nom", "Prix Achat", "Prix Vente", "Stock", "Categorie", "Fournisseur"]
+                    ["Nom", "Prix Achat", "Prix Vente", "Stock", "Categorie",
+                     "Fournisseur", "SKU"]
                 )
                 for p in products:
                     writer.writerow([
-                        p["name"], p["buy_price"], p["sell_price"],
+                        p["name"],
+                        str(p["buy_price"]).replace(".", ","),
+                        str(p["sell_price"]).replace(".", ","),
                         p["stock_quantity"],
                         p.get("category_name", ""),
                         p.get("supplier_name", ""),
+                        p.get("sku") or "",
                     ])
             self.success_occurred.emit(f"Export: {len(products)} produits.")
             InfoDialog.success(

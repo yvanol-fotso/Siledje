@@ -126,7 +126,7 @@ class MainWindow(QMainWindow):
             'database_settings':     DatabaseSettingsManager(self),
             'notification_settings': NotificationSettingsManager(self),
             'bug_report':            BugReportManager(self),
-            'file':                  FileManager(self, self.current_user),
+            'file':                  FileManager(self, self.current_user, auth_manager=self.auth_manager),
             'sync':                  SyncManager(self, self.current_user),
         }
 
