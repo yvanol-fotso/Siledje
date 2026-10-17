@@ -357,6 +357,8 @@ python -m src.main
 
 Cette section explique comment transformer le projet en `Siledje.exe`, puis en un installeur `Setup.exe` à remettre aux clients. Deux étapes : **PyInstaller** génère l'exécutable, **Inno Setup** l'emballe dans un installeur.
 
+> **À retenir :** ce que l'on remet à un client, c'est **un seul fichier** : `Output\Siledje_Setup_x.y.z.exe`. Ne jamais envoyer `Siledje.exe` seul (voir « Ce qu'il faut remettre au client »).
+
 ### Principe : deux dossiers distincts
 
 Une application installée dans `C:\Program Files` n'a pas le droit d'y écrire. `src/utils/config.py` sépare donc deux emplacements :
@@ -382,7 +384,7 @@ Get-ChildItem src -Recurse -Filter *.py | Select-String -Pattern "__file__","dat
 
 - Windows 10/11, Python 3.12 et le venv du projet activé
 - PyInstaller : `pip install pyinstaller`
-- Inno Setup (gratuit) : https://jrsoftware.org/isinfo.php
+- Inno Setup (voir « Installer Inno Setup » ci-dessous)
 - Une icône `assets/images/siledje.ico` (multi-tailles : 256, 128, 64, 48, 32, 16 px)
 
 ### Étape 1 — Point d'entrée `run.py`
@@ -413,9 +415,11 @@ pyinstaller run.py --name Siledje --noconsole --onedir --clean --noconfirm --ico
 | `--add-data "src;dest"` | Embarque un fichier ou dossier (sous Windows, `;` sépare source et destination) |
 | `--hidden-import` / `--collect-all` | Inclut les modules que PyInstaller ne détecte pas seul |
 
-Durée : 1 à 10 minutes selon la machine (l'analyse de PySide6 est longue). **Ne pas interrompre** (pas de Ctrl+C, pas de clic dans le terminal) : la fin est signalée par `Build complete!`. Résultat : `dist\Siledje\Siledje.exe`.
+Durée : 1 à 10 minutes selon la machine (l'analyse de PySide6 est longue). **Ne pas interrompre** (pas de Ctrl+C, pas de clic dans le terminal) : la fin est signalée par `Build complete!`. Résultat : `dist\Siledje\` contenant `Siledje.exe` **et** le dossier `_internal`.
 
-Teste toujours cet exécutable avant de créer l'installeur (lancement, connexion, vente, sauvegarde).
+Avec `--onedir`, `Siledje.exe` n'est qu'un petit lanceur (environ 5,5 Mo). Python, PySide6, `python312.dll`, les assets et le `.env` sont dans `_internal`. L'exe et `_internal` doivent toujours rester côte à côte.
+
+Teste toujours cet exécutable depuis `dist\Siledje` avant de créer l'installeur (lancement, connexion, vente, sauvegarde).
 
 ### Icône de la fenêtre et de la barre des tâches
 
@@ -427,7 +431,17 @@ Get-ChildItem src -Recurse -Filter *.py | Select-String "setWindowIcon"
 
 ### Étape 3 — Créer l'installeur avec Inno Setup
 
-Créer `installer.iss` à la racine :
+#### 3.1 Installer Inno Setup (une seule fois, sur le PC de développement)
+
+1. Télécharger Inno Setup sur https://jrsoftware.org/isdl.php (version 6.x ou 7.x ; la version 7 64 bits est recommandée).
+2. Lancer l'installeur et accepter les options par défaut.
+3. Alternative en ligne de commande : `winget install --id JRSoftware.InnoSetup -e -s winget -i`
+
+> **Licence :** Inno Setup est gratuit, mais l'éditeur demande l'achat d'une licence pour un usage commercial (licence perpétuelle, paiement unique). Le bandeau « Using Inno Setup commercially? » dans l'application le rappelle. Siledje étant vendu, prévoir cette licence.
+
+#### 3.2 Créer le script `installer.iss`
+
+Créer le fichier `installer.iss` **à la racine du projet** (au même niveau que `run.py` et le dossier `dist`), avec ce contenu :
 
 ```ini
 [Setup]
@@ -441,7 +455,7 @@ SetupIconFile=assets\images\siledje.ico
 UninstallDisplayIcon={app}\Siledje.exe
 Compression=lzma2
 SolidCompression=yes
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
@@ -457,13 +471,44 @@ Name: "{autodesktop}\Siledje"; Filename: "{app}\Siledje.exe"
 Filename: "{app}\Siledje.exe"; Description: "Lancer Siledje"; Flags: nowait postinstall
 ```
 
-Ouvrir le fichier dans Inno Setup puis cliquer sur **Compile** : l'installeur est créé dans `Output\Siledje_Setup_1.0.0.exe`. La base de données et les sauvegardes de l'utilisateur restent dans `%APPDATA%\Siledje` : elles survivent aux mises à jour et à la désinstallation.
+La ligne `Source: "dist\Siledje\*"` emballe tout le dossier généré par PyInstaller (l'exe **et** `_internal`). Le chemin est relatif à l'emplacement de `installer.iss`.
+
+#### 3.3 Compiler l'installeur
+
+1. Ouvrir Inno Setup. Dans la fenêtre « Welcome », choisir **Open an existing script file** puis **More files...** (ou **Cancel**, puis **File > Open** / `Ctrl+O`) et sélectionner `installer.iss`.
+2. Lancer la compilation avec **Build > Compile** ou `Ctrl+F9`.
+3. Attendre la fin sans toucher à rien : la dernière ligne de la zone de messages doit indiquer `Successful compile`.
+4. Récupérer l'installeur dans `Output\Siledje_Setup_1.0.0.exe` (environ 48 Mo à cause de PySide6).
+
+> **Ne pas utiliser le bouton Run (▶ / `F9`).** Il tente de lancer l'installeur en mode debug et affiche `Cannot debug. Debugger version ($00000000) does not match Setup version`, puis `Setup exit code: 2`. Ce n'est pas une erreur de compilation : l'installeur dans `Output` est correct. Pour le tester, double-cliquer simplement sur le `.exe` généré.
+
+#### 3.4 Tester l'installeur
+
+1. Double-cliquer sur `Output\Siledje_Setup_1.0.0.exe` et installer l'application.
+2. Lancer Siledje depuis le raccourci du bureau.
+3. Si l'écran d'activation de licence s'affiche, l'installeur fonctionne.
+
+La base de données et les sauvegardes de l'utilisateur restent dans `%APPDATA%\Siledje` : elles survivent aux mises à jour et à la désinstallation.
+
+### Ce qu'il faut remettre au client
+
+| Méthode | Fichier à envoyer | Recommandation |
+|---------|-------------------|----------------|
+| **Installeur** | `Output\Siledje_Setup_x.y.z.exe` (un seul fichier) | ✅ Méthode à utiliser |
+| Archive ZIP | Le dossier **complet** `dist\Siledje` (exe + `_internal`) zippé | Dépannage uniquement |
+| `Siledje.exe` seul | — | ❌ Ne fonctionne jamais |
+
+Si `Siledje.exe` est copié sans `_internal`, Windows affiche : `Failed to load Python DLL ... \_internal\python312.dll. LoadLibrary: Le module spécifié est introuvable.`
+
+Ne pas commiter le Setup.exe dans Git (trop volumineux) : le transmettre par WhatsApp, Drive, WeTransfer, etc. Avant d'envoyer un ZIP, l'extraire dans un autre dossier et vérifier qu'il se lance.
 
 ### Publier une nouvelle version
 
 1. Mettre à jour la version dans `config.json` et dans `QCoreApplication.setApplicationVersion(...)` (`src/main.py`).
 2. Mettre à jour `AppVersion` et `OutputBaseFilename` dans `installer.iss`.
-3. Recompiler avec PyInstaller (étape 2), tester, puis compiler l'installeur (étape 3).
+3. Recompiler avec PyInstaller (étape 2), tester `dist\Siledje\Siledje.exe`.
+4. Recompiler l'installeur avec `Ctrl+F9` (étape 3.3) : l'installeur n'est **pas** mis à jour automatiquement après un nouveau build PyInstaller.
+5. Tester l'installeur, puis l'envoyer au client.
 
 ### Résolution de problèmes
 
@@ -476,8 +521,13 @@ Ouvrir le fichier dans Inno Setup puis cliquer sur **Compile** : l'installeur es
 | `FileNotFoundError` / base introuvable | Chemin en dur, non converti | Utiliser `config.resource_dir` (lecture) ou `config.base_dir` (écriture) |
 | Erreur d'écriture / `PermissionError` | Écriture dans `Program Files` | Écrire dans `config.base_dir` (`%APPDATA%\Siledje`) |
 | Ancienne icône dans l'Explorateur | Cache d'icônes de Windows | Vider le cache (voir ci-dessous) |
-| Avertissement SmartScreen à l'installation | Exécutable non signé | Normal au début ; un certificat de signature de code le supprime |
+| Avertissement SmartScreen à l'installation | Exécutable non signé | Normal au début ; cliquer sur « Informations complémentaires » puis « Exécuter quand même » ; un certificat de signature de code le supprime |
 | `Hidden import "_cffi_backend" not found` | Avertissement sans conséquence | À ignorer |
+| `Failed to load Python DLL ... python312.dll` | `Siledje.exe` copié sans le dossier `_internal` | Envoyer l'installeur, ou zipper tout `dist\Siledje` |
+| `Cannot debug. Debugger version ... does not match Setup version` | Bouton Run (`F9`) utilisé au lieu de la compilation | Ignorer ; compiler avec `Ctrl+F9` et lancer le `.exe` depuis `Output` |
+| Inno Setup : `Unknown file ... French.isl` | Fichier de langue absent | Supprimer la section `[Languages]` du script |
+| Inno Setup : `Icon file not found` | `siledje.ico` absent | Placer le fichier dans `assets\images\` ou retirer `SetupIconFile` |
+| Inno Setup : `No files found matching dist\Siledje\*` | `installer.iss` hors de la racine du projet | Le placer au même niveau que le dossier `dist` |
 
 Vider le cache d'icônes de Windows :
 
@@ -490,7 +540,7 @@ Start-Process explorer
 
 ### Fichiers à ignorer dans Git
 
-Ajouter au `.gitignore` :
+Ajouter au `.gitignore` (`installer.iss`, lui, **doit** être versionné) :
 
 ```
 build/
@@ -514,7 +564,7 @@ Output/
 | python-dateutil | BSD License |
 | bcrypt | Apache 2.0 |
 | PyInstaller | GPL v2 avec exception (les exécutables générés ne sont pas soumis à la GPL) |
-| Inno Setup | Licence Inno Setup (gratuit, y compris usage commercial) |
+| Inno Setup | Licence Inno Setup (gratuit ; licence commerciale à acheter en cas d'usage commercial) |
 
 Le projet **SILEDJE** est distribué sous licence **MIT**. Voir `LICENSE`.
 
@@ -529,6 +579,7 @@ Le projet **SILEDJE** est distribué sous licence **MIT**. Voir `LICENSE`.
 - [ ] Bouton de purge de l'historique de synchronisation
 - [ ] Passage de la signature de licence HMAC à une signature asymétrique (Ed25519)
 - [ ] Signature de code de l'exécutable (suppression de l'avertissement SmartScreen)
+- [ ] Achat de la licence commerciale Inno Setup
 
 ---
 
