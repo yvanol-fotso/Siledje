@@ -1,4 +1,4 @@
-"""
+﻿"""
 Fenetre de saisie/activation de la cle de licence - Version finale agrandie.
 Sans emojis. Dialogues = InfoDialog (plus de QMessageBox).
 Light/Dark via Palette (meme source que BaseView / ModalForm).
@@ -81,7 +81,7 @@ class LicenseDialog(QDialog):
             Qt.Dialog | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
         )
 
-        app_icon_path = get_asset_path("icons", "app.png")
+        app_icon_path = get_asset_path("images", "siledje.ico")
         if app_icon_path.exists():
             self.setWindowIcon(QIcon(str(app_icon_path)))
 

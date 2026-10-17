@@ -12,6 +12,7 @@ Un système de gestion intuitif et complet pour les librairies et papeteries, co
 - [Base de données](#-base-de-données)
 - [Sécurité](#-sécurité)
 - [Installation](#-installation-et-lancement)
+- [Compilation et distribution (.exe)](#-compilation-et-distribution-exe)
 - [Licences](#-licences)
 - [Chantiers en cours](#-chantiers-en-cours)
 
@@ -51,6 +52,8 @@ Un système de gestion intuitif et complet pour les librairies et papeteries, co
 | **python-barcode + Pillow** | Génération des codes-barres |
 | **python-dateutil** | Comparaison fiable des horodatages entre appareils |
 | **urllib / socket** | Bibliothèque standard — aucune dépendance HTTP supplémentaire |
+| **PyInstaller** | Génération de l'exécutable Windows (`Siledje.exe`) |
+| **Inno Setup** | Création de l'installeur Windows (`Siledje_Setup_x.y.z.exe`) |
 
 ---
 
@@ -58,17 +61,18 @@ Un système de gestion intuitif et complet pour les librairies et papeteries, co
 
 ```
 SILEDJE/
+├── run.py                          # Point d'entrée pour PyInstaller (appelle src.main)
+├── installer.iss                   # Script Inno Setup (création du Setup.exe)
 ├── config.json                     # Configuration centralisée
 ├── requirements.txt                # Dépendances Python
 ├── .env                            # Secrets locaux (NON versionné)
 ├── .env.example                    # Modèle de .env (versionné, sans valeurs)
-├── siledje.db                    # Base SQLite (générée au 1er lancement)
+├── siledje.db                      # Base SQLite (générée au 1er lancement, en développement)
 ├── README.md
 │
 ├── scripts/                        # Outils réservés au vendeur/support
 │   ├── generate_license_cli.py
 │   ├── reset_password_cli.py
-│ 
 │
 ├── tools/                          # Scripts de maintenance et tests
 │   ├── show_books.py
@@ -76,7 +80,7 @@ SILEDJE/
 │
 ├── assets/
 │   ├── icons/                      # Icônes SVG
-│   ├── images/                     # Images et logos
+│   ├── images/                     # Images et logos (dont siledje.ico, icône de l'application)
 │   └── styles/
 │       ├── light.qss               # Thème clair
 │       └── dark.qss                # Thème sombre
@@ -100,7 +104,7 @@ SILEDJE/
 │   │       ├── user_repository.py
 │   │       ├── license_repository.py
 │   │       ├── bug_report_repository.py
-|   |       ├── catalog_repository.py
+│   │       ├── catalog_repository.py
 │   │       ├── sales_repository.py
 │   │       ├── supplier_order_repository.py
 │   │       ├── surveillance_repository.py
@@ -228,8 +232,8 @@ SILEDJE/
 │   │
 │   └── utils/
 │       ├── __init__.py
-|       |── backup_service.py
-│       ├── config.py
+│       ├── backup_service.py
+│       ├── config.py               # Chemins : mode développement vs exécutable (voir Compilation)
 │       ├── notifications.py
 │       ├── theme_manager.py
 │       ├── license_crypto.py
@@ -240,6 +244,10 @@ SILEDJE/
 │   ├── backups/                    # Sauvegardes locales
 │   └── dummy_data/
 │       └── data_home.py
+│
+├── build/                          # Généré par PyInstaller (NON versionné)
+├── dist/                           # Généré par PyInstaller : dist/Siledje/Siledje.exe (NON versionné)
+├── Output/                         # Généré par Inno Setup : le Setup.exe final (NON versionné)
 │
 └── docs/
     ├── docs_pdf/
@@ -305,6 +313,14 @@ Mot de passe       : admin123
 python scripts/reset_password_cli.py <username> <nouveau_mot_de_passe>
 ```
 
+### ⚠️ Secrets dans l'exécutable distribué
+
+La commande de compilation embarque le fichier `.env` dans l'exécutable. Cela suffit pour des tests, mais **pas pour une vente à grande échelle** :
+
+- Avec `SILEDJE_LICENSE_SECRET` (HMAC, clé symétrique), un client qui extrait le `.env` peut fabriquer ses propres licences. À terme, passer à une signature **asymétrique (Ed25519)** : seule la clé publique est dans l'application, la clé privée reste chez le vendeur (`generate_license_cli.py`).
+- Pour Supabase, n'embarquer que la clé `anon` (avec RLS activé), jamais la clé `service_role`.
+- Un `.env` placé dans `%APPDATA%\Siledje\` surcharge celui embarqué dans l'exécutable.
+
 ---
 
 ## Installation et Lancement
@@ -337,6 +353,155 @@ python -m src.main
 
 ---
 
+## 📦 Compilation et distribution (.exe)
+
+Cette section explique comment transformer le projet en `Siledje.exe`, puis en un installeur `Setup.exe` à remettre aux clients. Deux étapes : **PyInstaller** génère l'exécutable, **Inno Setup** l'emballe dans un installeur.
+
+### Principe : deux dossiers distincts
+
+Une application installée dans `C:\Program Files` n'a pas le droit d'y écrire. `src/utils/config.py` sépare donc deux emplacements :
+
+| Variable | En développement | Dans l'exécutable | Contenu |
+|----------|------------------|-------------------|---------|
+| `resource_dir` | racine du projet | dossier interne de PyInstaller (`_internal`) | `assets/`, `config.json` d'origine (lecture seule) |
+| `base_dir` | racine du projet | `%APPDATA%\Siledje` | `siledje.db`, `backups/`, `config.json` actif (écriture) |
+
+Règles à respecter dans le code :
+
+- tout fichier **lu** et embarqué (icône, `.qss`, image) passe par `config.resource_dir` ou `config.get_asset_path(...)` ;
+- tout fichier **écrit** (base de données, sauvegardes, exports) passe par `config.base_dir`, `config.db_path` ou `config.backup_dir` ;
+- ne jamais construire un chemin avec `__file__` ou un chemin relatif en dur (`"data/..."`) dans les managers et repositories.
+
+Pour repérer les chemins à corriger (PowerShell) :
+
+```powershell
+Get-ChildItem src -Recurse -Filter *.py | Select-String -Pattern "__file__","data/","backups"
+```
+
+### Prérequis
+
+- Windows 10/11, Python 3.12 et le venv du projet activé
+- PyInstaller : `pip install pyinstaller`
+- Inno Setup (gratuit) : https://jrsoftware.org/isinfo.php
+- Une icône `assets/images/siledje.ico` (multi-tailles : 256, 128, 64, 48, 32, 16 px)
+
+### Étape 1 — Point d'entrée `run.py`
+
+PyInstaller n'aime pas `python -m src.main`. Un fichier `run.py` à la racine suffit :
+
+```python
+from src.main import main
+
+if __name__ == "__main__":
+    main()
+```
+
+### Étape 2 — Générer l'exécutable
+
+Depuis la racine du projet, venv activé, **en une seule ligne** :
+
+```powershell
+pyinstaller run.py --name Siledje --noconsole --onedir --clean --noconfirm --icon assets\images\siledje.ico --add-data "assets;assets" --add-data ".env;." --add-data "config.json;." --hidden-import bcrypt --hidden-import dateutil --collect-all barcode
+```
+
+| Option | Rôle |
+|--------|------|
+| `--noconsole` | Pas de fenêtre noire au lancement |
+| `--onedir` | Un dossier au lieu d'un fichier unique : démarrage plus rapide, moins de faux positifs antivirus |
+| `--clean` / `--noconfirm` | Repart d'un cache propre et écrase `dist/` sans poser de question |
+| `--icon` | Icône du fichier `.exe` |
+| `--add-data "src;dest"` | Embarque un fichier ou dossier (sous Windows, `;` sépare source et destination) |
+| `--hidden-import` / `--collect-all` | Inclut les modules que PyInstaller ne détecte pas seul |
+
+Durée : 1 à 10 minutes selon la machine (l'analyse de PySide6 est longue). **Ne pas interrompre** (pas de Ctrl+C, pas de clic dans le terminal) : la fin est signalée par `Build complete!`. Résultat : `dist\Siledje\Siledje.exe`.
+
+Teste toujours cet exécutable avant de créer l'installeur (lancement, connexion, vente, sauvegarde).
+
+### Icône de la fenêtre et de la barre des tâches
+
+L'option `--icon` ne règle que l'icône du fichier `.exe`. L'icône de la fenêtre et de la barre des tâches est définie dans `src/main.py` (identifiant d'application Windows + `setWindowIcon`). Si une fenêtre garde une ancienne icône, chercher les autres appels :
+
+```powershell
+Get-ChildItem src -Recurse -Filter *.py | Select-String "setWindowIcon"
+```
+
+### Étape 3 — Créer l'installeur avec Inno Setup
+
+Créer `installer.iss` à la racine :
+
+```ini
+[Setup]
+AppName=Siledje
+AppVersion=1.0.0
+AppPublisher=Siledje
+DefaultDirName={autopf}\Siledje
+DefaultGroupName=Siledje
+OutputBaseFilename=Siledje_Setup_1.0.0
+SetupIconFile=assets\images\siledje.ico
+UninstallDisplayIcon={app}\Siledje.exe
+Compression=lzma2
+SolidCompression=yes
+ArchitecturesInstallIn64BitMode=x64
+
+[Languages]
+Name: "french"; MessagesFile: "compiler:Languages\French.isl"
+
+[Files]
+Source: "dist\Siledje\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+
+[Icons]
+Name: "{group}\Siledje"; Filename: "{app}\Siledje.exe"
+Name: "{autodesktop}\Siledje"; Filename: "{app}\Siledje.exe"
+
+[Run]
+Filename: "{app}\Siledje.exe"; Description: "Lancer Siledje"; Flags: nowait postinstall
+```
+
+Ouvrir le fichier dans Inno Setup puis cliquer sur **Compile** : l'installeur est créé dans `Output\Siledje_Setup_1.0.0.exe`. La base de données et les sauvegardes de l'utilisateur restent dans `%APPDATA%\Siledje` : elles survivent aux mises à jour et à la désinstallation.
+
+### Publier une nouvelle version
+
+1. Mettre à jour la version dans `config.json` et dans `QCoreApplication.setApplicationVersion(...)` (`src/main.py`).
+2. Mettre à jour `AppVersion` et `OutputBaseFilename` dans `installer.iss`.
+3. Recompiler avec PyInstaller (étape 2), tester, puis compiler l'installeur (étape 3).
+
+### Résolution de problèmes
+
+| Symptôme | Cause probable | Solution |
+|----------|----------------|----------|
+| `Aborted by user request` | Compilation interrompue | Relancer sans toucher au terminal |
+| `Icon input file ... not found` | `siledje.ico` absent | Placer le fichier dans `assets\images\` ou retirer `--icon` (et `SetupIconFile` dans `installer.iss`) |
+| L'exe se ferme sans message | Erreur au démarrage masquée par `--noconsole` | Recompiler sans `--noconsole` pour lire l'erreur |
+| `ModuleNotFoundError` | Module non détecté | Ajouter `--hidden-import nom_du_module` |
+| `FileNotFoundError` / base introuvable | Chemin en dur, non converti | Utiliser `config.resource_dir` (lecture) ou `config.base_dir` (écriture) |
+| Erreur d'écriture / `PermissionError` | Écriture dans `Program Files` | Écrire dans `config.base_dir` (`%APPDATA%\Siledje`) |
+| Ancienne icône dans l'Explorateur | Cache d'icônes de Windows | Vider le cache (voir ci-dessous) |
+| Avertissement SmartScreen à l'installation | Exécutable non signé | Normal au début ; un certificat de signature de code le supprime |
+| `Hidden import "_cffi_backend" not found` | Avertissement sans conséquence | À ignorer |
+
+Vider le cache d'icônes de Windows :
+
+```powershell
+Stop-Process -Name explorer -Force
+Remove-Item "$env:LOCALAPPDATA\IconCache.db" -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:LOCALAPPDATA\Microsoft\Windows\Explorer\iconcache*" -Force -ErrorAction SilentlyContinue
+Start-Process explorer
+```
+
+### Fichiers à ignorer dans Git
+
+Ajouter au `.gitignore` :
+
+```
+build/
+dist/
+Output/
+.env
+*.db
+```
+
+---
+
 ##  Licences
 
 | Composant | Licence |
@@ -348,6 +513,8 @@ python -m src.main
 | Pillow | HPND License |
 | python-dateutil | BSD License |
 | bcrypt | Apache 2.0 |
+| PyInstaller | GPL v2 avec exception (les exécutables générés ne sont pas soumis à la GPL) |
+| Inno Setup | Licence Inno Setup (gratuit, y compris usage commercial) |
 
 Le projet **SILEDJE** est distribué sous licence **MIT**. Voir `LICENSE`.
 
@@ -360,6 +527,8 @@ Le projet **SILEDJE** est distribué sous licence **MIT**. Voir `LICENSE`.
 - [ ] Extension des adaptateurs de synchronisation à `barcodes` et `product_components`
 - [ ] Activation du RLS + policies Supabase pour l'application mobile
 - [ ] Bouton de purge de l'historique de synchronisation
+- [ ] Passage de la signature de licence HMAC à une signature asymétrique (Ed25519)
+- [ ] Signature de code de l'exécutable (suppression de l'avertissement SmartScreen)
 
 ---
 

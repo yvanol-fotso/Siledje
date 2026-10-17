@@ -1,4 +1,4 @@
-"""
+﻿"""
 Interface de connexion moderne et professionnelle.
 Version finale - Fenêtre agrandie pour plus de confort.
 Sans emojis.
@@ -99,7 +99,7 @@ class LoginDialog(QDialog):
         self.setFixedSize(560, 680)  # Agrandi 520x620 -> 560x680
         self.setWindowFlags(Qt.Dialog | Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
         
-        app_icon_path = get_asset_path("icons", "app.png")
+        app_icon_path = get_asset_path("images", "siledje.ico")
         if app_icon_path.exists():
             self.setWindowIcon(QIcon(str(app_icon_path)))
     
@@ -215,7 +215,7 @@ class LoginDialog(QDialog):
         header_layout.setSpacing(0)
         header_layout.setAlignment(Qt.AlignCenter)
         
-        logo_path = get_asset_path("images", "logo.jpg")
+        logo_path = get_asset_path("images", "logo.png")
         
         self.logo_label = create_circular_avatar_label(
             image_path=logo_path if logo_path.exists() else None,

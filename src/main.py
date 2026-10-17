@@ -2,14 +2,22 @@
 Point d'entrée principal de l'application Siledje.
 Gère l'initialisation de l'application, l'authentification et le lancement.
 """
-from dotenv import load_dotenv
-load_dotenv()
-
 import sys
 import os
+import ctypes
+from pathlib import Path
+from dotenv import load_dotenv
+
+# .env : embarqué dans l'exe, avec surcharge possible dans %APPDATA%\Siledje\.env
+if getattr(sys, "frozen", False):
+    load_dotenv(Path(sys._MEIPASS) / ".env")
+    load_dotenv(Path(os.environ.get("APPDATA", "")) / "Siledje" / ".env", override=True)
+else:
+    load_dotenv()
 
 from src.utils.compat import QApplication, QCoreApplication, qt_exec
 from PySide6.QtWidgets import QStyleFactory
+from PySide6.QtGui import QIcon
 
 from src.ui.windows.main_window import MainWindow
 from src.ui.windows.login_window import LoginDialog
@@ -31,6 +39,13 @@ def main():
 
     os.environ["QT_QPA_PLATFORM"] = "windows"
 
+    # Identifiant d'application Windows : nécessaire pour que la barre des
+    # tâches affiche l'icône de Siledje (et non celle de Python).
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Siledje.App")
+    except Exception as e:
+        print(f"AppUserModelID non défini : {e}")
+
     QCoreApplication.setApplicationName("Siledje")
     QCoreApplication.setOrganizationName("Siledje")
     QCoreApplication.setApplicationVersion("1.0.0")
@@ -44,10 +59,16 @@ def main():
     config = AppConfig()
     print(f"Configuration chargee: version {config.version}")
 
+    # ========== ICÔNE DE L'APPLICATION ==========
+    icon_path = config.get_asset_path("images", "siledje.ico")
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
+    else:
+        print(f"Icône introuvable : {icon_path}")
+
     # ========== THÈME ==========
     theme_manager = ThemeManager(config)
     current_theme = theme_manager.get_current_theme()
-    # force=True : re-émet theme_changed même si le thème est déjà chargé
     theme_manager.set_theme(current_theme, force=True)
     print(f"Theme actuel: {current_theme}")
 
@@ -88,7 +109,7 @@ def main():
 
         sys.exit(qt_exec(app))
     else:
-        print("\nAuthentification annulee.")
+        print("\nAuthentification annulée.")
         sys.exit(0)
 
 

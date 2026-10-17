@@ -1,4 +1,4 @@
-"""
+﻿"""
 Fenêtre principale — VERSION FINALE COMPLÈTE (corrigée : propagation du thème
 + correction de l'incohérence de couleurs dans les contenus personnalisés
 des InfoDialog.rich() : Documentation, Guide de démarrage, Contact support,
@@ -94,7 +94,7 @@ class MainWindow(QMainWindow):
     def init_ui(self):
         self.setWindowTitle(f"{self.config.app_name} v{self.config.version}")
         self.setMinimumSize(1024, 768)
-        icon_path = get_asset_path("icons", "app.png")
+        icon_path = get_asset_path("images", "siledje.ico")
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
         self.modules = self.init_modules()
@@ -920,7 +920,7 @@ class MainWindow(QMainWindow):
     def init_system_tray(self):
         if not QSystemTrayIcon.isSystemTrayAvailable():
             return
-        p = get_asset_path("icons", "app.png")
+        p = get_asset_path("images", "siledje.ico")
         if p.exists():
             self.tray_icon = QSystemTrayIcon(QIcon(str(p)), self)
             self.tray_icon.activated.connect(self.tray_icon_clicked)
