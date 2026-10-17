@@ -26,6 +26,8 @@ class BarcodeView(BaseView):
     save_product_requested = Signal(dict)
     generate_internal_barcode_requested = Signal(dict)
     print_barcode_requested = Signal()
+    save_barcode_as_requested = Signal()
+    open_barcodes_folder_requested = Signal()
     refresh_products_requested = Signal()
     edit_product_requested = Signal(int)
     delete_product_requested = Signal(int)
@@ -49,6 +51,8 @@ class BarcodeView(BaseView):
         self.barcode_preview = None
         self.barcode_value_display = None
         self.print_internal_btn = None
+        self.save_as_btn = None
+        self.open_folder_btn = None
         self.products_table = None
         self._last_selected_row = -1
 
@@ -221,6 +225,10 @@ class BarcodeView(BaseView):
         self.barcode_value_display.setObjectName("barcodeValue")
         preview_v.addWidget(self.barcode_value_display)
 
+        # Actions sur le code-barres : imprimer / enregistrer / ouvrir le dossier
+        preview_btn_row = QHBoxLayout()
+        preview_btn_row.setSpacing(10)
+
         self.print_internal_btn = info_btn(
             "Imprimer l'Etiquette", "printer",
             lambda: self.print_barcode_requested.emit(),
@@ -228,7 +236,27 @@ class BarcodeView(BaseView):
         self.print_internal_btn.setMinimumWidth(180)
         self.print_internal_btn.setMinimumHeight(38)
         self.print_internal_btn.setEnabled(False)
-        preview_v.addWidget(self.print_internal_btn, 0, Qt.AlignLeft)
+
+        self.save_as_btn = outline_btn(
+            "Enregistrer sous...", "save",
+            lambda: self.save_barcode_as_requested.emit(),
+        )
+        self.save_as_btn.setMinimumWidth(180)
+        self.save_as_btn.setMinimumHeight(38)
+        self.save_as_btn.setEnabled(False)
+
+        self.open_folder_btn = outline_btn(
+            "Ouvrir le dossier", "folder",
+            lambda: self.open_barcodes_folder_requested.emit(),
+        )
+        self.open_folder_btn.setMinimumWidth(180)
+        self.open_folder_btn.setMinimumHeight(38)
+
+        preview_btn_row.addWidget(self.print_internal_btn)
+        preview_btn_row.addWidget(self.save_as_btn)
+        preview_btn_row.addWidget(self.open_folder_btn)
+        preview_btn_row.addStretch()
+        preview_v.addLayout(preview_btn_row)
 
         layout.addWidget(preview_group)
         layout.addStretch()
@@ -329,7 +357,7 @@ class BarcodeView(BaseView):
     def set_theme(self, is_dark: bool):
         super().set_theme(is_dark)
         try:
-           self.products_table.apply_theme(is_dark)
+            self.products_table.apply_theme(is_dark)
         except Exception as e:
             print(f"[BarcodeView] theme {e}")
         self._restyle_all_buttons()
@@ -469,6 +497,7 @@ class BarcodeView(BaseView):
         self.barcode_preview.clear()
         self.barcode_value_display.setText("<i>Code-barres affiche ici</i>")
         self.print_internal_btn.setEnabled(False)
+        self.save_as_btn.setEnabled(False)
 
     def update_barcode_preview(self, barcode_value: str, image_path: str):
         pixmap = QPixmap(image_path)
@@ -479,9 +508,11 @@ class BarcodeView(BaseView):
             self.barcode_preview.setPixmap(scaled)
         self.barcode_value_display.setText(f"<b>{barcode_value}</b>")
         self.print_internal_btn.setEnabled(True)
+        self.save_as_btn.setEnabled(True)
         self.set_status_message(
             f"Code genere : <b>{barcode_value}</b> — "
-            "cliquez sur Imprimer l'Etiquette pour l'imprimer.",
+            "utilisez Enregistrer sous... ou Ouvrir le dossier "
+            "pour recuperer l'image.",
             is_error=False,
         )
 

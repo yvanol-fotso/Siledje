@@ -1,9 +1,18 @@
 """
 Manager des codes-barres — CatalogRepository (products + barcodes).
 Messages : InfoDialog uniquement.
+
+Les images de codes-barres sont enregistrées dans config.base_dir / "barcodes" :
+- en développement : racine du projet
+- dans l'exécutable : %APPDATA%\\Siledje\\barcodes (dossier toujours accessible en écriture)
 """
 
-from PySide6.QtCore import QObject, Slot
+import shutil
+from pathlib import Path
+
+from PySide6.QtCore import QObject, Slot, QUrl
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import QFileDialog
 
 import barcode as barcode_lib
 from barcode.writer import ImageWriter
@@ -15,7 +24,7 @@ from src.ui.widgets.InfoDialog import InfoDialog
 
 class BarcodeManager(QObject):
 
-    version = "4.1"
+    version = "4.2"
 
     def __init__(self, parent=None, current_user=None):
         super().__init__(parent)
@@ -26,12 +35,14 @@ class BarcodeManager(QObject):
 
         config = get_config()
         self.barcodes_dir = config.base_dir / "barcodes"
-        self.barcodes_dir.mkdir(exist_ok=True)
+        self.barcodes_dir.mkdir(parents=True, exist_ok=True)
 
         self.current_barcode_for_print = None
         self.current_product_name_for_print = None
+        self.current_barcode_image_path = None
 
         print(f"[BarcodeManager v{self.version}] Initialisé")
+        print(f"[BarcodeManager] Dossier images : {self.barcodes_dir}")
 
     def get_ui(self):
         if self.view is None:
@@ -51,6 +62,10 @@ class BarcodeManager(QObject):
             self.on_generate_internal_barcode
         )
         self.view.print_barcode_requested.connect(self.on_print_barcode)
+        self.view.save_barcode_as_requested.connect(self.on_save_barcode_as)
+        self.view.open_barcodes_folder_requested.connect(
+            self.on_open_barcodes_folder
+        )
         self.view.refresh_products_requested.connect(self.load_products)
         self.view.edit_product_requested.connect(self.on_edit_product)
         self.view.delete_product_requested.connect(self.on_delete_product)
@@ -204,16 +219,18 @@ class BarcodeManager(QObject):
         self.catalog.update_product(new_id, sku=sku)
 
         try:
+            self.barcodes_dir.mkdir(parents=True, exist_ok=True)
             ean = barcode_lib.get(
                 "code128", new_barcode, writer=ImageWriter()
             )
-            filename = self.barcodes_dir / new_barcode
-            ean.save(str(filename))
-            image_path = str(filename) + ".png"
+            # save() retourne le chemin réel du fichier créé (avec extension)
+            image_path = ean.save(str(self.barcodes_dir / new_barcode))
 
-            self.view.update_barcode_preview(new_barcode, image_path)
             self.current_barcode_for_print = new_barcode
             self.current_product_name_for_print = name
+            self.current_barcode_image_path = image_path
+
+            self.view.update_barcode_preview(new_barcode, image_path)
             self.load_products()
             print(
                 f"[BarcodeManager] Code genere: {new_barcode} (SKU: {sku})"
@@ -231,11 +248,72 @@ class BarcodeManager(QObject):
                 "Impression",
                 f"Nom: {self.current_product_name_for_print}\n"
                 f"Code: {self.current_barcode_for_print}\n"
-                f"Verifiez le dossier 'barcodes'",
+                f"Utilisez 'Enregistrer sous...' ou 'Ouvrir le dossier' "
+                f"pour recuperer l'image du code-barres.",
             )
         else:
             InfoDialog.warning(
                 self.view, "Erreur", "Aucun code-barres a imprimer."
+            )
+
+    @Slot()
+    def on_save_barcode_as(self):
+        """Copie l'image du dernier code-barres généré à l'endroit choisi."""
+        source = (
+            Path(self.current_barcode_image_path)
+            if self.current_barcode_image_path else None
+        )
+        if source is None or not source.exists():
+            InfoDialog.warning(
+                self.view, "Erreur",
+                "Aucune image de code-barres a enregistrer. "
+                "Generez d'abord un code interne.",
+            )
+            return
+
+        documents = Path.home() / "Documents"
+        start_dir = documents if documents.exists() else Path.home()
+        default_path = str(start_dir / source.name)
+
+        target, _ = QFileDialog.getSaveFileName(
+            self.view,
+            "Enregistrer le code-barres",
+            default_path,
+            "Image PNG (*.png)",
+        )
+        if not target:
+            return  # annulé par l'utilisateur
+
+        if not target.lower().endswith(".png"):
+            target += ".png"
+
+        try:
+            shutil.copyfile(source, target)
+            InfoDialog.success(
+                self.view, "Succes", f"Code-barres enregistre :\n{target}"
+            )
+            print(f"[BarcodeManager] Image copiee vers {target}")
+        except Exception as e:
+            InfoDialog.error(
+                self.view, "Erreur", f"Enregistrement impossible : {e}"
+            )
+
+    @Slot()
+    def on_open_barcodes_folder(self):
+        """Ouvre le dossier des images de codes-barres dans l'Explorateur."""
+        try:
+            self.barcodes_dir.mkdir(parents=True, exist_ok=True)
+            opened = QDesktopServices.openUrl(
+                QUrl.fromLocalFile(str(self.barcodes_dir))
+            )
+            if not opened:
+                InfoDialog.warning(
+                    self.view, "Erreur",
+                    f"Impossible d'ouvrir le dossier :\n{self.barcodes_dir}",
+                )
+        except Exception as e:
+            InfoDialog.error(
+                self.view, "Erreur", f"Ouverture impossible : {e}"
             )
 
     @Slot(int)
