@@ -23,13 +23,14 @@ import ctypes
 import shutil
 from pathlib import Path
 
-from dotenv import load_dotenv, dotenv_values
+from dotenv import load_dotenv
 from PySide6.QtCore import QCoreApplication
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QStyleFactory
+from PySide6.QtWidgets import QApplication, QStyleFactory
+
+from src.first_run_dialog import ask_client_config
 
 FROZEN = getattr(sys, "frozen", False)
-CLIENT_REQUIRED_KEYS = ("SUPABASE_URL", "SUPABASE_API_KEY")
 
 
 # ──────────────────────────────────────────────
@@ -55,13 +56,8 @@ def _client_env_path() -> Path:
     return _user_dir() / ".env"
 
 
-# Variables communes (licence, rapports de bugs) : chargées dès l'import
+# Variables communes (rapports de bugs) : chargées dès l'import
 load_dotenv(_resource_dir() / "app.env")
-
-
-def _is_valid_client_env(path: Path) -> bool:
-    values = dotenv_values(path)
-    return all((values.get(key) or "").strip() for key in CLIENT_REQUIRED_KEYS)
 
 
 def _write_offline_env(env_path: Path) -> None:
@@ -94,51 +90,17 @@ def ensure_client_env() -> bool:
         load_dotenv(env_path, override=True)
         return True
 
-    while True:
-        box = QMessageBox()
-        box.setWindowTitle("Configuration de Siledje")
-        box.setIcon(QMessageBox.Question)
-        box.setText("Configuration cloud")
-        box.setInformativeText(
-            "Choisissez le fichier de configuration remis par Siledje "
-            "(extension .env) pour activer la sauvegarde et la synchronisation cloud.\n\n"
-            "Vous pouvez aussi continuer sans cloud : le logiciel fonctionne hors ligne."
-        )
-        btn_choose = box.addButton("Choisir le fichier", QMessageBox.AcceptRole)
-        btn_offline = box.addButton("Continuer sans cloud", QMessageBox.ActionRole)
-        btn_quit = box.addButton("Quitter", QMessageBox.RejectRole)
-        box.setDefaultButton(btn_choose)
-        box.exec()
-        clicked = box.clickedButton()
+    # Fenêtre de première configuration (autonome : aucun module src.* importé)
+    choice, chosen = ask_client_config(_resource_dir())
 
-        if clicked is btn_offline:
-            _write_offline_env(env_path)
-            break
+    if choice == "quit":
+        return False
 
-        if clicked is not btn_choose:
-            return False
-
-        chosen, _ = QFileDialog.getOpenFileName(
-            None,
-            "Fichier de configuration Siledje",
-            str(Path.home() / "Downloads"),
-            "Configuration (*.env *.txt);;Tous les fichiers (*)",
-        )
-        if not chosen:
-            continue
-
-        if not _is_valid_client_env(Path(chosen)):
-            QMessageBox.warning(
-                None,
-                "Fichier invalide",
-                "Ce fichier ne contient pas SUPABASE_URL et SUPABASE_API_KEY.\n"
-                "Verifiez que vous avez bien le fichier remis par Siledje.",
-            )
-            continue
-
+    if choice == "offline":
+        _write_offline_env(env_path)
+    else:
         env_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(chosen, env_path)
-        break
 
     load_dotenv(env_path, override=True)
     return True
