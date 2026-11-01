@@ -1,7 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
+# Compilation : pyinstaller Siledje.spec --clean --noconfirm
+#
+# app.env  : commun a tous les clients (rapports de bugs), embarque.
+# .env     : NON embarque. Chaque client a le sien dans %APPDATA%\Siledje\.env
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('assets', 'assets'), ('.env', '.'), ('config.json', '.')]
+datas = [('assets', 'assets'), ('config.json', '.'), ('app.env', '.')]
 binaries = []
 hiddenimports = ['bcrypt', 'dateutil']
 tmp_ret = collect_all('barcode')

@@ -21,7 +21,7 @@ barcodes/.env
 
 
 # Variables d'environnement
-.env
+*.env
 .env.*
 !.env.example
 build/
@@ -30,3 +30,9 @@ Output/
 .vscode/
 barcodes/
 Output/
+
+
+app.env
+.env
+clients/
+ 

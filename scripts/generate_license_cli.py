@@ -2,6 +2,8 @@
 Outil de génération de clés de licence Siledje.
 RÉSERVÉ AU VENDEUR. Ne JAMAIS distribuer ce script aux clients.
 
+Nécessite la clé privée Ed25519 du vendeur (voir generate_license_keypair.py).
+
 Usage :
   python scripts/generate_license_cli.py "Nom Client" pro 3 365
   python scripts/generate_license_cli.py "Nom Client" premium 5 --illimitee
@@ -13,7 +15,7 @@ from datetime import date, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.utils.license_crypto import generate_license_key
+from src.utils.license_crypto import generate_license_key, verify_license_key
 
 
 def main():
@@ -24,7 +26,12 @@ def main():
 
     client_name = sys.argv[1]
     plan = sys.argv[2].lower()
-    max_users = int(sys.argv[3])
+
+    try:
+        max_users = int(sys.argv[3])
+    except ValueError:
+        print("max_users doit être un nombre entier.")
+        sys.exit(1)
 
     if plan not in ("starter", "pro", "premium"):
         print(" Plan invalide. Choisir : starter, pro, premium")
@@ -34,10 +41,24 @@ def main():
     valid_until = None
 
     if len(sys.argv) > 4 and sys.argv[4] != "--illimitee":
-        days = int(sys.argv[4])
+        try:
+            days = int(sys.argv[4])
+        except ValueError:
+            print("jours_validite doit être un nombre entier (ou --illimitee).")
+            sys.exit(1)
         valid_until = valid_from + timedelta(days=days)
 
-    key = generate_license_key(client_name, plan, max_users, valid_from, valid_until)
+    try:
+        key = generate_license_key(client_name, plan, max_users, valid_from, valid_until)
+    except RuntimeError as e:
+        print(f"Erreur : {e}")
+        sys.exit(1)
+
+    # Auto-contrôle : la clé produite doit être acceptée par la clé publique
+    if not verify_license_key(key):
+        print("Erreur : la clé générée n'est pas valide avec la clé publique embarquée.")
+        print("Relancer scripts/generate_license_keypair.py puis recompiler.")
+        sys.exit(1)
 
     print("=" * 60)
     print(f"Client        : {client_name}")
